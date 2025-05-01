@@ -19,7 +19,7 @@ const PriceSection = () => {
      stagger: 0.3,
      scrollTrigger: {
       trigger: sectionRef.current,
-      start: "top 80%",
+      start: "top 40%",
       toggleActions: "play none none none",
      },
     }
@@ -39,7 +39,7 @@ const PriceSection = () => {
    details: ["1 Month Validity", "Non-shareable"],
   },
   {
-   price: "RM 250",
+   price: "RM 280",
    title: "8 Classes",
    details: ["2 Month Validity", "Non-shareable"],
   },
