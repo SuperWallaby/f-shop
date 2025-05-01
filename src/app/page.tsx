@@ -99,6 +99,7 @@ const HeroSection = () => {
      </p>
      <a
       target="_blank"
+      aria-label="Book Link"
       href="https://www.instagram.com/fasea.pilates"
       className="px-6 py-3   rounded-full text-white text-sm font-medium button-gradient button-shadow-md transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg"
      >
@@ -120,6 +121,7 @@ const HeroSection = () => {
     </p>
     <a
      target="_blank"
+     aria-label="Book Link"
      href="https://www.instagram.com/fasea.pilates"
      className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition"
     >
