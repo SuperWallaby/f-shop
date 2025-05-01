@@ -14,7 +14,7 @@ const HeroSection = () => {
  useEffect(() => {
   if (heroRef.current) {
    Gsap.fromTo(
-    heroRef.current.querySelectorAll("nav, h2, p, button"),
+    heroRef.current.querySelectorAll("nav, h2, p, a"),
     {
      y: 50,
      opacity: 0,
@@ -93,9 +93,13 @@ const HeroSection = () => {
       Fasea is your space to strengthen your body and calm your mind. Start your
       journey today.
      </p>
-     <button className="px-6 py-3 font-medium  button-gradient text-white text-sm rounded-full hover:opacity-90 transition">
-      Book a Session
-     </button>
+     <a
+      target="_blank"
+      href="https://www.instagram.com/fasea.pilates"
+      className="px-6 py-3   rounded-full text-white text-sm font-medium button-gradient button-shadow-md transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg"
+     >
+      DM to Book
+     </a>
     </main>
    </div>
    <WhyChooseSection />
@@ -110,9 +114,13 @@ const HeroSection = () => {
     <p className="text-[#716D64] text-base sm:text-lg mb-10">
      Your body deserves to feel strong, calm, and centered.
     </p>
-    <button className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition">
+    <a
+     target="_blank"
+     href="https://www.instagram.com/fasea.pilates"
+     className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition"
+    >
      Book Your First Class
-    </button>
+    </a>
    </section>
   </div>
  );
