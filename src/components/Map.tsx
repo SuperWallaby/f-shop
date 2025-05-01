@@ -8,9 +8,8 @@ const LocationSection = () => {
      Visit Our Studio
     </h3>
     <p className="text-[#716D64]  text-base sm:text-lg">
-     Fasea Pilates Studio, 2nd Floor, Jalan Wellness 9,
-     <br />
-     Kuala Lumpur, Malaysia
+     Lot 32558 ( PT 30714 ) Taman Desa Wakaf Baru, Jalan Lapangan Terbang, 21300
+     Kuala Terengganu, Terengganu, Malaysia
     </p>
    </div>
 

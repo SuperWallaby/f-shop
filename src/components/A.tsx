@@ -77,8 +77,8 @@ const PriceSection = () => {
         </div>
        )}
 
-       <h4 className="font-serif text-xl font-semibold mb-2">{plan.title}</h4>
-       <p className="text-2xl font-sans font-bold mb-4 text-[#9B9B7B]">
+       <h4 className="font-serif text-2xl font-bold mb-2">{plan.title}</h4>
+       <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
         {plan.price}
        </p>
        <ul className="text-sm  text-[#716D64] space-y-1">

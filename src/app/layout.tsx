@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Inter } from "next/font/google";
 import { Playfair_Display } from "next/font/google";
+import Script from "next/script";
 
 const inter = Inter({
  subsets: ["latin"],
@@ -11,7 +12,7 @@ const inter = Inter({
 
 const playfair = Playfair_Display({
  subsets: ["latin"],
- weight: ["500", "700"],
+ weight: ["700"],
  variable: "--font-playfair",
  display: "swap",
 });
@@ -36,11 +37,41 @@ export default function RootLayout({
    <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
     {children}
    </body>
+   <Script
+    id="jsonld-localbusiness"
+    type="application/ld+json"
+    dangerouslySetInnerHTML={{
+     __html: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "LocalBusiness",
+      name: "Fasea Pilates Studio",
+      image: "https://fasea.com/og-image.jpg",
+      url: "https://fasea.com",
+      telephone: "+60145403560",
+      address: {
+       "@type": "PostalAddress",
+       streetAddress:
+        "Lot 32558 ( PT 30714 ), Taman Desa Wakaf Baru, Jalan Lapangan Terbang",
+       addressLocality: "Kuala Terengganu",
+       addressRegion: "Terengganu",
+       postalCode: "21300",
+       addressCountry: "MY",
+      },
+      geo: {
+       "@type": "GeoCoordinates",
+       latitude: 5.3830675, // 정확한 위도
+       longitude: 103.0962731, // 정확한 경도
+      },
+      map: "https://www.google.com/maps?q=WOOD+BARBERSHOP,+Lot+32558+(+PT+30714+)+Taman+Desa+Wakaf+Baru,+Jalan+Lapangan+Terbang,+21300+Kuala+Terengganu,+Terengganu&ftid=0x31b7bdfe07fff745:0xd0218b296f852ad7",
+      openingHours: "Mo-Fr 09:00-18:00",
+      priceRange: "$$",
+      sameAs: ["https://www.instagram.com/fasea", "https://wa.me/60145403560"],
+     }),
+    }}
+   />
   </html>
  );
 }
-
-// app/layout.tsx 또는 app/page.tsx
 export const metadata = {
  title: "Fasea – Pilates Studio for Wellness & Balance",
  description:
@@ -51,10 +82,18 @@ export const metadata = {
  openGraph: {
   title: "Fasea – Wellness & Balance",
   description: "Experience Pilates in the most elegant and calm space in KL.",
-  url: "https://fasea.com", // 실제 도메인으로 변경
+  url: "https://fasea.com", // 도메인에 맞게 변경
   siteName: "Fasea Pilates Studio",
   locale: "en_US",
   type: "website",
+  images: [
+   {
+    url: "/og-image.jpg", // public 폴더에 위치한 이미지
+    width: 1200,
+    height: 630,
+    alt: "Fasea Pilates Studio",
+   },
+  ],
  },
  robots: {
   index: true,
@@ -64,14 +103,16 @@ export const metadata = {
    follow: true,
   },
  },
+ themeColor: "#DFD1C9",
  twitter: {
   card: "summary_large_image",
   title: "Fasea – Pilates Studio",
   description:
    "Your space to move with intention, strength, and calm. Book your first class today.",
-  creator: "@fasea_studio", // 트위터 계정 있으면 넣기
+  images: ["/og-image.jpg"],
+  creator: "@fasea_studio", // 있다면 입력
  },
  icons: {
-  icon: "/favicon.ico",
+  icon: "/favicon.ico", // 여전히 .ico 권장
  },
 };
