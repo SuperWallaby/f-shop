@@ -13,11 +13,14 @@ const HeroSection = () => {
  const heroRef = useRef<HTMLDivElement>(null);
  useEffect(() => {
   if (heroRef.current) {
+   const elements = heroRef.current.querySelectorAll("nav, h2, p, a");
+
    Gsap.fromTo(
-    heroRef.current.querySelectorAll("nav, h2, p, a"),
+    elements,
     {
      y: 50,
      opacity: 0,
+     // ✅ 여기에서 배경은 명시적으로 포함시키지 않음
     },
     {
      y: 0,
@@ -25,6 +28,7 @@ const HeroSection = () => {
      duration: 0.8,
      ease: "power4.out",
      stagger: 0.1,
+     clearProps: "opacity,transform", // ✅ inline style 제거
      scrollTrigger: {
       trigger: heroRef.current,
       start: "top 80%",
@@ -54,7 +58,7 @@ const HeroSection = () => {
     className="min-h-screen bg-hero-animated relative flex flex-col items-center  px-6 py-12 "
    >
     {/* Header / Navigation */}
-    <nav className="fixed px-5 md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12 transition-colors duration-300">
+    <nav className="fixed px-5 !bg-transparent md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12  duration-300">
      <h1
       onClick={() => {
        document.getElementById("Hero")?.scrollIntoView();
@@ -74,7 +78,7 @@ const HeroSection = () => {
           inline: "center",
          });
         }}
-        className={`px-4 py-2 text-sm font-medium  rounded-full border border-[#DFD1C9] cursor-pointer  text-[#444444] hover:bg-[#DFD1C9] transition ${
+        className={`px-4 py-2  text-sm font-medium  rounded-full border border-[#DFD1C9] cursor-pointer  text-[#444444] hover:bg-[#DFD1C9] transition ${
          navSolid ? "bg-white/90 " : ""
         }`}
        >
@@ -85,11 +89,11 @@ const HeroSection = () => {
     </nav>
 
     {/* Hero Content */}
-    <main className="mt-5 absolute px-4 top-1/2 -translate-y-1/2 text-center  flex flex-col items-center">
-     <h2 className="font-serif  text-4xl sm:text-5xl font-extrabold mb-6 leading-snug">
+    <main className="!bg-transparent mt-5 absolute px-4 top-1/2 -translate-y-1/2 text-center  flex flex-col items-center">
+     <h2 className="font-serif !bg-transparent  text-4xl sm:text-5xl font-extrabold mb-6 leading-snug">
       Your Personal <br /> Pilates Studio for Wellness & Balance
      </h2>
-     <p className="text-lg sm:text-xl text-[#716D64] max-w-xl mb-8">
+     <p className="!bg-transparent text-lg sm:text-xl text-[#716D64] max-w-xl mb-8">
       Fasea is your space to strengthen your body and calm your mind. Start your
       journey today.
      </p>

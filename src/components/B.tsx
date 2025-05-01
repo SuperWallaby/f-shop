@@ -22,7 +22,7 @@ const ScheduleSection = () => {
      stagger: 0.15,
      scrollTrigger: {
       trigger: sectionRef.current,
-      start: "top 90%",
+      start: "top 100%",
       toggleActions: "play none none none",
      },
     }

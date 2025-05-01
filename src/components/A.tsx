@@ -19,7 +19,7 @@ const PriceSection = () => {
      stagger: 0.3,
      scrollTrigger: {
       trigger: sectionRef.current,
-      start: "top 40%",
+      start: "top 100%",
       toggleActions: "play none none none",
      },
     }
@@ -65,7 +65,7 @@ const PriceSection = () => {
       <div
        id="Price"
        key={index}
-       className={`price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 ${
+       className={`opacity-0 translate-y-8 price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 ${
         isHighlighted
          ? "bg-white/70 border-[#9B9B7B] shadow-lg scale-[1.03]"
          : "bg-white/50 border-[#DFD1C9]"
