@@ -11,12 +11,6 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #DFD1C9;
-    --foreground: #DFD1C9;
-  }
-}
 
 body {
   background: var(--background);
@@ -30,18 +24,6 @@ body {
   background-size: 200% 200%;
 }
 
-
-@keyframes gradientMove {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
 
 @keyframes gradientMove {
   0% {
