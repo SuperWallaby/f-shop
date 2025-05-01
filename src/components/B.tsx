@@ -7,7 +7,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 gsap.registerPlugin(ScrollTrigger);
 
 const ScheduleSection = () => {
- const sectionRef = useRef<any>(null);
+ const sectionRef = useRef<HTMLDivElement>(null);
 
  useEffect(() => {
   if (sectionRef.current) {
