@@ -1,10 +1,9 @@
 "use client";
-
-import { FaInstagram, FaWhatsapp } from "react-icons/fa";
-
+import { FaInstagram } from "@react-icons/all-files/fa/FaInstagram";
+import { FaWhatsapp } from "@react-icons/all-files/fa/FaWhatsapp";
 const ContactSection = () => {
  return (
-  <section className="py-28 px-6 bg-[#DFD1C9] text-[#444444]">
+  <section id="Contact" className="py-28 px-6 bg-[#DFD1C9] text-[#444444]">
    <div className="max-w-3xl mx-auto text-center">
     <h3 className="font-serif text-3xl sm:text-4xl font-bold mb-6">
      Get in Touch

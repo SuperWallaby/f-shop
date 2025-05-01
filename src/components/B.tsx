@@ -39,7 +39,11 @@ const ScheduleSection = () => {
  ];
 
  return (
-  <section ref={sectionRef} className="py-28 px-6 bg-[#FAF8F6] text-[#444444]">
+  <section
+   id="Time"
+   ref={sectionRef}
+   className="py-28 px-6 bg-[#FAF8F6] text-[#444444]"
+  >
    <div className="max-w-5xl mx-auto text-center mb-16">
     <h3 className="font-serif text-3xl sm:text-4xl font-bold">
      Weekly Schedule

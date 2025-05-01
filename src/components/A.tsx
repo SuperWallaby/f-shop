@@ -46,7 +46,11 @@ const PriceSection = () => {
  ];
 
  return (
-  <section ref={sectionRef} className="py-24 px-6 bg-[#F3ECE6] text-[#444444]">
+  <section
+   id="Plan"
+   ref={sectionRef}
+   className="py-24 px-6 bg-[#F3ECE6] text-[#444444]"
+  >
    <div className="max-w-5xl mx-auto text-center mb-12">
     <h3 className="font-serif text-3xl sm:text-4xl font-bold">
      Mat Pilates Plans
@@ -59,6 +63,7 @@ const PriceSection = () => {
 
      return (
       <div
+       id="Price"
        key={index}
        className={`price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 ${
         isHighlighted

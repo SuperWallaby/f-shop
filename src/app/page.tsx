@@ -1,7 +1,7 @@
 // components/HeroSection.tsx
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import WhyChooseSection from "../components/WhyChooseSection";
 import PriceSection from "../components/A";
 import { Gsap } from "../utils/gasp";
@@ -34,22 +34,49 @@ const HeroSection = () => {
    );
   }
  }, []);
+ const [navSolid, setNavSolid] = useState(false);
+
+ useEffect(() => {
+  const handleScroll = () => {
+   const scrolled = window.scrollY;
+   setNavSolid(scrolled > window.innerHeight);
+  };
+
+  window.addEventListener("scroll", handleScroll);
+  return () => window.removeEventListener("scroll", handleScroll);
+ }, []);
+
  return (
   <div className="   text-[#444444] ">
    <div
+    id="Hero"
     ref={heroRef}
     className="min-h-screen bg-hero-animated relative flex flex-col items-center  px-6 py-12 "
    >
     {/* Header / Navigation */}
-    <nav className="w-full  max-w-6xl flex justify-between  items-center mb-12">
-     <h1 className="text-2xl font-serif font-bold tracking-tight italic underline">
+    <nav className="fixed px-5 md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12 transition-colors duration-300">
+     <a
+      href="/#Hero"
+      className="text-2xl font-serif font-bold tracking-tight italic underline"
+     >
       Fasea
-     </h1>
+     </a>
      <div className="space-x-2 md:space-x-3 ">
       {["About", "Plan", "Contact"].map((item) => (
        <button
         key={item}
-        className="px-4 py-2 text-sm font-medium rounded-full border border-[#DFD1C9] cursor-pointer  text-[#444444] hover:bg-[#DFD1C9] transition"
+        onClick={() => {
+         document
+          .getElementById(item)
+          ?.scrollIntoView({
+           behavior: "smooth",
+           block: "center",
+           inline: "center",
+          });
+        }}
+        className={`px-4 py-2 text-sm font-medium  rounded-full border border-[#DFD1C9] cursor-pointer  text-[#444444] hover:bg-[#DFD1C9] transition ${
+         navSolid ? "bg-white/90 " : ""
+        }`}
        >
         {item}
        </button>

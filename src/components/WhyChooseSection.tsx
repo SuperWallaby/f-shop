@@ -1,10 +1,8 @@
 "use client";
 
-import {
- UserGroupIcon,
- SparklesIcon,
- HeartIcon,
-} from "@heroicons/react/24/outline";
+import UserGroupIcon from "@heroicons/react/24/outline/UserGroupIcon";
+import SparklesIcon from "@heroicons/react/24/outline/SparklesIcon";
+import HeartIcon from "@heroicons/react/24/outline/HeartIcon";
 import { useEffect, useRef } from "react";
 import { Gsap } from "../utils/gasp";
 
@@ -51,8 +49,12 @@ const WhyChooseSection = () => {
  ];
 
  return (
-  <section ref={sectionRef} className="py-24 px-6 bg-[#FAF8F6] text-[#444444]">
-   <div className="max-w-6xl mx-auto text-center mb-12">
+  <section
+   id="Service"
+   ref={sectionRef}
+   className="py-24 px-6 bg-[#FAF8F6] text-[#444444]"
+  >
+   <div id="About" className="max-w-6xl mx-auto text-center mb-12">
     <h3 className="font-serif text-3xl sm:text-4xl font-bold">
      Why Choose Fasea
     </h3>

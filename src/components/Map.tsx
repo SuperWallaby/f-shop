@@ -25,7 +25,7 @@ const LocationSection = () => {
 
    <div className="text-center">
     <a
-     href="https://goo.gl/maps/..." // 실제 구글맵 링크로 바꾸기
+     href="https://maps.app.goo.gl/dhBfgpz2GXFbt2VL6?g_st=com.google.maps.preview.copy" // 실제 구글맵 링크로 바꾸기
      target="_blank"
      rel="noopener noreferrer"
      className="inline-block button-gradient  text-white font-medium py-3 px-6 rounded-full shadow-md hover:opacity-90 transition"
