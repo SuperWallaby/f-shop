@@ -55,24 +55,24 @@ const HeroSection = () => {
    >
     {/* Header / Navigation */}
     <nav className="fixed px-5 md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12 transition-colors duration-300">
-     <a
-      href="/#Hero"
+     <h1
+      onClick={() => {
+       document.getElementById("Hero")?.scrollIntoView();
+      }}
       className="text-2xl font-serif font-bold tracking-tight italic underline"
      >
       Fasea
-     </a>
+     </h1>
      <div className="space-x-2 md:space-x-3 ">
       {["About", "Plan", "Contact"].map((item) => (
        <button
         key={item}
         onClick={() => {
-         document
-          .getElementById(item)
-          ?.scrollIntoView({
-           behavior: "smooth",
-           block: "center",
-           inline: "center",
-          });
+         document.getElementById(item)?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+          inline: "center",
+         });
         }}
         className={`px-4 py-2 text-sm font-medium  rounded-full border border-[#DFD1C9] cursor-pointer  text-[#444444] hover:bg-[#DFD1C9] transition ${
          navSolid ? "bg-white/90 " : ""
