@@ -29,9 +29,10 @@ const PriceSection = () => {
 
  const plans = [
   {
+   strong: true,
    price: "RM 50",
    title: "Walk In",
-   details: ["First Timer get 30%", "Non-shareable"],
+   details: ["30% off for first-time visitors", "Non-shareable"],
   },
   {
    price: "RM 160",
@@ -83,7 +84,9 @@ const PriceSection = () => {
        </p>
        <ul className="text-sm  text-[#716D64] space-y-1">
         {plan.details.map((line, i) => (
-         <li key={i}>• {line}</li>
+         <li className={line.includes("30%") ? "font-semibold" : ""} key={i}>
+          • {line}
+         </li>
         ))}
        </ul>
       </div>
