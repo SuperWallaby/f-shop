@@ -27,7 +27,7 @@ const ContactSection = () => {
      {/* +60145403560 */}
      <a
       aria-label="What's app link"
-      href="https://wa.me/60123456789" // Replace with real WhatsApp number
+      href="https://wa.me/60145403560" // Replace with real WhatsApp number
       target="_blank"
       rel="noopener noreferrer"
       className="text-[#9B9B7B] reveal hover:text-[#D1B9B4]  transition transform hover:scale-110 text-4xl"
