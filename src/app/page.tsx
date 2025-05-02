@@ -35,7 +35,7 @@ const HeroSection = () => {
     {/* Header / Navigation */}
     <nav className="fixed px-5 !bg-transparent md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12 duration-300  transition-none">
      <h1 className="text-2xl font-serif font-bold tracking-tight italic underline reveal transition-none">
-      <a href="/#Hero">Fasea</a>
+      <a href="#Hero">Fasea</a>
      </h1>
      <NavButtons />
     </nav>
