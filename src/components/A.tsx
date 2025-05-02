@@ -1,32 +1,6 @@
-"use client";
-
-import { useEffect, useRef } from "react";
-import { Gsap } from "../utils/gasp";
+import RevealTrigger from "../hook/Reaveal";
 
 const PriceSection = () => {
- const sectionRef = useRef<HTMLDivElement>(null);
-
- useEffect(() => {
-  if (sectionRef.current) {
-   Gsap.fromTo(
-    sectionRef.current.querySelectorAll(".price-card"),
-    { y: 30, opacity: 0 },
-    {
-     y: 0,
-     opacity: 1,
-     duration: 0.8,
-     ease: "circ.out",
-     stagger: 0.3,
-     scrollTrigger: {
-      trigger: sectionRef.current,
-      start: "top 100%",
-      toggleActions: "play none none none",
-     },
-    }
-   );
-  }
- }, []);
-
  const plans = [
   {
    strong: true,
@@ -47,16 +21,13 @@ const PriceSection = () => {
  ];
 
  return (
-  <section
-   id="Plan"
-   ref={sectionRef}
-   className="py-24 px-6 bg-[#F3ECE6] text-[#444444]"
-  >
+  <section id="Plan" className="py-24 px-6 bg-[#F3ECE6] text-[#444444]">
    <div className="max-w-5xl mx-auto text-center mb-12">
     <h3 className="font-serif text-3xl sm:text-4xl font-bold">
      Mat Pilates Plans
     </h3>
    </div>
+   <RevealTrigger rootSelector="#Plan" />
 
    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
     {plans.map((plan, index) => {
@@ -66,7 +37,7 @@ const PriceSection = () => {
       <div
        id="Price"
        key={index}
-       className={`opacity-0 translate-y-8 price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 ${
+       className={`reveal price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 ${
         isHighlighted
          ? "bg-white/70 border-[#9B9B7B] shadow-lg scale-[1.03]"
          : "bg-white/50 border-[#DFD1C9]"

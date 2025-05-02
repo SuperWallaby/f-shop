@@ -1,8 +1,9 @@
-"use client";
+import RevealTrigger from "../hook/Reaveal";
 
 const LocationSection = () => {
  return (
-  <section className="py-28 px-6 bg-[#FAF8F6] text-[#444444]">
+  <section id="Loc" className="py-28 px-6 bg-[#FAF8F6] text-[#444444]">
+   <RevealTrigger rootSelector="#Loc"></RevealTrigger>
    <div className="max-w-4xl mx-auto text-center mb-12">
     <h3 className="font-serif text-3xl sm:text-4xl font-bold mb-4">
      Visit Our Studio
@@ -13,7 +14,7 @@ const LocationSection = () => {
     </p>
    </div>
 
-   <div className="max-w-4xl mx-auto rounded-xl overflow-hidden shadow-lg mb-10">
+   <div className="reveal max-w-4xl mx-auto rounded-xl overflow-hidden shadow-lg mb-10">
     <iframe
      aria-label="Shop Location"
      className="w-full h-80 sm:h-96"
