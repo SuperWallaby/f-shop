@@ -59,7 +59,7 @@ body {
 .bg-hero-animated {
   background-image: linear-gradient(135deg, #FAF8F6, #DFD1C9, #D1B9B4);
   background-size: 300% 300%;
-  animation: gradientMove 8s ease-in-out infinite;
+  animation: gradientMove 4s ease-in-out infinite;
 }
 .button-gradient {
   background: #716d64;
