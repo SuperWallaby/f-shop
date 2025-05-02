@@ -55,7 +55,7 @@ const HeroSection = () => {
    <div
     id="Hero"
     ref={heroRef}
-    className="min-h-screen bg-hero-animated relative flex flex-col items-center  px-6 py-12 "
+    className="min-h-[100svh] bg-hero-animated relative flex flex-col items-center  px-6 py-12 "
    >
     {/* Header / Navigation */}
     <nav className="fixed px-5 !bg-transparent md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12  duration-300">
