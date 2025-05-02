@@ -30,7 +30,7 @@ const HeroSection = () => {
    <div
     id="Hero"
     // ref={heroRef}
-    className="min-h-[100svh] bg-hero-animated relative flex flex-col items-center  px-6 py-12 "
+    className="min-h-[100svh] overflow-x-hidden bg-hero-animated relative flex flex-col items-center  px-6 py-12 "
    >
     {/* Header / Navigation */}
     <nav className="fixed px-5 !bg-transparent md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12 duration-300  transition-none">
@@ -41,7 +41,7 @@ const HeroSection = () => {
     </nav>
 
     {/* Hero Content */}
-    <main className="!bg-transparent mt-5 absolute px-4 top-1/2 -translate-y-1/2 text-center flex flex-col items-center">
+    <main className="!bg-transparent mt-5 overflow-x-hidden absolute px-4 top-1/2 -translate-y-1/2 text-center flex flex-col items-center">
      <h2 className="font-serif text-4xl sm:text-5xl font-extrabold mb-6 leading-snug reveal transition-none">
       Your Personal <br /> Pilates Studio for Wellness & Balance
      </h2>
