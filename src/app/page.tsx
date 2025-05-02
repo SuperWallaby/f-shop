@@ -41,7 +41,7 @@ const HeroSection = () => {
     </nav>
 
     {/* Hero Content */}
-    <main className="!bg-transparent mt-5 overflow-x-hidden absolute px-4 top-1/2 -translate-y-1/2 text-center flex flex-col items-center">
+    <main className="!bg-transparent mt-5  absolute px-4 top-1/2 -translate-y-1/2 text-center flex flex-col items-center">
      <h2 className="font-serif text-4xl sm:text-5xl font-extrabold mb-6 leading-snug reveal transition-none">
       Your Personal <br /> Pilates Studio for Wellness & Balance
      </h2>
