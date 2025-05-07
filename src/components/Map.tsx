@@ -5,13 +5,13 @@ const LocationSection = () => {
   <section id="Loc" className="py-28 px-6 bg-[#FAF8F6] text-[#444444]">
    <RevealTrigger rootSelector="#Loc"></RevealTrigger>
    <div className="max-w-4xl mx-auto text-center mb-12">
-    <h3 className="font-serif text-3xl sm:text-4xl font-bold mb-4">
+    <h6 className="font-serif text-3xl sm:text-4xl font-bold mb-4">
      Visit Our Studio
-    </h3>
-    <p className="text-[#716D64]  text-base sm:text-lg">
+    </h6>
+    <address className="text-[#716D64]  text-base sm:text-lg">
      Lot 32558 ( PT 30714 ) Taman Desa Wakaf Baru, Jalan Lapangan Terbang, 21300
      Kuala Terengganu, Terengganu, Malaysia
-    </p>
+    </address>
    </div>
 
    <div className="reveal max-w-4xl mx-auto rounded-xl overflow-hidden shadow-lg mb-10">

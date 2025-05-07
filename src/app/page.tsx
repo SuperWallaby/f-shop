@@ -34,9 +34,11 @@ const HeroSection = () => {
    >
     {/* Header / Navigation */}
     <nav className="fixed px-5 !bg-transparent md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12 duration-300  transition-none">
-     <h1 className="text-2xl font-serif font-bold tracking-tight italic underline reveal transition-none">
-      <a href="#Hero">Fasea</a>
-     </h1>
+     <a aria-label="Scroll to Hero section" href="#Hero">
+      <h1 className="text-2xl font-serif font-bold tracking-tight italic underline reveal transition-none">
+       Faséa
+      </h1>
+     </a>
      <NavButtons />
     </nav>
 
@@ -46,7 +48,7 @@ const HeroSection = () => {
       Your Personal <br /> Pilates Studio for Wellness & Balance
      </h2>
      <p className="text-lg sm:text-xl text-[#716D64] max-w-xl mb-8 reveal transition-none">
-      Fasea is your space to strengthen your body and calm your mind. Start your
+      Faséa is your space to strengthen your body and calm your mind. Start your
       journey today.
      </p>
      <a

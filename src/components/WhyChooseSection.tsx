@@ -27,7 +27,7 @@ const WhyChooseSection = () => {
    <RevealTrigger rootSelector="#Service" />
    <div id="About" className="max-w-6xl mx-auto text-center mb-12">
     <h3 className="font-serif text-3xl sm:text-4xl font-bold">
-     Why Choose Fasea
+     Why Choose Faséa
     </h3>
    </div>
    <div className="grid grid-cols-1 sm:grid-cols-3 gap-10 max-w-5xl mx-auto text-center">

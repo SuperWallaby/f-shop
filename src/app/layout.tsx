@@ -44,7 +44,7 @@ export default function RootLayout({
      __html: JSON.stringify({
       "@context": "https://schema.org",
       "@type": "LocalBusiness",
-      name: "Fasea Pilates Studio",
+      name: "Faséa Pilates Studio",
       image: "https://fasea.com/og-image.jpg",
       url: "https://fasea.com",
       telephone: "+60145403560",
@@ -73,17 +73,17 @@ export default function RootLayout({
  );
 }
 export const metadata = {
- title: "Fasea – Pilates Studio for Wellness & Balance",
+ title: "Faséa – Pilates Studio for Wellness & Balance",
  description:
-  "Fasea is your personal pilates space in KL. Strengthen your body and calm your mind with tailored sessions.",
- keywords: ["Pilates", "Wellness", "Fasea", "Balance", "KL Studio"],
- authors: [{ name: "Fasea Studio" }],
- creator: "Fasea Studio",
+  "Faséa is your personal pilates space in KL. Strengthen your body and calm your mind with tailored sessions.",
+ keywords: ["Pilates", "Wellness", "Faséa", "Balance", "KL Studio"],
+ authors: [{ name: "Faséa Studio" }],
+ creator: "Faséa Studio",
  openGraph: {
-  title: "Fasea – Wellness & Balance",
+  title: "Faséa – Wellness & Balance",
   description: "Experience Pilates in the most elegant and calm space in KL.",
   url: "https://fasea.com", // 도메인에 맞게 변경
-  siteName: "Fasea Pilates Studio",
+  siteName: "Faséa Pilates Studio",
   locale: "en_US",
   type: "website",
   images: [
@@ -91,7 +91,7 @@ export const metadata = {
     url: "/og-image.jpg", // public 폴더에 위치한 이미지
     width: 1200,
     height: 630,
-    alt: "Fasea Pilates Studio",
+    alt: "Faséa Pilates Studio",
    },
   ],
  },
@@ -106,7 +106,7 @@ export const metadata = {
  themeColor: "#DFD1C9",
  twitter: {
   card: "summary_large_image",
-  title: "Fasea – Pilates Studio",
+  title: "Faséa – Pilates Studio",
   description:
    "Your space to move with intention, strength, and calm. Book your first class today.",
   images: ["/og-image.jpg"],
