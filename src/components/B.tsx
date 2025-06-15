@@ -37,7 +37,7 @@ const ScheduleSection = () => {
      </div>
     ))}
    </div>
-   <div className="mx-auto flex justify-center mt-8">
+   <div className="mx-auto flex justify-center mt-12">
     <a
      target="_blank"
      href="https://burly-elbow-f4a.notion.site/213cbfc9f2c980ddaa4ee6b27de0487c?v=213cbfc9f2c9808db0eb000c2d99dea2&t=new"
