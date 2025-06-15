@@ -17,7 +17,7 @@ const ScheduleSection = () => {
      Group Class <span className="whitespace-nowrap">Weekly Schedule</span>
     </h3>
     <p className="reveal text-[#5C574F] text-base sm:text-lg mb-10">
-     Private Class Schedule is flexible between 10am - 6pmFv
+     Private Class Schedule is flexible between 10am - 6pm
     </p>
    </div>
    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6 max-w-6xl mx-auto text-center">
