@@ -64,7 +64,7 @@ const HeroSection = () => {
       <a
        target="_blank"
        aria-label="Book Link"
-       href="https://burly-elbow-f4a.notion.site/213cbfc9f2c980ddaa4ee6b27de0487c?v=213cbfc9f2c9808db0eb000c2d99dea2&t=new"
+       href="https://burly-elbow-f4a.notion.site/ebd/1ebcbfc9f2c9803faae2d3168073b0a0"
        className="px-6 py-3 rounded-full bg-white text-sm font-medium  shadow-sm  transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04]  hover:shadow-lg reveal "
       >
        Check Schedule
