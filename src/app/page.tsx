@@ -51,19 +51,31 @@ const HeroSection = () => {
       Faséa is your space to strengthen your body and calm your mind. Start your
       journey today.
      </p>
-     <a
-      target="_blank"
-      aria-label="Book Link"
-      href="https://www.instagram.com/fasea.pilates"
-      className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient button-shadow-md transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal transition-none"
-     >
-      DM to Book
-     </a>
+     <div className="flex gap-5 bg-transparent">
+      <a
+       target="_blank"
+       aria-label="Book Link"
+       href="https://www.instagram.com/fasea.pilates"
+       className="px-6 py-3  rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal "
+      >
+       DM to Book
+      </a>
+
+      <a
+       target="_blank"
+       aria-label="Book Link"
+       href="https://burly-elbow-f4a.notion.site/213cbfc9f2c980ddaa4ee6b27de0487c?v=213cbfc9f2c9808db0eb000c2d99dea2&t=new"
+       className="px-6 py-3 rounded-full bg-white text-sm font-medium  shadow-sm  transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04]  hover:shadow-lg reveal "
+      >
+       Check Schedule
+      </a>
+     </div>
     </main>
    </div>
    <WhyChooseSection />
    <PriceSection />
    <ScheduleSection />
+
    <ContactSection />
    <LocationSection />
    <section className="py-24 px-6 bg-[#F8F0EE] text-[#444444] text-center">
