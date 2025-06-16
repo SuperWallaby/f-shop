@@ -75,13 +75,13 @@ export default function RootLayout({
 export const metadata = {
  title: "Faséa – Pilates Studio for Wellness & Balance",
  description:
-  "Faséa is your personal pilates space in KL. Strengthen your body and calm your mind with tailored sessions.",
+  "Faséa is your personal pilates space in TRG. Strengthen your body and calm your mind with tailored sessions.",
  keywords: ["Pilates", "Wellness", "Faséa", "Balance", "KL Studio"],
  authors: [{ name: "Faséa Studio" }],
  creator: "Faséa Studio",
  openGraph: {
   title: "Faséa – Wellness & Balance",
-  description: "Experience Pilates in the most elegant and calm space in KL.",
+  description: "Experience Pilates in the most elegant and calm space in TRG.",
   url: "https://fasea.com", // 도메인에 맞게 변경
   siteName: "Faséa Pilates Studio",
   locale: "en_US",
