@@ -28,12 +28,12 @@ const PriceSection = () => {
   },
   {
    price: "RM 480",
-   title: "3 Class",
+   title: "3 Classes",
    details: ["1 Month Validity", "Non-shareable"],
   },
   {
    price: "RM 1,500",
-   title: "10 Class",
+   title: "10 Classes",
    details: ["3 Month Validity", "Non-shareable"],
   },
  ];
