@@ -5,7 +5,7 @@ const ScheduleSection = () => {
   { day: "Sun", times: ["8:30 PM - 9:30 PM"] },
   { day: "Mon", times: ["9:00 AM - 10:00 AM"] },
   { day: "Wed", times: ["8:30 PM - 9:30 PM"] },
-  { day: "Thu", times: ["9:00 AM - 10:00 AM"] },
+  { day: "Thu", times: ["5:00 PM - 6:00 PM"] },
   { day: "Fri", times: ["9:00 AM - 10:00 AM"] },
  ];
 
@@ -17,7 +17,7 @@ const ScheduleSection = () => {
      Group Class <span className="whitespace-nowrap">Weekly Schedule</span>
     </h3>
     <p className="reveal text-[#5C574F] text-base sm:text-lg mb-10">
-     Private Class Schedule is flexible between 10am - 6pm
+     Private class schedule is flexible between 11 am – 6 pm.
     </p>
    </div>
    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6 max-w-6xl mx-auto text-center">

@@ -6,17 +6,21 @@ const PriceSection = () => {
    strong: true,
    price: "RM 50",
    title: "Single Class",
-   details: ["30% off for first-time visitors", "Non-shareable"],
+   details: [
+    "30% off for first-time visitors",
+    "Non-shareable",
+    "Non-refundable",
+   ],
   },
   {
    price: "RM 160",
    title: "4 Classes",
-   details: ["1 Month Validity", "Non-shareable"],
+   details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
   },
   {
    price: "RM 280",
    title: "8 Classes",
-   details: ["2 Month Validity", "Non-shareable"],
+   details: ["2 Month Validity", "Non-shareable", "Non-refundable"],
   },
  ];
 
@@ -24,17 +28,17 @@ const PriceSection = () => {
   {
    price: "RM 170",
    title: "Single Class",
-   details: ["First Timer get 10% off", "Non-shareable"],
+   details: ["First Timer get 10% off", "Non-shareable", "Non-refundable"],
   },
   {
    price: "RM 480",
    title: "3 Classes",
-   details: ["1 Month Validity", "Non-shareable"],
+   details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
   },
   {
    price: "RM 1,500",
    title: "10 Classes",
-   details: ["3 Month Validity", "Non-shareable"],
+   details: ["3 Month Validity", "Non-shareable", "Non-refundable"],
   },
  ];
  return (
