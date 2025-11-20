@@ -2,6 +2,7 @@
 
 import React from "react";
 import WhyChooseSection from "../components/WhyChooseSection";
+import ReviewSection from "../components/ReviewSection";
 import PriceSection from "../components/A";
 import ScheduleSection from "../components/B";
 import ContactSection from "../components/Contact";
@@ -73,6 +74,7 @@ const HeroSection = () => {
     </main>
    </div>
    <WhyChooseSection />
+   <ReviewSection />
    <PriceSection />
    <ScheduleSection />
 
