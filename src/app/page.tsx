@@ -8,7 +8,7 @@ import ScheduleSection from "../components/B";
 import ContactSection from "../components/Contact";
 import LocationSection from "../components/Map";
 import RevealTrigger from "../hook/Reaveal";
-import { NavButtons } from "../components/Navigate";
+import SiteHeader from "../components/SiteHeader";
 
 const HeroSection = () => {
  //  const heroRef = useRef<HTMLDivElement>(null);
@@ -26,25 +26,16 @@ const HeroSection = () => {
  //  }, []);
 
  return (
-  <div className="   text-[#444444] ">
+  <div className="text-[#444444] ">
    <RevealTrigger rootSelector="#Hero" />
+   <SiteHeader />
    <div
     id="Hero"
     // ref={heroRef}
-    className="min-h-[105svh] md:min-h-[100svh]  justify-center overflow-x-hidden bg-hero-animated relative flex flex-col items-center  px-6 py-12 "
+    className="min-h-[105svh] md:min-h-[100svh] justify-center overflow-x-hidden bg-hero-animated relative flex flex-col items-center px-6 py-12 "
    >
-    {/* Header / Navigation */}
-    <nav className="fixed px-5 !bg-transparent md:px-0 top-5 z-50 w-full max-w-6xl flex justify-between items-center mb-12 duration-300  transition-none">
-     <a aria-label="Scroll to Hero section" href="#Hero">
-      <h1 className="text-2xl font-serif font-bold tracking-tight italic underline reveal transition-none">
-       Faséa
-      </h1>
-     </a>
-     <NavButtons />
-    </nav>
-
     {/* Hero Content */}
-    <main className="!bg-transparent w-full max-w-screen mt-5   px-4  text-center flex flex-col items-center">
+    <main className="!bg-transparent w-full max-w-screen mt-5 px-4 text-center flex flex-col items-center">
      <h2 className="font-serif text-4xl sm:text-5xl font-extrabold mb-6 leading-snug reveal transition-none">
       Your Personal <br /> Pilates Studio for Wellness & Balance
      </h2>
@@ -57,7 +48,7 @@ const HeroSection = () => {
        target="_blank"
        aria-label="Book Link"
        href="https://www.instagram.com/fasea.pilates"
-       className="px-6 py-3  rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal "
+       className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal "
       >
        DM to Book
       </a>
@@ -66,7 +57,7 @@ const HeroSection = () => {
        target="_blank"
        aria-label="Book Link"
        href="https://burly-elbow-f4a.notion.site/ebd/1ebcbfc9f2c9803faae2d3168073b0a0"
-       className="px-6 py-3 rounded-full  bg-[#FAF8F6] text-sm font-medium  shadow-sm  transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04]  hover:shadow-lg reveal "
+       className="px-6 py-3 rounded-full bg-[#FAF8F6] text-sm font-medium shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:shadow-lg reveal "
       >
        Check Schedule
       </a>
@@ -87,14 +78,23 @@ const HeroSection = () => {
     <p className="text-[#716D64] text-base sm:text-lg mb-10">
      Your body deserves to feel strong, calm, and centered.
     </p>
-    <a
-     target="_blank"
-     aria-label="Book Link"
-     href="https://www.instagram.com/fasea.pilates"
-     className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition"
-    >
-     Book Your First Class
-    </a>
+    <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+     <a
+      target="_blank"
+      aria-label="Book Link"
+      href="https://www.instagram.com/fasea.pilates"
+      className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition"
+     >
+      Book Your First Class
+     </a>
+     <a
+      aria-label="Learn more about Faséa"
+      href="/about"
+      className="px-6 py-3 rounded-full text-sm font-medium text-[#444444] bg-white shadow-sm hover:shadow-md transition"
+     >
+      Learn more about Faséa
+     </a>
+    </div>
    </section>
   </div>
  );

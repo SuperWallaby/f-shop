@@ -38,6 +38,18 @@ export default function RootLayout({
     {children}
    </body>
    <Script
+    async
+    src="https://www.googletagmanager.com/gtag/js?id=AW-17771629817"
+   />
+   <Script id="gtag-aw-17771629817" strategy="afterInteractive">
+    {`
+     window.dataLayer = window.dataLayer || [];
+     function gtag(){dataLayer.push(arguments);}
+     gtag('js', new Date());
+     gtag('config', 'AW-17771629817');
+    `}
+   </Script>
+   <Script
     id="jsonld-localbusiness"
     type="application/ld+json"
     dangerouslySetInnerHTML={{

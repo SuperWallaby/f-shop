@@ -17,6 +17,16 @@ export const NavButtons = () => {
  }, []);
 
  const handleClick = (id: string) => {
+  if (id === "About") {
+   window.location.href = "/about";
+   return;
+  }
+
+  if (window.location.pathname !== "/") {
+   window.location.href = `/#${id}`;
+   return;
+  }
+
   const el = document.getElementById(id);
   if (el) {
    el.scrollIntoView({ behavior: "smooth", block: "center" });
