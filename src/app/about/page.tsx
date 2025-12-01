@@ -2,6 +2,7 @@ import React from "react";
 import RevealTrigger from "../../hook/Reaveal";
 import SiteHeader from "../../components/SiteHeader";
 import Image from "next/image";
+import Link from "next/link";
 import InstaCtaButton from "../../components/InstaCtaButton";
 
 export const metadata = {
@@ -181,13 +182,13 @@ const AboutPage = () => {
       >
        Book your first class
       </InstaCtaButton>
-      <a
+      <Link
        href="/#About"
        aria-label="Back to main page About section"
        className="px-6 py-3 rounded-full text-sm font-medium text-[#444444] bg-white shadow-sm hover:shadow-md transition"
       >
        Back to main page
-      </a>
+      </Link>
      </div>
     </section>
    </main>
