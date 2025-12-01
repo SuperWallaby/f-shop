@@ -26,4 +26,8 @@ export function trackLeadClick(channel: LeadChannel, source?: string) {
  }
 
  anyWindow.gtag("event", "lead_click", eventParams);
+
+ anyWindow.gtag("event", "conversion", {
+  send_to: "AW-17771629817/egIFCNb_-ckbEPmZlppC",
+ });
 }
