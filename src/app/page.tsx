@@ -9,6 +9,7 @@ import ContactSection from "../components/Contact";
 import LocationSection from "../components/Map";
 import RevealTrigger from "../hook/Reaveal";
 import SiteHeader from "../components/SiteHeader";
+import InstaCtaButton from "../components/InstaCtaButton";
 
 const HeroSection = () => {
  //  const heroRef = useRef<HTMLDivElement>(null);
@@ -44,14 +45,13 @@ const HeroSection = () => {
       journey today.
      </p>
      <div className="flex gap-5 bg-transparent">
-      <a
-       target="_blank"
-       aria-label="Book Link"
-       href="https://www.instagram.com/fasea.pilates"
+      <InstaCtaButton
+       ariaLabel="Book via Instagram"
+       source="hero"
        className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal "
       >
        DM to Book
-      </a>
+      </InstaCtaButton>
 
       <a
        target="_blank"
@@ -79,14 +79,13 @@ const HeroSection = () => {
      Your body deserves to feel strong, calm, and centered.
     </p>
     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-     <a
-      target="_blank"
-      aria-label="Book Link"
-      href="https://www.instagram.com/fasea.pilates"
+     <InstaCtaButton
+      ariaLabel="Book Link"
+      source="home_footer"
       className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition"
      >
       Book Your First Class
-     </a>
+     </InstaCtaButton>
      <a
       aria-label="Learn more about Faséa"
       href="/about"

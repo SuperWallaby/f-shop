@@ -1,6 +1,9 @@
+"use client";
+
 import { FaInstagram } from "@react-icons/all-files/fa/FaInstagram";
 import { FaWhatsapp } from "@react-icons/all-files/fa/FaWhatsapp";
 import RevealTrigger from "../hook/Reaveal";
+import { trackLeadClick } from "../utils/trackConversion";
 const ContactSection = () => {
  return (
   <section id="Contact" className="py-28 px-6 bg-[#EFE9E2] text-[#444444]">
@@ -19,6 +22,7 @@ const ContactSection = () => {
       href="https://www.instagram.com/fasea.pilates?igsh=MTZ5d2N0OHNibnc3aA%3D%3D&utm_source=qr" // Replace with real link
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() => trackLeadClick("instagram", "contact")}
       className="text-[#9B9B7B] reveal hover:text-[#D1B9B4] transition transform hover:scale-110 text-4xl"
      >
       <FaInstagram />
@@ -30,6 +34,7 @@ const ContactSection = () => {
       href="https://wa.me/60145403560" // Replace with real WhatsApp number
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() => trackLeadClick("whatsapp", "contact")}
       className="text-[#9B9B7B] reveal hover:text-[#D1B9B4]  transition transform hover:scale-110 text-4xl"
      >
       <FaWhatsapp />

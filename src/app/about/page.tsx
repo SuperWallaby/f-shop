@@ -2,6 +2,7 @@ import React from "react";
 import RevealTrigger from "../../hook/Reaveal";
 import SiteHeader from "../../components/SiteHeader";
 import Image from "next/image";
+import InstaCtaButton from "../../components/InstaCtaButton";
 
 export const metadata = {
  title: "About Faséa – Story & Professional Pilates Approach",
@@ -173,14 +174,13 @@ const AboutPage = () => {
       core, and moving with more ease, we would love to meet you in the studio.
      </p>
      <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-      <a
-       target="_blank"
-       aria-label="Book Link"
-       href="https://www.instagram.com/fasea.pilates"
+      <InstaCtaButton
+       ariaLabel="Book Link"
+       source="about_footer"
        className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition"
       >
        Book your first class
-      </a>
+      </InstaCtaButton>
       <a
        href="/#About"
        aria-label="Back to main page About section"
