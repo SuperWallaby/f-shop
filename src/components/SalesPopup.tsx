@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 
 const SalesPopup = () => {
