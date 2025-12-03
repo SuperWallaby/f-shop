@@ -3,6 +3,7 @@ import "./globals.css";
 import { Inter } from "next/font/google";
 import { Playfair_Display } from "next/font/google";
 import Script from "next/script";
+import SalesPopup from "../components/SalesPopup";
 
 const inter = Inter({
  subsets: ["latin"],
@@ -36,6 +37,7 @@ export default function RootLayout({
   <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
    <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
     {children}
+    <SalesPopup />
    </body>
    <Script
     async

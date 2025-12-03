@@ -14,8 +14,15 @@ const PriceSection = () => {
   },
   {
    price: "RM 160",
+   originalPrice: "RM 160",
+   discountedPrice: "RM 120",
    title: "4 Classes",
    details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
+   promotion: {
+    active: true,
+    discount: "25%",
+    label: "End Year Sales",
+   },
   },
   {
    price: "RM 280",
@@ -96,10 +103,27 @@ const PriceSection = () => {
         </div>
        )}
 
+       {plan.promotion?.active && (
+        <div className="absolute font-bold -top-3 left-4 bg-[#A66A4A] text-white text-xs px-3 py-1 rounded-full shadow-lg animate-bounce">
+         {plan.promotion.discount} OFF - {plan.promotion.label}
+        </div>
+       )}
+
        <h4 className="font-serif text-2xl font-bold mb-2">{plan.title}</h4>
-       <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
-        {plan.price}
-       </p>
+       {plan.promotion?.active ? (
+        <div className="mb-4">
+         <p className="text-lg font-sans font-bold text-[#9B9B7B] line-through mb-1">
+          {plan.originalPrice}
+         </p>
+         <p className="text-2xl font-sans font-bold text-[#A66A4A]">
+          {plan.discountedPrice}
+         </p>
+        </div>
+       ) : (
+        <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
+         {plan.price}
+        </p>
+       )}
        <ul className="text-sm  text-[#716D64] space-y-1">
         {plan.details.map((line, i) => (
          <li className={line.includes("30%") ? "font-semibold" : ""} key={i}>

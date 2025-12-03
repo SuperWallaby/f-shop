@@ -10,6 +10,9 @@ import LocationSection from "../components/Map";
 import RevealTrigger from "../hook/Reaveal";
 import SiteHeader from "../components/SiteHeader";
 import InstaCtaButton from "../components/InstaCtaButton";
+import WhatsAppCtaButton from "../components/WhatsAppCtaButton";
+import { FaInstagram } from "@react-icons/all-files/fa/FaInstagram";
+import { FaWhatsapp } from "@react-icons/all-files/fa/FaWhatsapp";
 
 const HeroSection = () => {
  //  const heroRef = useRef<HTMLDivElement>(null);
@@ -44,18 +47,28 @@ const HeroSection = () => {
       Faséa is your space to strengthen your body and calm your mind. Start your
       journey today.
      </p>
-     <div className="flex gap-5 bg-transparent">
+     <div className="flex flex-wrap justify-center gap-4 bg-transparent">
       <InstaCtaButton
        ariaLabel="Book via Instagram"
        source="hero"
-       className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal "
+       className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal flex items-center gap-2"
       >
+       <FaInstagram className="h-4 w-4" />
        DM to Book
       </InstaCtaButton>
 
+      <WhatsAppCtaButton
+       ariaLabel="Book via WhatsApp"
+       source="hero"
+       className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal flex items-center gap-2"
+      >
+       <FaWhatsapp className="h-4 w-4" />
+       WhatsApp
+      </WhatsAppCtaButton>
+
       <a
        target="_blank"
-       aria-label="Book Link"
+       aria-label="Check Schedule"
        href="https://burly-elbow-f4a.notion.site/ebd/1ebcbfc9f2c9803faae2d3168073b0a0"
        className="px-6 py-3 rounded-full bg-[#FAF8F6] text-sm font-medium shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:shadow-lg reveal "
       >
