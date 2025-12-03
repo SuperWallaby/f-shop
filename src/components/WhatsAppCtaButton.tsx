@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { FaWhatsapp } from "@react-icons/all-files/fa/FaWhatsapp";
 import { trackLeadClick } from "../utils/trackConversion";
 
 type WhatsAppCtaButtonProps = {
@@ -38,4 +37,3 @@ const WhatsAppCtaButton = ({
 };
 
 export default WhatsAppCtaButton;
-
