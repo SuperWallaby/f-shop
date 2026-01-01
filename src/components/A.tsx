@@ -1,7 +1,21 @@
 import RevealTrigger from "../hook/Reaveal";
 
+type Plan = {
+ strong?: boolean;
+ price: string;
+ title: string;
+ details: string[];
+ originalPrice?: string;
+ discountedPrice?: string;
+ promotion?: {
+  active: boolean;
+  discount: string;
+  label: string;
+ };
+};
+
 const PriceSection = () => {
- const plans = [
+ const plans: Plan[] = [
   {
    strong: true,
    price: "RM 50",
