@@ -37,7 +37,7 @@ export default function RootLayout({
   <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
    <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
     {children}
-    <SalesPopup />
+    {/* <SalesPopup /> */}
    </body>
    <Script
     async

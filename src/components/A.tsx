@@ -18,11 +18,11 @@ const PriceSection = () => {
    discountedPrice: "RM 120",
    title: "4 Classes",
    details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
-   promotion: {
-    active: true,
-    discount: "25%",
-    label: "End Year Sales",
-   },
+   //  promotion: {
+   //   active: true,
+   //   discount: "25%",
+   //   label: "End Year Sales",
+   //  },
   },
   {
    price: "RM 280",
