@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const NAV_ITEMS = ["About", "Plan", "Contact"];
+const NAV_ITEMS = ["About", "Plan", "Contact", "Book"];
 
 export const NavButtons = () => {
  const [navSolid, setNavSolid] = useState(false);
@@ -19,6 +19,10 @@ export const NavButtons = () => {
  const handleClick = (id: string) => {
   if (id === "About") {
    window.location.href = "/about";
+   return;
+  }
+  if (id === "Book") {
+   window.location.href = "/booking";
    return;
   }
 
@@ -41,7 +45,7 @@ export const NavButtons = () => {
      onClick={() => handleClick(item)}
      className={`  px-4 py-2 text-sm font-medium rounded-full border border-[#DFD1C9] cursor-pointer text-[#444444] hover:bg-[#DFD1C9] transition ${
       navSolid ? "bg-white/90" : "!bg-transparent"
-     }`}
+     } ${item === "Contact" ? "hidden md:inline-flex" : ""}`}
     >
      {item}
     </button>

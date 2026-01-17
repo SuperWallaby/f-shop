@@ -13,6 +13,7 @@ import InstaCtaButton from "../components/InstaCtaButton";
 import WhatsAppCtaButton from "../components/WhatsAppCtaButton";
 import { FaInstagram } from "@react-icons/all-files/fa/FaInstagram";
 import { FaWhatsapp } from "@react-icons/all-files/fa/FaWhatsapp";
+import Link from "next/link";
 
 const HeroSection = () => {
  //  const heroRef = useRef<HTMLDivElement>(null);
@@ -54,7 +55,7 @@ const HeroSection = () => {
        className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal flex items-center gap-2"
       >
        <FaInstagram className="h-4 w-4" />
-       DM to Book
+       Insta DM 
       </InstaCtaButton>
 
       <WhatsAppCtaButton
@@ -66,14 +67,13 @@ const HeroSection = () => {
        WhatsApp
       </WhatsAppCtaButton>
 
-      <a
-       target="_blank"
-       aria-label="Check Schedule"
-       href="https://burly-elbow-f4a.notion.site/ebd/1ebcbfc9f2c9803faae2d3168073b0a0"
-       className="px-6 py-3 rounded-full bg-[#FAF8F6] text-sm font-medium shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:shadow-lg reveal "
+      <Link
+       aria-label="Book now"
+       href="/booking"
+       className="px-6 py-3 rounded-full bg-[#FAF8F6] text-sm font-medium shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:shadow-lg reveal"
       >
-       Check Schedule
-      </a>
+       Book Now
+      </Link>
      </div>
     </main>
    </div>

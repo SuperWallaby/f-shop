@@ -3,6 +3,7 @@ import "./globals.css";
 import { Inter } from "next/font/google";
 import { Playfair_Display } from "next/font/google";
 import Script from "next/script";
+import HydrationProbe from "@/components/HydrationProbe";
 // import SalesPopup from "../components/SalesPopup";
 
 const inter = Inter({
@@ -34,10 +35,18 @@ export default function RootLayout({
  children: React.ReactNode;
 }>) {
  return (
-  <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
-   <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+  <html
+   lang="en"
+   className={`${inter.variable} ${playfair.variable}`}
+   suppressHydrationWarning
+  >
+   <body
+    className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+    suppressHydrationWarning
+   >
     {children}
     {/* <SalesPopup /> */}
+    <HydrationProbe />
    </body>
    <Script
     async

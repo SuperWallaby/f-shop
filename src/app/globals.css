@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "react-day-picker/style.css";
 
 :root {
   --background: #DFD1C9;
@@ -20,6 +21,37 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* react-day-picker theme overrides (remove default blue) */
+.rdp-root,
+.rdp {
+  --rdp-accent-color: #716D64; /* replaces default blue */
+  --rdp-accent-background-color: #DFD1C9;
+  --rdp-today-color: #A66A4A;
+
+  /* Make range/selected styling match the brand palette */
+  --rdp-selected-border: 2px solid rgba(223, 209, 201, 0.95);
+  --rdp-range_middle-background-color: rgba(223, 209, 201, 0.45);
+  --rdp-range_start-date-background-color: #716D64;
+  --rdp-range_end-date-background-color: #716D64;
+  --rdp-range_start-color: #FAF8F6;
+  --rdp-range_end-color: #FAF8F6;
+
+  /* Slightly smaller cells to match existing UI density */
+  --rdp-day-height: 40px;
+  --rdp-day-width: 40px;
+  --rdp-day_button-height: 38px;
+  --rdp-day_button-width: 38px;
+}
+
+.rdp-root .rdp-day_button:hover:not(:disabled) {
+  background-color: rgba(223, 209, 201, 0.35);
+}
+
+.rdp-root .rdp-day_button:focus-visible {
+  outline: 2px solid rgba(223, 209, 201, 0.85);
+  outline-offset: 2px;
 }
 
 

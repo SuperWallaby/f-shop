@@ -20,6 +20,21 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Environment variables (booking/admin)
+
+Copy `env.template` to `.env.local` and fill in values:
+
+```bash
+cp env.template .env.local
+```
+
+Required:
+- `MONGODB_URI`
+- `ADMIN_PASSWORD`
+- `ADMIN_SESSION_SECRET`
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

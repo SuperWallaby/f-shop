@@ -1,0 +1,12 @@
+{
+    "crons": [
+        {
+            "path": "/api/admin/jobs/auto-cancel?horizonHours=48",
+            "schedule": "*/10 * * * *"
+        },
+        {
+            "path": "/api/admin/jobs/reminders",
+            "schedule": "0 1 * * *"
+        }
+    ]
+}

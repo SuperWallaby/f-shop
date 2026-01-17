@@ -38,12 +38,8 @@ const ScheduleSection = () => {
     ))}
    </div>
    <div className="mx-auto flex justify-center mt-12">
-    <a
-     target="_blank"
-     href="https://burly-elbow-f4a.notion.site/ebd/1ebcbfc9f2c9803faae2d3168073b0a0"
-     className="cursor-pointer underline underline-offset-2"
-    >
-     Check Detail Schdule
+    <a href="/booking" className="cursor-pointer underline underline-offset-2">
+     Book a time
     </a>
    </div>
   </section>
