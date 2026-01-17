@@ -18,6 +18,7 @@ import Link from "next/link";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
 import MagnifyingGlassIcon from "@heroicons/react/24/outline/MagnifyingGlassIcon";
 import DocumentDuplicateIcon from "@heroicons/react/24/outline/DocumentDuplicateIcon";
+import { FaWhatsapp } from "react-icons/fa";
 import {
  buildCustomerBookingConfirmationMessage,
  formatKlParts,
@@ -419,6 +420,16 @@ function BookingPageInner() {
   }
  }
 
+ function getSubmitBookingLabel(): string {
+  if (submitting) return "Submitting…";
+  if (!selectedSlotId) return "Select a time";
+  if (!name) return "Enter your name";
+  if (!email) return "Enter your email";
+  if (!whatsapp) return "Enter your WhatsApp";
+  if (!consentWhatsapp) return "Agree to WhatsApp updates";
+  return "Submit booking";
+ }
+
  if (successBookingCode) {
   const bookedSlot = selectedSlotId
    ? allSlots.find((s) => s.id === selectedSlotId) ?? null
@@ -448,16 +459,29 @@ function BookingPageInner() {
        tz: BUSINESS_TIME_ZONE,
       })
     : "";
+
+  const wasapMessage =
+   bookedParts && bookedClassName
+    ? `Booking Done | Class ${bookedClassName} | Date ${bookedParts.dateLabel} | Time ${bookedParts.timeLabel} | Booking Code ${successBookingCode}`
+    : `Booking Done | Booking Code ${successBookingCode}`;
+    
+// Replace wasap.my with official WhatsApp deep link (wa.me)
+const phone = "60145403560"; // country code + number, NO "+" and NO spaces
+const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(wasapMessage)}`;
+
+// Optional: keep a clean visible href (no prefilled text)
+const waPrettyHref = `https://wa.me/${phone}`;
+
   return (
    <div className="min-h-screen bg-[#FAF8F6] text-[#444444] px-6 py-24">
     <SiteHeader />
     <main className="max-w-2xl mx-auto mt-16">
      <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-8 shadow-sm">
       <h1 className="font-serif text-3xl font-bold mb-3">
-       Your booking is ready
+       Booking is ready
       </h1>
       <p className="text-[#5C574F] mb-6">
-       We will send you a WhatsApp message and an email with the details.
+       Please click the button below and complete your booking.
       </p>
       {!!bookedParts && (
        <div className="rounded-2xl border border-[#E8DDD4] bg-white px-5 py-4 text-sm text-[#444444]">
@@ -495,6 +519,28 @@ function BookingPageInner() {
         </button>
        </div>
       </div>
+
+      <a
+       href={waPrettyHref}
+       target="_blank"
+       rel="noreferrer"
+       onClick={(e) => {
+        // Keep the visible/hover URL clean, but open the full prefilled message.
+        e.preventDefault();
+        window.open(waUrl, "_blank", "noopener,noreferrer");
+       }}
+       className={cn(
+        "mt-6 w-full rounded-2xl px-6 py-4",
+        "bg-[#25D366] text-black",
+        "inline-flex items-center justify-center gap-3",
+        "text-base sm:text-lg font-semibold",
+        "shadow-sm transition hover:brightness-95"
+       )}
+      >
+       <FaWhatsapp className="h-6 w-6" aria-hidden />
+       Complete Booking.
+      </a>
+
       <div className="mt-6 rounded-2xl border border-[#E8DDD4] bg-white/70 px-5 py-4">
        <div className="text-xs text-[#716D64] font-medium mb-2">
         Before you come
@@ -676,6 +722,11 @@ function BookingPageInner() {
           : ""}
         </div>
        </div>
+       {selectedItemId && !selectedSlotId ? (
+        <div className="mt-1 text-xs text-[#A66A4A]">
+         Select a time below to continue.
+        </div>
+       ) : null}
 
        <SkipUpdate block={loadingSlots || loadingCalendar || itemsLoading}>
         <WithLoading
@@ -839,7 +890,7 @@ function BookingPageInner() {
          onClick={submitBooking}
          className="mt-2 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
-         {submitting ? "Submitting…" : "Submit booking"}
+         {getSubmitBookingLabel()}
         </button>
         <div className="text-xs text-[#716D64]">
          After submit, you’ll see confirmation. If anything changes, we’ll email

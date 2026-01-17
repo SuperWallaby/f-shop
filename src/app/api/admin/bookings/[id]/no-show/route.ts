@@ -61,7 +61,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     await Promise.all([
       sendNoShowEmail({ to: booking.email, name: booking.name, firstTimer }).catch(() => {}),
       (booking.whatsapp
-        ? sendNoShowWhatsApp({ to: booking.whatsapp, name: booking.name, firstTimer })
+        ? sendNoShowWhatsApp({
+            to: booking.whatsapp,
+            classTypeName,
+            dateKey: booking.dateKey,
+            startMin: booking.startMin,
+            endMin: booking.endMin,
+            businessTimeZone: tz,
+          })
         : Promise.resolve()
       ).catch(() => {}),
     ]);

@@ -36,22 +36,45 @@ AUTH_TOKEN="${TWILIO_AUTH_TOKEN:?Missing TWILIO_AUTH_TOKEN (set it in .env.local
 post_content() {
   local friendly_name="$1"
   local body="$2"
+  local variables="${3:-}"
 
   echo "==> Creating: ${friendly_name}"
+
+  local payload
+  if [[ -n "${variables}" ]]; then
+    payload="$(cat <<JSON
+{
+  "friendly_name": "${friendly_name}",
+  "language": "en",
+  "types": {
+    "twilio/text": {
+      "body": ${body}
+    }
+  },
+  "variables": ${variables}
+}
+JSON
+)"
+  else
+    payload="$(cat <<JSON
+{
+  "friendly_name": "${friendly_name}",
+  "language": "en",
+  "types": {
+    "twilio/text": {
+      "body": ${body}
+    }
+  }
+}
+JSON
+)"
+  fi
 
   curl -sS -u "${ACCOUNT_SID}:${AUTH_TOKEN}" \
     -H "Content-Type: application/json" \
     -X POST \
     "https://content.twilio.com/v1/Content" \
-    -d "{
-      \"friendly_name\": \"${friendly_name}\",
-      \"language\": \"en\",
-      \"types\": {
-        \"twilio/text\": {
-          \"body\": ${body}
-        }
-      }
-    }"
+    -d "${payload}"
 
   echo ""
   echo ""
@@ -62,61 +85,63 @@ post_content() {
 # Twilio variables: {{1}}, {{2}}, ...
 # ---------------------------------------------------------------------------
 
-# 1) Customer: booking confirmed
-# Vars:
-#  {{1}} name
-#  {{2}} class type
-#  {{3}} date label
-#  {{4}} time label
-#  {{5}} booking code
-post_content "fasea_booking_confirmed_en" "$(cat <<'JSON'
-"Hi {{1}} 🤍\nYour Pilates class booking is confirmed.\n\nClass Type: {{2}}\n🗓 Date: {{3}}\n⏰ Time: {{4}}\nBooking Code: {{5}}\n\nPlease bring grip socks, wear comfortable attire, and bring a water bottle.\nKindly arrive 10–15 minutes earlier before class.\n\n✨ Cancellation & No-Show Policy:\n• Free cancellation or reschedule at least 12 hours before class\n• Group class: RM10 (late cancellation / no-show)\n• Private session: RM20 (late cancellation / no-show)\n• Fee applies when the slot remains unused\n\nThank you for your understanding 🤍 Looking forward to seeing you ✨"
-JSON
-)"
-
-# 2) Customer: reminder
+# 1) Booking confirmed (v7; reduce variables)
 # Vars:
 #  {{1}} date label
 #  {{2}} time label
-post_content "fasea_booking_reminder_en" "$(cat <<'JSON'
-"Hi Pilates Girls 🤍\nThis is a gentle reminder that you have class tomorrow ({{1}}) at {{2}}.\n\nPlease arrive 15 minutes earlier to prepare before class starts.\nSee you soon 🤍"
+post_content "fasea_booking_confirmed_en_v7" "$(cat <<'JSON'
+"Booking status update: confirmed.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+JSON
+)" "$(cat <<'JSON'
+{"1":"2026-01-20","2":"7:00 PM"}
 JSON
 )"
 
-# 3) Customer: cancelled by client
-# Vars:
-#  {{1}} name
-#  {{2}} class type
-#  {{3}} date label
-#  {{4}} time label
-post_content "fasea_booking_cancelled_by_client_en" "$(cat <<'JSON'
-"Hi {{1}} ✨\nYour booking for {{2}} on {{3}} at {{4}} has been successfully cancelled as requested.\n\nIf you’d like to rebook, feel free to let us know 🤍"
-JSON
-)"
-
-# 4) Customer: class cancelled by instructor
+# 2) Reminder (v7; keep 2 variables)
 # Vars:
 #  {{1}} date label
 #  {{2}} time label
-#  {{3}} class type
-post_content "fasea_class_cancelled_by_instructor_en" "$(cat <<'JSON'
-"Dear Pilates Girls 💖\nWe regret to inform you that today’s Pilates class on {{1}} at {{2}} has been cancelled due to unforeseen circumstances.\n\nClass Type: {{3}}\n\nWe sincerely apologise for the inconvenience.\nYour session can be rescheduled. Please reach us soon :)\n\nThank you for your understanding 🤍"
+post_content "fasea_booking_reminder_en_v7" "$(cat <<'JSON'
+"Booking status update: reminder.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+JSON
+)" "$(cat <<'JSON'
+{"1":"2026-01-20","2":"7:00 PM"}
 JSON
 )"
 
-# 5) Customer: no-show (first timer)
+# 3) Cancelled by client (v7; reduce variables)
 # Vars:
-#  {{1}} name
-post_content "fasea_no_show_first_timer_en" "$(cat <<'JSON'
-"Hi {{1}} 🤍\nFor first-time clients, we understand unexpected situations.\n\nA one-time grace may be given for late cancellation or no-show.\nKindly inform us as early as possible for future bookings ✨"
+#  {{1}} date label
+#  {{2}} time label
+post_content "fasea_booking_cancelled_by_client_en_v7" "$(cat <<'JSON'
+"Booking status update: cancelled.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+JSON
+)" "$(cat <<'JSON'
+{"1":"2026-01-20","2":"7:00 PM"}
 JSON
 )"
 
-# 6) Customer: no-show (standard)
+# 4) Cancelled by instructor (v7; reduce variables)
 # Vars:
-#  {{1}} name
-post_content "fasea_no_show_en" "$(cat <<'JSON'
-"Hi {{1}} 🤍\nWe noticed you were unable to attend your scheduled class today.\n\nAs per studio policy, a no-show fee applies:\n• Group class: RM10\n• Private session: RM20\n\nThis helps us manage class slots fairly.\nThank you for your kind understanding ✨"
+#  {{1}} date label
+#  {{2}} time label
+post_content "fasea_class_cancelled_by_instructor_en_v7" "$(cat <<'JSON'
+"Booking status update: class cancelled.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+JSON
+)" "$(cat <<'JSON'
+{"1":"2026-01-20","2":"7:00 PM"}
+JSON
+)"
+
+# 5) No-show (v7; reduce variables)
+# Vars:
+#  {{1}} date label
+#  {{2}} time label
+post_content "fasea_no_show_en_v7" "$(cat <<'JSON'
+"Booking status update: attendance not recorded.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+JSON
+)" "$(cat <<'JSON'
+{"1":"2026-01-20","2":"7:00 PM"}
 JSON
 )"
 

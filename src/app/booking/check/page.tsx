@@ -315,7 +315,15 @@ export default function BookingCheckPage() {
                       onClick={() => cancelBooking(b.code)}
                       className="mt-3 px-4 py-2 rounded-full border border-[#E8DDD4] bg-[#F3ECE6] text-sm hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {cancellingCode === b.code ? "Cancelling…" : "Cancel booking"}
+                      <span className="inline-flex items-center gap-2">
+                        {cancellingCode === b.code ? (
+                          <span
+                            className="h-3.5 w-3.5 rounded-full border-2 border-[#716D64]/30 border-t-[#716D64] animate-spin"
+                            aria-hidden
+                          />
+                        ) : null}
+                        {cancellingCode === b.code ? "Cancelling…" : "Cancel booking"}
+                      </span>
                     </button>
                   )}
                 </div>

@@ -73,13 +73,13 @@ The response will include a Content SID like `HX...`. Save it.
 
 ### One-shot script (recommended for this repo)
 
-This repo includes a script that registers all booking-related templates defined in `src/lib/bookingMessages.ts`:
+This repo includes a script that registers booking-related templates (currently `*_v7`) with **sample values** for variables (Twilio `variables` field), which can help WhatsApp approval reviewers understand parameter usage:
 
 - booking confirmed
 - reminder
 - cancelled by client
 - cancelled by instructor
-- no-show (first timer + standard)
+  - no-show
 
 Run:
 
@@ -91,6 +91,28 @@ The script will auto-load `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` from `.en
 
 It will print the JSON responses for each template. Copy the returned `sid` (Content SID, `HX...`) values for later use.
 
+### Submit all templates for WhatsApp approval (bulk)
+
+After creating templates, submit them for WhatsApp approval:
+
+```bash
+bash scripts/submit-twilio-whatsapp-approvals.sh
+```
+
+This script posts approval requests to Twilio for the booking templates created by `register-twilio-whatsapp-templates.sh` (category defaults to `UTILITY`).
+
+### Notes on INVALID_FORMAT
+
+If you see WhatsApp rejections like `INVALID_FORMAT`, the most common fixes are:
+
+- Use sequential parameters only (`{{1}}`, `{{2}}`, ...), do not skip numbers.
+- Avoid smart quotes and special punctuation (use ASCII `'` and `-`).
+- Avoid bullet characters like `•` (use `-`).
+- Keep emojis minimal (0–1 per template).
+- Keep long policy blocks short; link out for details.
+
+The current scripts generate `*_v7` templates and include `variables` sample values in the Content create payload.
+
 ## Wire templates into this repo (required outside the 24-hour window)
 
 Set these in `.env.local` after your templates are approved:
@@ -99,7 +121,6 @@ Set these in `.env.local` after your templates are approved:
 - `TWILIO_CONTENT_SID_BOOKING_REMINDER_EN`
 - `TWILIO_CONTENT_SID_BOOKING_CANCELLED_BY_CLIENT_EN`
 - `TWILIO_CONTENT_SID_CLASS_CANCELLED_BY_INSTRUCTOR_EN`
-- `TWILIO_CONTENT_SID_NO_SHOW_FIRST_TIMER_EN`
 - `TWILIO_CONTENT_SID_NO_SHOW_EN`
 
 This repo will automatically use `ContentSid + ContentVariables` for customer WhatsApp messages when these are present, and fall back to `Body` when they are not.
@@ -120,25 +141,22 @@ This repo currently sends WhatsApp using a plain **Body**:
 
 So: registering templates in Twilio is step 1, but **to actually use them outside the 24‑hour window**, we’d need a small code change to send `ContentSid` + `ContentVariables` instead of `Body`.
 
-If you want, tell me which message kinds you want templated first (booking_confirmed / reminder / cancelled / no_show), and I’ll add:
-- env vars for the Content SIDs
-- a `sendTwilioWhatsAppTemplate(...)` helper
-- a safe fallback to `Body` for dev/testing
+This repo will use `ContentSid + ContentVariables` automatically when these env vars are present, and falls back to plain `Body` when they are not.
 
 ## Suggested template set for this project
 
 These map cleanly to the message builders in `src/lib/bookingMessages.ts`:
 
 - **Booking confirmed**
-  - Variables: name, class type, date label, time label, booking code
+  - Variables: date label, time label
 - **Reminder**
   - Variables: date label, time label
 - **Cancelled by client**
-  - Variables: name, class type, date label, time label
+  - Variables: date label, time label
 - **Cancelled by instructor**
-  - Variables: class type, date label, time label
+  - Variables: date label, time label
 - **No show**
-  - Variables: name (and optional “first timer” variant)
+  - Variables: date label, time label
 
 ## Notes / pitfalls
 

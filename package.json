@@ -11,8 +11,7 @@
     "vercel:unlink": "rm -rf .vercel",
     "vercel:link:fasea": "npx --yes vercel link --yes --project fasea",
     "vercel:pull": "npx --yes vercel pull --yes --environment=preview",
-    "deploy": "npx --yes vercel deploy --yes",
-    "deploy:prod": "npx --yes vercel deploy --yes --prod",
+    "deploy": "npx --yes vercel deploy --yes --prod",
     "dev:worker": "npx --yes wrangler dev --config cloudflare/cron-worker/wrangler.toml",
     "deploy:worker": "npx --yes wrangler deploy --config cloudflare/cron-worker/wrangler.toml"
   },

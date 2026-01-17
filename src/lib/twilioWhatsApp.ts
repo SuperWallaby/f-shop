@@ -4,18 +4,16 @@ import {
   buildCustomerBookingConfirmationMessage,
   buildCustomerCancelledByClientMessage,
   buildCustomerCancelledByInstructorMessage,
-  buildCustomerNoShowMessage,
   buildCustomerReminderMessage,
   formatKlParts,
 } from "@/lib/bookingMessages";
 
 const DEFAULT_CONTENT_SIDS = {
-  bookingConfirmedEn: "HXce558372a44f944ac213a7385aa9b553",
-  bookingReminderEn: "HX6616d80554e9e2b81ade282422a24171",
-  bookingCancelledByClientEn: "HXca89227a701fd1aeda632b4d828ff108",
-  classCancelledByInstructorEn: "HX4a429a962f13b4f5d6711e8c5883682d",
-  noShowFirstTimerEn: "HX2bcccf411ddaf73d1640e3f6d6ff4e8f",
-  noShowEn: "HXd31e3e399d44810bd67b4713d54550a4",
+  bookingConfirmedEn: "HX8eb56c76730f61160facb74d91acd32a",
+  bookingReminderEn: "HXaf5345bb90988367047251d07dcf7f36",
+  bookingCancelledByClientEn: "HXde78c084556bb1672cf7f85d8d26e927",
+  classCancelledByInstructorEn: "HXa1e64586469081388ed540d7c50f0269",
+  noShowEn: "HXa1256393456f0496ca3679231572e00a",
 } as const;
 
 function formEncode(params: Record<string, string>): string {
@@ -168,11 +166,11 @@ export async function sendBookingConfirmedWhatsApp(args: {
     to: args.to,
     contentSid: sid,
     contentVariables: {
-      "1": args.name,
-      "2": args.classTypeName,
-      "3": dateLabel,
-      "4": timeLabel,
-      "5": args.bookingCode ?? "",
+      // v7 template:
+      //  {{1}} date label
+      //  {{2}} time label
+      "1": dateLabel,
+      "2": timeLabel,
     },
   });
 }
@@ -213,10 +211,11 @@ export async function sendBookingCancelledByClientWhatsApp(args: {
     to: args.to,
     contentSid: sid,
     contentVariables: {
-      "1": args.name,
-      "2": args.classTypeName,
-      "3": dateLabel,
-      "4": timeLabel,
+      // v7 template:
+      //  {{1}} date label
+      //  {{2}} time label
+      "1": dateLabel,
+      "2": timeLabel,
     },
   });
 }
@@ -255,9 +254,11 @@ export async function sendClassCancelledByInstructorWhatsApp(args: {
     to: args.to,
     contentSid: sid,
     contentVariables: {
+      // v7 template:
+      //  {{1}} date label
+      //  {{2}} time label
       "1": dateLabel,
       "2": timeLabel,
-      "3": args.classTypeName,
     },
   });
 }
@@ -302,22 +303,27 @@ export async function sendBookingReminderWhatsApp(args: {
 
 export async function sendNoShowWhatsApp(args: {
   to: string;
-  name: string;
-  firstTimer: boolean;
+  classTypeName: string;
+  dateKey: string;
+  startMin: number;
+  endMin: number;
+  businessTimeZone: string;
 }) {
-  const body = buildCustomerNoShowMessage({
-    name: args.name,
-    firstTimer: args.firstTimer,
+  let sid = getContentSid("TWILIO_CONTENT_SID_NO_SHOW_EN");
+  if (!sid) sid = DEFAULT_CONTENT_SIDS.noShowEn;
+
+  const { dateLabel, timeLabel } = formatKlParts({
+    dateKey: args.dateKey,
+    startMin: args.startMin,
+    endMin: args.endMin,
+    tz: args.businessTimeZone,
   });
 
-  let sid: string | undefined;
-  if (args.firstTimer) {
-    sid = getContentSid("TWILIO_CONTENT_SID_NO_SHOW_FIRST_TIMER_EN");
-    if (!sid) sid = DEFAULT_CONTENT_SIDS.noShowFirstTimerEn;
-  } else {
-    sid = getContentSid("TWILIO_CONTENT_SID_NO_SHOW_EN");
-    if (!sid) sid = DEFAULT_CONTENT_SIDS.noShowEn;
-  }
+  const body =
+    `Booking status update: attendance not recorded.\n` +
+    `Date: ${dateLabel}\n` +
+    `Time: ${timeLabel}\n\n` +
+    `Reference: https://fasea.plantweb.io/info/booking`;
 
   if (!sid) {
     await sendTwilioWhatsApp({ to: args.to, body });
@@ -328,7 +334,11 @@ export async function sendNoShowWhatsApp(args: {
     to: args.to,
     contentSid: sid,
     contentVariables: {
-      "1": args.name,
+      // v7 template:
+      //  {{1}} date label
+      //  {{2}} time label
+      "1": dateLabel,
+      "2": timeLabel,
     },
   });
 }
