@@ -206,6 +206,7 @@ export async function POST(req: NextRequest) {
             to: whatsapp,
             name,
             classTypeName: item.name,
+            bookingCode: bookingDoc.code,
             dateKey: updatedSlot.dateKey,
             startMin: updatedSlot.startMin,
             endMin: updatedSlot.endMin,

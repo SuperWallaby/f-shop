@@ -473,7 +473,7 @@ export function AdminCalendarView() {
       cur = cur.plus({ days: 1 });
     }
     return list;
-  }, [monthDt, days]);
+  }, [monthDt]);
 
   return (
     <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">

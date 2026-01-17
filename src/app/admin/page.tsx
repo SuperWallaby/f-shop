@@ -90,7 +90,6 @@ export default function AdminPage() {
 
  const [dayLoading, setDayLoading] = useState(false);
  const [dayError, setDayError] = useState<string | null>(null);
- const [dayTimeZone, setDayTimeZone] = useState<string>("UTC");
  const [daySlots, setDaySlots] = useState<AdminDaySlot[]>([]);
 
  const [adminItems, setAdminItems] = useState<
@@ -283,7 +282,7 @@ export default function AdminPage() {
    if (!res.ok || !json?.ok) {
     throw new Error(json?.error?.message ?? "Failed to load day");
    }
-   setDayTimeZone(json.data.timeZone ?? "UTC");
+   // timeZone is currently unused in the UI, but kept in API response
    setDaySlots(json.data.slots ?? []);
   } catch (e) {
    setDaySlots([]);
@@ -593,7 +592,10 @@ export default function AdminPage() {
    ...prev,
    [itemId]: {
     ...(prev[itemId] ?? {}),
-    [dayKey]: [...((prev[itemId]?.[dayKey] ?? []) as any), { start: "09:00", end: "10:00" }],
+   [dayKey]: [
+    ...(prev[itemId]?.[dayKey] ?? []),
+    { start: "09:00", end: "10:00" },
+   ],
    },
   }));
  }

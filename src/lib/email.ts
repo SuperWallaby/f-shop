@@ -63,6 +63,7 @@ export async function sendBookingCreatedEmail(args: {
     text: buildCustomerBookingConfirmationMessage({
       name: args.name,
       classTypeName: args.classTypeName,
+      bookingCode: args.bookingCode,
       dateKey: args.dateKey,
       startMin: args.startMin,
       endMin: args.endMin,

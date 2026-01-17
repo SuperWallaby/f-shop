@@ -15,7 +15,7 @@ function allowJob(req: NextRequest) {
   if (req.headers.get("x-vercel-cron") === "1") return null;
   const auth = requireAdmin(req);
   if (!auth) return null;
-  const secret = optionalEnv("REMINDER_JOB_SECRET");
+  const secret = optionalEnv("AUTO_CANCEL_JOB_SECRET");
   if (!secret) return auth;
   const got =
     req.headers.get("x-job-secret") ??
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       .limit(5000)
       .toArray();
 
-    let considered = docs.length;
+    const considered = docs.length;
     let sentOrMarked = 0;
 
     for (const b of docs) {

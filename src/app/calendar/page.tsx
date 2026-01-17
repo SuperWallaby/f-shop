@@ -25,12 +25,6 @@ type PublicCalendarDay = {
  }>;
 };
 
-function minutesToHhmm(min: number): string {
- const hh = Math.floor(min / 60);
- const mm = min % 60;
- return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
-}
-
 function minutesToAmPm(min: number): string {
  const hh = Math.floor(min / 60);
  const mm = min % 60;

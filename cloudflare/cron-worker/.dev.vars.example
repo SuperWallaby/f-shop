@@ -1,0 +1,6 @@
+## For `npm run dev:worker`
+## Copy to `cloudflare/cron-worker/.dev.vars` (do NOT commit real secrets)
+
+TARGET_BASE_URL=https://your-vercel-domain.vercel.app
+AUTO_CANCEL_JOB_SECRET=replace-me
+

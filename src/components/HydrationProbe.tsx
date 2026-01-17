@@ -4,13 +4,7 @@ import { useEffect } from "react";
 
 export default function HydrationProbe() {
   useEffect(() => {
-    const bodyAttrs = {
-      czShortcutListen: document.body.getAttribute("cz-shortcut-listen"),
-      dataGrammarly: document.body.getAttribute("data-gr-ext-installed"),
-    };
-    const htmlAttrs = {
-      czShortcutListen: document.documentElement.getAttribute("cz-shortcut-listen"),
-    };
+    // Intentionally empty: this component exists to force hydration on client.
   }, []);
 
   return null;

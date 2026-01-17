@@ -35,6 +35,12 @@ Required:
 - `RESEND_API_KEY`
 - `EMAIL_FROM`
 
+## Twilio WhatsApp templates
+
+If you want WhatsApp messages to work reliably outside the 24-hour window, you must register approved WhatsApp templates in Twilio and send using Content Templates:
+
+- See `docs/twilio-whatsapp-templates.md`
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

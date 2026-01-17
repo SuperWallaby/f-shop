@@ -117,7 +117,6 @@ export async function GET(req: NextRequest) {
       const slotId = s._id.toHexString();
       const itemId = s.itemId?.toHexString?.() ?? "";
       const item = itemsById.get(itemId);
-      const exKey = (item?.exclusiveKey ?? "").trim();
       const cap = item?.capacity ?? 0;
       const bs = bookingsBySlot.get(slotId) ?? [];
       day.slots.push({

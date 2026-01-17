@@ -98,7 +98,6 @@ function BookingPageInner() {
  const [allSlots, setAllSlots] = useState<SlotDto[]>([]);
  const [loadingSlots, setLoadingSlots] = useState(false);
  const [slotsError, setSlotsError] = useState<string | null>(null);
- const [hasLoadedSlotsOnce, setHasLoadedSlotsOnce] = useState(false);
 
  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
  const [name, setName] = useState("");
@@ -341,13 +340,13 @@ function BookingPageInner() {
     }
     if (!cancelled) {
      setAllSlots(json.data.slots ?? []);
-     setHasLoadedSlotsOnce(true);
+     // loaded
     }
    } catch (e) {
     if (!cancelled) {
      setAllSlots([]);
      setSlotsError(e instanceof Error ? e.message : "Failed to load slots");
-     setHasLoadedSlotsOnce(true);
+     // loaded
     }
    } finally {
     if (!cancelled) setLoadingSlots(false);
@@ -442,6 +441,7 @@ function BookingPageInner() {
     ? buildCustomerBookingConfirmationMessage({
        name: name.trim() || "Pilates Girls",
        classTypeName: bookedClassName,
+       bookingCode: successBookingCode,
        dateKey: bookedSlot.dateKey,
        startMin: bookedSlot.startMin,
        endMin: bookedSlot.endMin,

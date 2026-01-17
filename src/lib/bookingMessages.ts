@@ -19,6 +19,7 @@ export function formatKlParts(args: {
 export function buildCustomerBookingConfirmationMessage(args: {
   name: string;
   classTypeName: string;
+  bookingCode?: string;
   dateKey: string;
   startMin: number;
   endMin: number;
@@ -30,7 +31,9 @@ export function buildCustomerBookingConfirmationMessage(args: {
     `Your Pilates class booking is confirmed.\n\n` +
     `Class Type: ${args.classTypeName}\n` +
     `🗓 Date: ${dateLabel}\n` +
-    `⏰ Time: ${timeLabel}\n\n` +
+    `⏰ Time: ${timeLabel}\n` +
+    (args.bookingCode ? `Booking Code: ${args.bookingCode}\n` : ``) +
+    `\n` +
     `Please bring grip socks, wear comfortable attire, and bring a water bottle.\n` +
     `Kindly arrive 10–15 minutes earlier before class.\n\n` +
     `✨ Cancellation & No-Show Policy:\n` +

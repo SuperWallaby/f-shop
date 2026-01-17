@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   let expected = "";
   try {
    expected = requireEnv("ADMIN_PASSWORD");
-  } catch (e) {
+  } catch {
    return jsonError(
     "Admin password is not configured",
     500,
