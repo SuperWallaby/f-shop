@@ -460,10 +460,17 @@ function BookingPageInner() {
       })
     : "";
 
-  const wasapMessage =
-   bookedParts && bookedClassName
-    ? `Booking Done | Class ${bookedClassName} | Date ${bookedParts.dateLabel} | Time ${bookedParts.timeLabel} | Booking Code ${successBookingCode}`
-    : `Booking Done | Booking Code ${successBookingCode}`;
+    const wasapMessage =
+    bookedParts && bookedClassName
+      ? [
+          "Booking Done",
+          `Class: ${bookedClassName}`,
+          `Date: ${bookedParts.dateLabel}`,
+          `Time: ${bookedParts.timeLabel}`,
+          `Booking Code: ${successBookingCode}`,
+        ].join("\n")
+      : ["Booking Done", `Booking Code: ${successBookingCode}`].join("\n");
+      
     
 // Replace wasap.my with official WhatsApp deep link (wa.me)
 const phone = "60145403560"; // country code + number, NO "+" and NO spaces
