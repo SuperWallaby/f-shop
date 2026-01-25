@@ -20,7 +20,7 @@ const ScheduleSection = () => {
    <RevealTrigger rootSelector="#Time" />
    <div className="max-w-5xl mx-auto text-center mb-16">
     <h3 className="font-serif leading-snug text-3xl sm:text-4xl font-bold">
-     Math Group Class <span className="whitespace-nowrap">Weekly Schedule</span>
+     Mat Group Class <span className="whitespace-nowrap">Weekly Schedule</span>
     </h3>
    </div>
    {/*  */}
