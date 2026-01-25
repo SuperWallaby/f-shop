@@ -29,6 +29,7 @@ const ScheduleSection = () => {
      <span> class schedule is flexible between 11 am – 6 pm.</span>
     </p>
    </div>
+   {/*  */}
    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6 max-w-6xl mx-auto text-center">
     {schedule.map(({ day, times }, idx) => (
      <div
