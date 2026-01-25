@@ -5,6 +5,8 @@ type Plan = {
  price: string;
  title: string;
  details: string[];
+ // Optional small note shown next to the price (e.g. "/ per head")
+ priceNote?: string;
  originalPrice?: string;
  discountedPrice?: string;
  promotion?: {
@@ -92,6 +94,7 @@ const PriceSection = () => {
   {
    strong: true,
    price: "RM 120",
+   priceNote: "/ per head",
    title: "Single Class",
    details: [
     "First trial 10% off (RM 108)",
@@ -102,11 +105,13 @@ const PriceSection = () => {
   },
   {
    price: "RM 460",
+   priceNote: "/ per head",
    title: "4 Classes",
    details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
   },
   {
    price: "RM 880",
+   priceNote: "/ per head",
    title: "8 Classes",
    details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
   },
@@ -327,9 +332,12 @@ const PriceSection = () => {
         </div>
        )}
        <h4 className="font-serif text-2xl font-bold mb-2">{plan.title}</h4>
-       <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
-        {plan.price}
-       </p>
+      <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
+       {plan.price}{" "}
+       {plan.priceNote ? (
+        <span className="text-xs font-normal text-[#716D64]">{plan.priceNote}</span>
+       ) : null}
+      </p>
        <ul className="text-sm text-[#716D64] space-y-1">
         {plan.details.map((line, i) => (
          <li key={i}>• {line}</li>
