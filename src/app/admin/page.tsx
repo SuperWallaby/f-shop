@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import { DayPicker } from "react-day-picker";
 import { DateTime } from "luxon";
@@ -26,8 +25,6 @@ import {
 } from "./_lib/adminTime";
 
 export default function AdminPage() {
- const router = useRouter();
- const searchParams = useSearchParams();
  const [checking, setChecking] = useState(true);
  const [authed, setAuthed] = useState(false);
  const [password, setPassword] = useState("");
@@ -92,12 +89,8 @@ export default function AdminPage() {
   []
  );
  type TabKey = (typeof allowedTabs)[number];
- const tabFromUrl = (searchParams.get("tab") ?? "").trim() as TabKey;
- const initialTab: TabKey = (allowedTabs as readonly string[]).includes(tabFromUrl)
-  ? tabFromUrl
-  : "calendar";
 
- const [tab, setTab] = useState<TabKey>(initialTab);
+ const [tab, setTab] = useState<TabKey>("calendar");
  const [selectedDay, setSelectedDay] = useState<Date | undefined>(
   () => new Date()
  );
@@ -218,23 +211,35 @@ export default function AdminPage() {
   }
   setTab(next);
   try {
-   const params = new URLSearchParams(searchParams.toString());
-   params.set("tab", next);
-   router.replace(`/admin?${params.toString()}`, { scroll: false });
+   const url = new URL(window.location.href);
+   url.searchParams.set("tab", next);
+   window.history.replaceState({}, "", url.toString());
   } catch {
    // ignore
   }
  }
 
- // If user navigates (back/forward) and tab param changes, sync state.
+ // Sync tab with URL (?tab=...) on mount and when user uses back/forward.
  useEffect(() => {
-  const raw = (searchParams.get("tab") ?? "").trim() as TabKey;
-  const nextTab: TabKey = (allowedTabs as readonly string[]).includes(raw)
-   ? raw
-   : "calendar";
-  if (nextTab !== tab) setTab(nextTab);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [searchParams]);
+  const readTabFromUrl = (): TabKey => {
+   try {
+    const url = new URL(window.location.href);
+    const raw = (url.searchParams.get("tab") ?? "").trim();
+    return (allowedTabs as readonly string[]).includes(raw) ? (raw as TabKey) : "calendar";
+   } catch {
+    return "calendar";
+   }
+  };
+
+  // Initial sync after mount
+  const initial = readTabFromUrl();
+  setTab(initial);
+
+  // Back/forward sync
+  const onPop = () => setTab(readTabFromUrl());
+  window.addEventListener("popstate", onPop);
+  return () => window.removeEventListener("popstate", onPop);
+ }, [allowedTabs]);
 
  async function saveAdminItemsDraft() {
   if (adminItemsSaving) return;
