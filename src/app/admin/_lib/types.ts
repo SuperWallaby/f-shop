@@ -20,6 +20,7 @@ export type AdminDaySlot = {
     email: string;
     whatsapp?: string;
     status: "confirmed" | "cancelled" | "no_show";
+    starred?: boolean;
     createdAt: string;
     cancelledAt: string | null;
   }>;
@@ -45,6 +46,11 @@ export type CalendarDayDto = {
       email?: string;
       whatsapp?: string;
       status: "confirmed" | "cancelled" | "no_show";
+      starred?: boolean;
+      createdAt?: string;
+      cancelledAt?: string | null;
+      noShowAt?: string | null;
+      adminNote?: string;
     }>;
   }>;
 };
@@ -58,6 +64,7 @@ export type BookingListItem = {
   itemName: string;
   itemColor: string;
   adminNote: string;
+  starred: boolean;
   status: "confirmed" | "cancelled" | "no_show";
   createdAt: string;
   dateKey: string;

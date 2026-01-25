@@ -63,9 +63,9 @@ const SalesPopup = () => {
     </button>
     <div className="max-w-lg relative w-full aspect-auto sm:max-h-[85vh] rounded-lg overflow-hidden shadow-2xl">
      <img
-      src="/imgs/sales.webp"
-      alt="Special offer"
-      className="object-contain "
+      src="/promotion.png"
+      alt="Promotion"
+      className="object-contain"
      />
     </div>
    </div>

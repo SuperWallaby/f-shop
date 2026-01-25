@@ -14,6 +14,24 @@ type Plan = {
  };
 };
 
+const ReformerMachineIcon = ({ className }: { className?: string }) => (
+ <svg
+  className={className ?? "w-14 h-14"}
+  xmlns="http://www.w3.org/2000/svg"
+  version="1.0"
+  width="512.000000pt"
+  height="512.000000pt"
+  viewBox="0 0 512.000000 512.000000"
+  preserveAspectRatio="xMidYMid meet"
+  aria-hidden="true"
+ >
+  <g transform="translate(0.000000,512.000000) scale(0.100000,-0.100000)" fill="#444444" stroke="none">
+   <path d="M3910 4685 c-152 -43 -257 -171 -268 -326 -2 -37 0 -88 7 -112 10 -42 9 -49 -30 -133 -88 -190 -106 -299 -71 -432 21 -81 24 -77 -53 -87 -75 -9 -240 -54 -325 -87 -186 -73 -306 -146 -528 -322 l-154 -120 -73 3 c-96 4 -173 -13 -263 -55 -86 -41 -197 -141 -233 -209 -21 -39 -31 -47 -74 -59 -27 -8 -341 -91 -696 -185 l-646 -170 -151 -3 -150 -3 -4 74 c-3 65 -6 76 -31 97 -38 33 -96 33 -134 0 l-28 -24 -3 -701 -2 -700 29 -33 c26 -30 34 -33 100 -36 l71 -4 0 -284 c0 -314 1 -322 62 -343 19 -7 122 -11 260 -11 188 0 234 3 259 16 55 28 59 55 59 354 l0 270 1710 0 1710 0 0 -285 0 -285 29 -32 29 -33 262 0 262 0 29 33 29 32 0 284 0 284 81 4 c77 3 82 5 110 36 l29 32 0 248 0 248 -28 45 c-16 24 -92 135 -170 247 -78 111 -142 204 -142 207 0 2 64 104 143 227 180 280 197 310 197 337 0 34 -26 76 -55 89 -57 26 -103 8 -146 -60 l-31 -49 -40 40 c-22 21 -183 162 -358 312 -283 244 -316 275 -297 283 172 69 262 147 331 291 89 181 112 302 82 429 -26 109 -77 194 -167 280 -54 51 -79 82 -79 98 0 39 -56 144 -100 188 -88 88 -233 127 -350 95z m139 -195 c73 -21 121 -94 121 -183 0 -54 13 -73 75 -108 95 -54 155 -138 170 -241 l7 -47 -78 34 c-142 61 -256 66 -369 16 l-45 -20 -67 30 c-37 17 -69 32 -71 34 -5 4 32 76 63 121 30 44 31 68 5 125 -46 103 -3 209 99 239 36 11 51 11 90 0z m-206 -729 c87 -39 113 -39 185 1 77 44 138 44 242 -1 41 -18 79 -37 83 -41 12 -11 -28 -85 -74 -135 -23 -25 -64 -54 -100 -70 -55 -24 -70 -27 -143 -23 -91 5 -141 26 -206 84 -47 43 -87 121 -96 187 -8 55 -17 55 109 -2z m-451 -433 c-10 -26 -16 -75 -16 -123 0 -66 4 -90 27 -140 33 -70 59 -100 144 -164 l61 -47 -25 -33 c-31 -39 -92 -68 -293 -139 -178 -63 -501 -164 -506 -159 -14 13 -153 402 -146 406 5 3 69 54 143 112 209 166 329 236 510 299 118 40 120 40 101 -12z m413 13 c47 -29 913 -779 925 -800 32 -61 -11 -146 -80 -157 -43 -7 -19 -23 -592 391 -233 169 -435 320 -450 337 -57 65 -41 175 31 224 45 30 121 33 166 5z m-1291 -677 c43 -113 74 -209 70 -213 -5 -5 -72 -34 -149 -66 -518 -213 -511 -211 -1260 -314 -280 -39 -520 -72 -532 -75 -23 -3 -23 -2 -23 108 l0 112 53 14 c295 74 1332 352 1347 360 12 6 32 35 46 65 63 131 183 213 319 214 l50 1 79 -206z m1614 -186 c191 -139 370 -261 399 -273 l51 -21 -152 -240 -152 -239 -645 -2 c-485 -2 -650 -6 -667 -15 -57 -30 -65 -113 -16 -159 l26 -24 974 -3 974 -2 0 -120 0 -120 -2360 0 -2360 0 0 120 0 120 976 2 976 3 29 33 c40 44 40 93 0 133 l-29 29 -801 0 -801 0 21 44 22 43 151 21 c83 12 300 42 481 67 492 68 529 73 670 107 170 40 272 76 592 209 172 71 340 133 480 175 289 87 507 165 631 225 85 41 108 57 134 94 18 25 36 45 41 45 4 0 164 -113 355 -252z m-3718 -448 c0 -139 -3 -166 -19 -199 -32 -63 -90 -107 -163 -125 l-28 -6 0 210 c0 167 3 217 15 240 19 36 25 38 118 39 l77 1 0 -160z m4407 -317 c4 -10 -29 -13 -152 -13 -122 0 -155 3 -149 13 4 6 26 41 49 77 23 36 54 84 69 108 l27 43 76 -108 c41 -59 78 -113 80 -120z m-4179 -870 l-3 -218 -117 -3 -118 -3 0 221 0 220 120 0 120 0 -2 -217z m4062 -3 l0 -220 -120 0 -120 0 0 220 0 220 120 0 120 0 0 -220z" />
+   <path d="M2507 1689 c-22 -13 -47 -61 -47 -93 0 -14 13 -40 29 -58 24 -27 36 -33 71 -33 35 0 47 6 71 33 16 18 29 44 29 58 0 33 -25 81 -49 94 -25 13 -81 12 -104 -1z" />
+  </g>
+ </svg>
+);
+
 const PriceSection = () => {
  const plans: Plan[] = [
   {
@@ -21,10 +39,17 @@ const PriceSection = () => {
    price: "RM 50",
    title: "Single Class",
    details: [
-    "30% off for first-time visitors",
+    "Promo single class RM 26",
     "Non-shareable",
     "Non-refundable",
    ],
+   originalPrice: "RM 50",
+   discountedPrice: "RM 26",
+   promotion: {
+    active: true,
+    discount: "RM 26",
+    label: "Promo price",
+   },
   },
   {
    price: "RM 160",
@@ -60,6 +85,61 @@ const PriceSection = () => {
    price: "RM 1,500",
    title: "10 Classes",
    details: ["3 Month Validity", "Non-shareable", "Non-refundable"],
+  },
+ ];
+
+ const duetPlans: Plan[] = [
+  {
+   strong: true,
+   price: "RM 120",
+   title: "Single Class",
+   details: [
+    "First trial 10% off (RM 108)",
+    "1 Month Validity",
+    "Non-shareable",
+    "Non-refundable",
+   ],
+  },
+  {
+   price: "RM 460",
+   title: "4 Classes",
+   details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
+  },
+  {
+   price: "RM 880",
+   title: "8 Classes",
+   details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
+  },
+ ];
+
+ const reformerGroupPlans: Plan[] = [
+  {
+   strong: true,
+   price: "RM 90",
+   title: "Single Class",
+   details: [
+    "Promo single class RM 70",
+    "1 Month Validity",
+    "Non-shareable",
+    "Non-refundable",
+   ],
+   originalPrice: "RM 90",
+   discountedPrice: "RM 70",
+   promotion: {
+    active: true,
+    discount: "RM 70",
+    label: "Promo price",
+   },
+  },
+  {
+   price: "RM 348",
+   title: "4 Classes",
+   details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
+  },
+  {
+   price: "RM 664",
+   title: "8 Classes",
+   details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
   },
  ];
  return (
@@ -119,7 +199,9 @@ const PriceSection = () => {
 
        {plan.promotion?.active && (
         <div className="absolute font-bold -top-3 left-4 bg-[#A66A4A] text-white text-xs px-3 py-1 rounded-full shadow-lg animate-bounce">
-         {plan.promotion.discount} OFF - {plan.promotion.label}
+         {plan.promotion.discount.includes("RM")
+          ? plan.promotion.label
+          : `${plan.promotion.discount} OFF - ${plan.promotion.label}`}
         </div>
        )}
 
@@ -208,6 +290,110 @@ const PriceSection = () => {
          <li className={line.includes("30%") ? "font-semibold" : ""} key={i}>
           • {line}
          </li>
+        ))}
+       </ul>
+      </div>
+     );
+    })}
+   </div>
+
+   <div className="text-3xl mb-12 mt-24 text-center flex-col justify-center items-center gap-4 mx-auto flex sm:text-4xl font-bold">
+    <div className="flex items-center justify-center gap-2">
+     {Array.from({ length: 2 }).map((_, i) => (
+      <ReformerMachineIcon key={i} className="w-12 h-12" />
+     ))}
+    </div>
+    <h3 className="font-serif">Duet class</h3>
+    <p className="text-[#716D64] text-sm font-normal">
+     Train with a partner and get more personalized coaching - perfect for couples or friends.
+    </p>
+   </div>
+
+   <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+    {duetPlans.map((plan, index) => {
+     const isHighlighted = index === duetPlans.length - 1;
+     return (
+      <div
+       key={`duet-${index}`}
+       className={`reveal price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 ${
+        isHighlighted
+         ? "bg-white/70 border-[#9B9B7B] shadow-lg scale-[1.03]"
+         : "bg-white/50 border-[#DFD1C9]"
+       }`}
+      >
+       {isHighlighted && (
+        <div className="absolute font-bold -top-3 right-4 bg-[#9B9B7B] text-white text-xs px-2 py-1 rounded-full shadow">
+         Best Value
+        </div>
+       )}
+       <h4 className="font-serif text-2xl font-bold mb-2">{plan.title}</h4>
+       <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
+        {plan.price}
+       </p>
+       <ul className="text-sm text-[#716D64] space-y-1">
+        {plan.details.map((line, i) => (
+         <li key={i}>• {line}</li>
+        ))}
+       </ul>
+      </div>
+     );
+    })}
+   </div>
+
+   <div className="text-3xl mb-12 mt-24 text-center flex-col justify-center items-center gap-4 mx-auto flex sm:text-4xl font-bold">
+    <div className="flex items-center justify-center gap-2">
+     {Array.from({ length: 3 }).map((_, i) => (
+      <ReformerMachineIcon key={i} className="w-12 h-12" />
+     ))}
+    </div>
+    <h3 className="font-serif">Reformer Group class</h3>
+    <p className="text-[#716D64] text-sm font-normal">
+     Small group energy with the Reformer - stronger support, smoother progression, faster results.
+    </p>
+   </div>
+
+   <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+    {reformerGroupPlans.map((plan, index) => {
+     const isHighlighted = index === reformerGroupPlans.length - 1;
+     return (
+      <div
+       key={`rg-${index}`}
+       className={`reveal price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 ${
+        isHighlighted
+         ? "bg-white/70 border-[#9B9B7B] shadow-lg scale-[1.03]"
+         : "bg-white/50 border-[#DFD1C9]"
+       }`}
+      >
+       {isHighlighted && (
+        <div className="absolute font-bold -top-3 right-4 bg-[#9B9B7B] text-white text-xs px-2 py-1 rounded-full shadow">
+         Best Value
+        </div>
+       )}
+       {plan.promotion?.active && (
+        <div className="absolute font-bold -top-3 left-4 bg-[#A66A4A] text-white text-xs px-3 py-1 rounded-full shadow-lg animate-bounce">
+         {plan.promotion.discount.includes("RM")
+          ? plan.promotion.label
+          : `${plan.promotion.discount} OFF - ${plan.promotion.label}`}
+        </div>
+       )}
+       <h4 className="font-serif text-2xl font-bold mb-2">{plan.title}</h4>
+       {plan.promotion?.active ? (
+        <div className="mb-4">
+         <p className="text-lg font-sans font-bold text-[#9B9B7B] line-through mb-1">
+          {plan.originalPrice}
+         </p>
+         <p className="text-2xl font-sans font-bold text-[#A66A4A]">
+          {plan.discountedPrice}
+         </p>
+        </div>
+       ) : (
+        <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
+         {plan.price}
+        </p>
+       )}
+       <ul className="text-sm text-[#716D64] space-y-1">
+        {plan.details.map((line, i) => (
+         <li key={i}>• {line}</li>
         ))}
        </ul>
       </div>

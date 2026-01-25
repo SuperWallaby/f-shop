@@ -7,6 +7,7 @@ import { requireAdmin } from "../../../_utils/adminAuth";
 
 const patchSchema = z.object({
   adminNote: z.string().max(2000).optional(),
+  starred: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -25,11 +26,28 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const { bookings } = await getCollections();
     const note = parsed.data.adminNote;
     const trimmed = typeof note === "string" ? note.trim() : undefined;
+    const starred = parsed.data.starred;
 
-    const update =
-      trimmed && trimmed.length > 0
-        ? ({ $set: { adminNote: trimmed } } as const)
-        : ({ $unset: { adminNote: "" } } as const);
+    const $set: Record<string, unknown> = {};
+    const $unset: Record<string, ""> = {};
+
+    if (note !== undefined) {
+      if (trimmed && trimmed.length > 0) $set.adminNote = trimmed;
+      else $unset.adminNote = "";
+    }
+    if (starred !== undefined) {
+      if (starred) $set.starred = true;
+      else $unset.starred = "";
+    }
+
+    if (Object.keys($set).length === 0 && Object.keys($unset).length === 0) {
+      return jsonOk({ updated: true });
+    }
+
+    const update = {
+      ...(Object.keys($set).length ? { $set } : {}),
+      ...(Object.keys($unset).length ? { $unset } : {}),
+    } as const;
 
     const result = await bookings.updateOne({ _id: bookingObjectId }, update);
     if (!result.matchedCount) return jsonError("Booking not found", 404);

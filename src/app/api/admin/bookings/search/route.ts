@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const q = qRaw.replace(/^#/, "").trim();
     const dateKey = (req.nextUrl.searchParams.get("dateKey") ?? "").trim();
     const detached = parseBool(req.nextUrl.searchParams.get("detached"));
+    const starred = parseBool(req.nextUrl.searchParams.get("starred"));
 
     const { bookings, items: itemCol } = await getCollections();
 
@@ -38,6 +39,10 @@ export async function GET(req: NextRequest) {
     if (detached !== null) {
       if (detached) and.push({ detached: true, slotId: null });
       else and.push({ $or: [{ detached: { $ne: true } }, { slotId: { $ne: null } }] });
+    }
+    if (starred !== null) {
+      if (starred) and.push({ starred: true });
+      else and.push({ $or: [{ starred: { $ne: true } }, { starred: { $exists: false } }] });
     }
 
     const filter: Filter<BookingDb> = and.length ? ({ $and: and } as Filter<BookingDb>) : {};
@@ -71,6 +76,7 @@ export async function GET(req: NextRequest) {
       itemName: itemMetaById.get(b.itemId?.toHexString?.() ?? "")?.name ?? "",
       itemColor: itemMetaById.get(b.itemId?.toHexString?.() ?? "")?.color ?? "",
       adminNote: b.adminNote ?? "",
+      starred: Boolean(b.starred),
       status: b.status,
       createdAt: b.createdAt,
       dateKey: b.dateKey,

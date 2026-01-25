@@ -137,6 +137,11 @@ export async function GET(req: NextRequest) {
           email: b.email,
           whatsapp: b.whatsapp ?? "",
           status: b.status,
+          starred: Boolean((b as unknown as { starred?: boolean }).starred),
+          createdAt: b.createdAt,
+          cancelledAt: b.cancelledAt ?? null,
+          noShowAt: b.noShowAt ?? null,
+          adminNote: (b.adminNote ?? "").trim() || undefined,
         })),
       });
       daysMap.set(s.dateKey, day);

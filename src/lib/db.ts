@@ -25,6 +25,15 @@ export type SettingsDoc = {
  updatedAt: Date;
 };
 
+export type SettingsHistoryDb = {
+ _id?: ObjectId;
+ settingsId: "singleton";
+ createdAt: Date;
+ // Snapshot before/after. Stored as plain objects for easy inspection/debugging.
+ prev: SettingsDoc | null;
+ next: SettingsDoc;
+};
+
 export type ItemDb = {
  _id?: ObjectId;
  name: string;
@@ -77,6 +86,8 @@ export type BookingDb = {
  marketingOptIn?: boolean;
  marketingOptInAt?: Date;
  adminNote?: string;
+ // Admin-only: mark bookings you want to pay attention to (star/pin).
+ starred?: boolean;
  status: "confirmed" | "cancelled" | "no_show";
  createdAt: Date;
  cancelledAt?: Date;
@@ -104,6 +115,7 @@ export type ItemDoc = WithId<ItemDb>;
 export type TimeSlotDoc = WithId<TimeSlotDb>;
 export type BookingDoc = WithId<BookingDb>;
 export type ExclusiveLockDoc = WithId<ExclusiveLockDb>;
+export type SettingsHistoryDoc = WithId<SettingsHistoryDb>;
 
 declare global {
  // eslint-disable-next-line no-var
@@ -134,6 +146,7 @@ export async function getDb(): Promise<Db> {
 export async function getCollections(db?: Db): Promise<{
  db: Db;
  settings: Collection<SettingsDoc>;
+ settingsHistory: Collection<SettingsHistoryDb>;
  items: Collection<ItemDb>;
  timeSlots: Collection<TimeSlotDb>;
  bookings: Collection<BookingDb>;
@@ -143,6 +156,7 @@ export async function getCollections(db?: Db): Promise<{
  return {
   db: resolvedDb,
   settings: resolvedDb.collection<SettingsDoc>("settings"),
+  settingsHistory: resolvedDb.collection<SettingsHistoryDb>("settingsHistory"),
   items: resolvedDb.collection<ItemDb>("items"),
   timeSlots: resolvedDb.collection<TimeSlotDb>("timeSlots"),
   bookings: resolvedDb.collection<BookingDb>("bookings"),
@@ -157,6 +171,7 @@ async function ensureIndexes(db: Db): Promise<void> {
  const bookings = db.collection<BookingDb>("bookings");
  const items = db.collection<ItemDb>("items");
  const exclusiveLocks = db.collection<ExclusiveLockDb>("exclusiveLocks");
+ const settingsHistory = db.collection<SettingsHistoryDb>("settingsHistory");
  // const settings = db.collection<SettingsDoc>("settings"); // _id index exists by default
 
  try {
@@ -210,6 +225,10 @@ async function ensureIndexes(db: Db): Promise<void> {
    ),
    items.createIndex({ active: 1 }, { name: "active" }),
    items.createIndex({ name: 1 }, { name: "name" }),
+   settingsHistory.createIndex(
+    { settingsId: 1, createdAt: -1 },
+    { name: "settings_id_createdAt" }
+   ),
   ]);
 
   global._mongoIndexesEnsured = true;

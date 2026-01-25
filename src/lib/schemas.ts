@@ -94,6 +94,9 @@ export const adminGenerateSlotsSchema = z.object({
 export const adminUpdateSettingsSchema = z.object({
   businessTimeZone: z.string().min(1),
   weeklyPattern: weeklyPatternSchema,
+  // Safety valve: allow intentionally wiping weeklyPattern even if an existing pattern is present.
+  // (Server will reject accidental empty overwrites unless this is true.)
+  confirmEmptyWeeklyPattern: z.boolean().optional(),
   bookingRules: z
     .object({
       minNoticeHours: z.number().int().min(0).max(24 * 365),

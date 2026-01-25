@@ -99,13 +99,13 @@ const HeroSection = () => {
      >
       Book Your First Class
      </InstaCtaButton>
-     <a
+     <Link
       aria-label="Learn more about Faséa"
       href="/about"
       className="px-6 py-3 rounded-full text-sm font-medium text-[#444444] bg-white shadow-sm hover:shadow-md transition"
      >
       Learn more about Faséa
-     </a>
+     </Link>
     </div>
    </section>
   </div>

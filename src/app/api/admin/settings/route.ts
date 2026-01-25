@@ -5,6 +5,7 @@ import { requireAdmin } from "../../_utils/adminAuth";
 import { adminUpdateSettingsSchema } from "@/lib/schemas";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { DEFAULT_BOOKING_RULES } from "@/lib/bookingRules";
+import type { SettingsDoc } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const auth = requireAdmin(req);
@@ -42,7 +43,27 @@ export async function PUT(req: NextRequest) {
       return jsonError("Invalid body", 400, parsed.error.flatten());
     }
 
-    const { settings } = await getCollections();
+    const { settings, settingsHistory } = await getCollections();
+    const existing = await settings.findOne({ _id: "singleton" });
+
+    const countPattern = (p: unknown): number => {
+      if (!p || typeof p !== "object") return 0;
+      let total = 0;
+      for (const v of Object.values(p as Record<string, unknown>)) {
+        if (Array.isArray(v)) total += v.length;
+      }
+      return total;
+    };
+
+    const existingCount = countPattern((existing as { weeklyPattern?: unknown } | null)?.weeklyPattern);
+    const nextCount = countPattern(parsed.data.weeklyPattern);
+    if (nextCount === 0 && existingCount > 0 && !parsed.data.confirmEmptyWeeklyPattern) {
+      return jsonError(
+        "Refusing to overwrite Weekly pattern with an empty value. Reload settings and try again, or confirm reset.",
+        409
+      );
+    }
+
     const now = new Date();
     await settings.updateOne(
       { _id: "singleton" },
@@ -58,6 +79,22 @@ export async function PUT(req: NextRequest) {
       { upsert: true }
     );
     const updated = await settings.findOne({ _id: "singleton" });
+    if (!updated) {
+      return jsonError("Failed to load updated settings", 500);
+    }
+
+    // History record (best-effort): store prev/next snapshots for audit + recovery.
+    try {
+      await settingsHistory.insertOne({
+        settingsId: "singleton",
+        createdAt: now,
+        prev: (existing as SettingsDoc | null) ?? null,
+        next: updated as SettingsDoc,
+      });
+    } catch {
+      // ignore
+    }
+
     return jsonOk(updated);
   } catch (e) {
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);

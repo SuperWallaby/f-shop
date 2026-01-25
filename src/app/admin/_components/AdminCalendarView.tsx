@@ -38,11 +38,38 @@ export function AdminCalendarView() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [copiedCodeBookingId, setCopiedCodeBookingId] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedSlotIds, setSelectedSlotIds] = useState<Set<string>>(() => new Set());
   const selectedSlotIdsRef = useRef<Set<string>>(new Set());
   const [dragSelecting, setDragSelecting] = useState(false);
   const dragModeRef = useRef<"add" | "remove">("add");
+
+  async function copyBookingCode(bookingId: string, code: string) {
+    const raw = code.trim();
+    if (!raw) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(raw);
+      } else {
+        // Fallback for older browsers / non-secure contexts
+        const ta = document.createElement("textarea");
+        ta.value = raw;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopiedCodeBookingId(bookingId);
+      window.setTimeout(() => setCopiedCodeBookingId(null), 1200);
+    } catch {
+      // ignore
+    }
+  }
 
   const [dayModalDateKey, setDayModalDateKey] = useState<string | null>(null);
 
@@ -366,6 +393,8 @@ export function AdminCalendarView() {
   }
 
   async function cancelBooking(bookingId: string) {
+    const ok = window.confirm("Cancel this booking? (This will send a notice)");
+    if (!ok) return;
     setSaving(true);
     setActionError(null);
     try {
@@ -1086,29 +1115,82 @@ export function AdminCalendarView() {
                       selected.slot.bookings.map((b) => (
                         <div
                           key={b.id}
-                          className="flex items-center justify-between gap-3 rounded-2xl border border-[#E8DDD4] px-4 py-3"
+                          className="rounded-2xl border border-[#E8DDD4] px-4 py-3"
                           style={{
-                            backgroundColor: selected.slot.itemColor ? selected.slot.itemColor : "rgba(255,255,255,0.9)",
+                            backgroundColor: selected.slot.itemColor
+                              ? selected.slot.itemColor
+                              : "rgba(255,255,255,0.9)",
                             opacity: b.status === "cancelled" ? 0.7 : 1,
                           }}
                         >
                           <div className="min-w-0">
-                            <div className="flex items-baseline gap-2 flex-wrap">
-                              {!!b.code && <div className="text-xs font-mono text-[#716D64]">#{b.code}</div>}
-                              <div className="text-sm font-medium truncate">{b.name}</div>
+                            <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+                              {!!b.code && (
+                                <div className="flex items-baseline gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => copyBookingCode(b.id, b.code)}
+                                    className="text-xs font-mono text-[#716D64] hover:text-[#444444] hover:underline underline-offset-2"
+                                    title="Click to copy booking code"
+                                  >
+                                    #{b.code}
+                                  </button>
+                                  {copiedCodeBookingId === b.id ? (
+                                    <span className="text-[10px] text-[#716D64]">
+                                      copied
+                                    </span>
+                                  ) : null}
+                                </div>
+                              )}
+                              <div className="text-sm font-medium truncate min-w-0">
+                                {b.starred ? <span title="Starred">★ </span> : null}
+                                {b.name}
+                              </div>
                             </div>
                             <div className="text-xs text-[#716D64] truncate">{b.email}</div>
                             <div className="text-xs text-[#716D64] truncate">{b.whatsapp}</div>
                             <div className="text-[10px] text-[#716D64]">
-                              {b.status === "confirmed"
-                                ? "booked"
-                                : b.status === "no_show"
-                                  ? "no-show"
-                                  : "cancelled"}
+                              {(() => {
+                                const statusLabel =
+                                  b.status === "confirmed"
+                                    ? "booked"
+                                    : b.status === "no_show"
+                                      ? "no-show"
+                                      : "cancelled";
+
+                                let whenIso: string | null = null;
+                                if (b.status === "cancelled" && typeof b.cancelledAt === "string") {
+                                  whenIso = b.cancelledAt;
+                                } else if (b.status === "no_show" && typeof b.noShowAt === "string") {
+                                  whenIso = b.noShowAt;
+                                } else if (typeof b.createdAt === "string") {
+                                  whenIso = b.createdAt;
+                                }
+
+                                const rel =
+                                  whenIso
+                                    ? DateTime.fromISO(whenIso).toRelative({
+                                        base: DateTime.now(),
+                                      })
+                                    : null;
+
+                                return (
+                                  <>
+                                    {statusLabel}
+                                    {rel ? ` · ${rel}` : null}
+                                  </>
+                                );
+                              })()}
                             </div>
+                            {!!b.adminNote && b.adminNote.trim().length > 0 ? (
+                              <div className="mt-1 text-[10px] text-[#444444] line-clamp-2">
+                                Memo: {b.adminNote.trim()}
+                              </div>
+                            ) : null}
                           </div>
+
                           {b.status === "confirmed" ? (
-                            <div className="flex items-center gap-2">
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
                               <button
                                 type="button"
                                 disabled={saving}
@@ -1127,61 +1209,71 @@ export function AdminCalendarView() {
                               </button>
                             </div>
                           ) : b.status === "cancelled" ? (
-                            <button
-                              type="button"
-                              disabled={saving}
-                              onClick={async () => {
-                                const ok = window.confirm(
-                                  "Delete this cancelled booking? This cannot be undone."
-                                );
-                                if (!ok) return;
-                                setSaving(true);
-                                setActionError(null);
-                                try {
-                                  const res = await fetch(
-                                    `/api/admin/bookings/${encodeURIComponent(b.id)}`,
-                                    { method: "DELETE", cache: "no-store" }
+                            <div className="mt-2 flex flex-col items-start gap-2">
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={async () => {
+                                  const ok = window.confirm(
+                                    "Delete this cancelled booking? This cannot be undone."
                                   );
-                                  const json = await res.json();
-                                  if (!res.ok || !json?.ok)
-                                    throw new Error(json?.error?.message ?? "Failed to delete booking");
+                                  if (!ok) return;
+                                  setSaving(true);
+                                  setActionError(null);
+                                  try {
+                                    const res = await fetch(
+                                      `/api/admin/bookings/${encodeURIComponent(b.id)}`,
+                                      { method: "DELETE", cache: "no-store" }
+                                    );
+                                    const json = await res.json();
+                                    if (!res.ok || !json?.ok)
+                                      throw new Error(
+                                        json?.error?.message ?? "Failed to delete booking"
+                                      );
 
-                                  // Reload month and refresh selected slot
-                                  const res2 = await fetch(
-                                    `/api/admin/calendar?fromDateKey=${encodeURIComponent(
-                                      fromDateKey
-                                    )}&toDateKey=${encodeURIComponent(toDateKey)}`,
-                                    { cache: "no-store" }
-                                  );
-                                  const json2 = await res2.json();
-                                  if (!res2.ok || !json2?.ok) {
-                                    throw new Error(json2?.error?.message ?? "Failed to reload calendar");
+                                    // Reload month and refresh selected slot
+                                    const res2 = await fetch(
+                                      `/api/admin/calendar?fromDateKey=${encodeURIComponent(
+                                        fromDateKey
+                                      )}&toDateKey=${encodeURIComponent(toDateKey)}`,
+                                      { cache: "no-store" }
+                                    );
+                                    const json2 = await res2.json();
+                                    if (!res2.ok || !json2?.ok) {
+                                      throw new Error(
+                                        json2?.error?.message ?? "Failed to reload calendar"
+                                      );
+                                    }
+                                    setDays(json2.data.days ?? []);
+                                    const updatedDay = (json2.data.days ?? []).find(
+                                      (d: CalendarDayDto) => d.dateKey === selected?.dateKey
+                                    );
+                                    const updatedSlot =
+                                      updatedDay?.slots?.find(
+                                        (s: CalendarDayDto["slots"][number]) =>
+                                          s.id === selected.slot.id
+                                      ) ?? null;
+                                    if (updatedSlot) {
+                                      const nextSel = {
+                                        dateKey: selected.dateKey,
+                                        slot: updatedSlot,
+                                      };
+                                      setSelected(nextSel);
+                                      syncEditorFromSelected(nextSel);
+                                    } else {
+                                      setSelected(null);
+                                    }
+                                  } catch (e) {
+                                    setActionError(e instanceof Error ? e.message : "Failed");
+                                  } finally {
+                                    setSaving(false);
                                   }
-                                  setDays(json2.data.days ?? []);
-                                  const updatedDay = (json2.data.days ?? []).find(
-                                    (d: CalendarDayDto) => d.dateKey === selected?.dateKey
-                                  );
-                                  const updatedSlot =
-                                    updatedDay?.slots?.find(
-                                      (s: CalendarDayDto["slots"][number]) => s.id === selected.slot.id
-                                    ) ?? null;
-                                  if (updatedSlot) {
-                                    const nextSel = { dateKey: selected.dateKey, slot: updatedSlot };
-                                    setSelected(nextSel);
-                                    syncEditorFromSelected(nextSel);
-                                  } else {
-                                    setSelected(null);
-                                  }
-                                } catch (e) {
-                                  setActionError(e instanceof Error ? e.message : "Failed");
-                                } finally {
-                                  setSaving(false);
-                                }
-                              }}
-                              className="px-3 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-xs hover:shadow-sm transition disabled:opacity-50 cursor-pointer"
-                            >
-                              Delete
-                            </button>
+                                }}
+                                className="px-3 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-xs hover:shadow-sm transition disabled:opacity-50 cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           ) : null}
                         </div>
                       ))

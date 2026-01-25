@@ -118,6 +118,7 @@ export async function GET(req: NextRequest) {
           email: b.email,
           whatsapp: b.whatsapp ?? "",
           status: b.status,
+          starred: Boolean((b as unknown as { starred?: boolean }).starred),
           createdAt: b.createdAt,
           cancelledAt: b.cancelledAt ?? null,
         })),

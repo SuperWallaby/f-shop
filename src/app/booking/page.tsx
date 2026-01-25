@@ -18,6 +18,7 @@ import Link from "next/link";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
 import MagnifyingGlassIcon from "@heroicons/react/24/outline/MagnifyingGlassIcon";
 import DocumentDuplicateIcon from "@heroicons/react/24/outline/DocumentDuplicateIcon";
+import ChevronDownIcon from "@heroicons/react/24/outline/ChevronDownIcon";
 import { FaWhatsapp } from "react-icons/fa";
 import {
  buildCustomerBookingConfirmationMessage,
@@ -112,6 +113,8 @@ function BookingPageInner() {
   null
  );
  const [copied, setCopied] = useState(false);
+ const [openPrepareInfo, setOpenPrepareInfo] = useState(false);
+ const [openNeedToKnow, setOpenNeedToKnow] = useState(false);
 
  // When booking is completed, scroll to top so the success screen starts at the top.
  useEffect(() => {
@@ -633,6 +636,67 @@ const waPrettyHref = `https://wa.me/${phone}`;
        }}
       />
       <div className="text-xs text-[#716D64] mt-4">{availabilityHint}</div>
+
+      <div className="mt-6 space-y-3">
+       <div className="rounded-2xl border border-[#E8DDD4] bg-white/50">
+        <button
+         type="button"
+         onClick={() => setOpenPrepareInfo((v) => !v)}
+         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+         aria-expanded={openPrepareInfo}
+        >
+         <div className="text-xs font-medium text-[#716D64]">Booking prepare</div>
+         <ChevronDownIcon
+          className={cn(
+           "h-4 w-4 text-[#716D64] transition-transform",
+           openPrepareInfo ? "rotate-180" : ""
+          )}
+         />
+        </button>
+        {openPrepareInfo ? (
+         <div className="px-4 pb-4 text-sm text-[#444444]">
+          <div className="text-xs text-[#716D64]">Things need to bring</div>
+          <div className="mt-2 space-y-1.5">
+           <div>🧦Grip socks (if dont have can purchase in studio)</div>
+           <div>🏷️ Mat Towel to cover mattress (optional)</div>
+           <div>👚Attire : Sport Attire that comfortable</div>
+          </div>
+         </div>
+        ) : null}
+       </div>
+
+       <div className="rounded-2xl border border-[#E8DDD4] bg-white/50">
+        <button
+         type="button"
+         onClick={() => setOpenNeedToKnow((v) => !v)}
+         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+         aria-expanded={openNeedToKnow}
+        >
+         <div className="text-xs font-medium text-[#716D64]">
+          Something you need to know
+         </div>
+         <ChevronDownIcon
+          className={cn(
+           "h-4 w-4 text-[#716D64] transition-transform",
+           openNeedToKnow ? "rotate-180" : ""
+          )}
+         />
+        </button>
+        {openNeedToKnow ? (
+         <div className="px-4 pb-4 text-sm text-[#444444]">
+          <div className="space-y-1.5">
+           <div>⏳Cancellation and Refundable can be made 12 hours before the class</div>
+           <div>⏰ Please come 15 minutes early</div>
+           <div>‼️No Show/Late Cancellation Fee</div>
+           <div className="pl-4">
+            <div>- Group Class RM 10</div>
+            <div>- Private Session RM 20</div>
+           </div>
+          </div>
+         </div>
+        ) : null}
+       </div>
+      </div>
      </section>
 
      <section className="space-y-6">
@@ -779,7 +843,9 @@ const waPrettyHref = `https://wa.me/${phone}`;
                 {s.capacity > 1 ? (
                  <span className="text-[#716D64]">
                   {!!itemLabel && "· "}
-                  {s.available} / {s.capacity} available
+                  {s.isFull || s.available <= 0
+                   ? "Full"
+                   : `${s.available} ${s.available === 1 ? "spot" : "spots"} left`}
                  </span>
                 ) : null}
                </span>

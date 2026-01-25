@@ -1,19 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { DateTime } from "luxon";
 import { cn } from "@/lib/cn";
 import { Switch } from "@/components/Switch";
 import { Skeleton, SkeletonButton, SkeletonLine } from "./Skeleton";
 import type { BookingListItem } from "../_lib/types";
 import { minutesToAmPmRange, minutesToHhmm } from "../_lib/adminTime";
+import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 
 export function AdminBookingsView() {
   const [q, setQ] = useState("");
   const [dateKey, setDateKey] = useState("");
   const [detachedOnly, setDetachedOnly] = useState(false);
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [todayOnly, setTodayOnly] = useState(false);
+  const [sortMode, setSortMode] = useState<"latest_booking" | "closest_class">(
+    "latest_booking"
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<BookingListItem[]>([]);
+
+  const todayDateKey = useMemo(() => {
+    return DateTime.now().setZone(BUSINESS_TIME_ZONE).toISODate() ?? "";
+  }, []);
 
   const [assignTarget, setAssignTarget] = useState<BookingListItem | null>(null);
   const [assignDateKey, setAssignDateKey] = useState<string>("");
@@ -25,17 +36,57 @@ export function AdminBookingsView() {
   const [assigning, setAssigning] = useState(false);
 
   const hasActiveFilters = useMemo(() => {
-    return q.trim().length > 0 || dateKey.trim().length > 0 || detachedOnly;
-  }, [q, dateKey, detachedOnly]);
+    return (
+      q.trim().length > 0 ||
+      dateKey.trim().length > 0 ||
+      detachedOnly ||
+      starredOnly ||
+      todayOnly
+    );
+  }, [q, dateKey, detachedOnly, starredOnly, todayOnly]);
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
-      const dk = a.dateKey.localeCompare(b.dateKey);
-      if (dk !== 0) return dk;
+      // Always keep starred items on top
+      if (a.starred !== b.starred) return Number(b.starred) - Number(a.starred);
+
+      if (sortMode === "latest_booking") {
+        const ta = Number.isFinite(Date.parse(a.createdAt)) ? Date.parse(a.createdAt) : 0;
+        const tb = Number.isFinite(Date.parse(b.createdAt)) ? Date.parse(b.createdAt) : 0;
+        if (ta !== tb) return tb - ta; // newest first
+      } else {
+        // closest class date/time first
+        const dk = a.dateKey.localeCompare(b.dateKey);
+        if (dk !== 0) return dk;
+        if (a.startMin !== b.startMin) return a.startMin - b.startMin;
+        if (a.endMin !== b.endMin) return a.endMin - b.endMin;
+      }
+
+      // tie-breakers: class date/time, then createdAt
+      const dk2 = a.dateKey.localeCompare(b.dateKey);
+      if (dk2 !== 0) return dk2;
       if (a.startMin !== b.startMin) return a.startMin - b.startMin;
-      return a.endMin - b.endMin;
+      if (a.endMin !== b.endMin) return a.endMin - b.endMin;
+      const ta2 = Number.isFinite(Date.parse(a.createdAt)) ? Date.parse(a.createdAt) : 0;
+      const tb2 = Number.isFinite(Date.parse(b.createdAt)) ? Date.parse(b.createdAt) : 0;
+      return tb2 - ta2;
     });
-  }, [items]);
+  }, [items, sortMode]);
+
+  const visibleItems = useMemo(() => {
+    let list = sortedItems;
+
+    // When sorting by closest upcoming class, hide past classes (before today).
+    if (sortMode === "closest_class") {
+      list = list.filter((b) => b.dateKey >= todayDateKey);
+    }
+
+    if (todayOnly) {
+      list = list.filter((b) => b.dateKey === todayDateKey);
+    }
+
+    return list;
+  }, [sortedItems, sortMode, todayDateKey, todayOnly]);
 
   async function search() {
     setLoading(true);
@@ -45,6 +96,7 @@ export function AdminBookingsView() {
       if (q.trim()) params.set("q", q.trim());
       if (dateKey.trim()) params.set("dateKey", dateKey.trim());
       if (detachedOnly) params.set("detached", "true");
+      if (starredOnly) params.set("starred", "true");
       const res = await fetch(`/api/admin/bookings/search?${params.toString()}`, {
         cache: "no-store",
       });
@@ -165,12 +217,30 @@ export function AdminBookingsView() {
     setItems((prev) => prev.map((b) => (b.id === bookingId ? { ...b, adminNote: note } : b)));
   }
 
+  async function setStarred(bookingId: string, next: boolean) {
+    // optimistic UI
+    setItems((prev) => prev.map((b) => (b.id === bookingId ? { ...b, starred: next } : b)));
+    try {
+      const res = await fetch(`/api/admin/bookings/${encodeURIComponent(bookingId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ starred: next }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error?.message ?? "Failed to update star");
+    } catch (e) {
+      // rollback on failure
+      setItems((prev) => prev.map((b) => (b.id === bookingId ? { ...b, starred: !next } : b)));
+      throw e;
+    }
+  }
+
   return (
     <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="font-serif text-2xl font-semibold">Bookings</h2>
-          <div className="text-xs text-[#716D64] mt-1">Total: {sortedItems.length}</div>
+          <div className="text-xs text-[#716D64] mt-1">Total: {visibleItems.length}</div>
         </div>
         <button
           onClick={search}
@@ -203,6 +273,19 @@ export function AdminBookingsView() {
           />
         </label>
         <Switch checked={detachedOnly} onCheckedChange={setDetachedOnly} label="Unassigned only" />
+        <Switch checked={starredOnly} onCheckedChange={setStarredOnly} label="Starred only" />
+        <Switch checked={todayOnly} onCheckedChange={setTodayOnly} label="Today classes only" />
+        <label className="grid gap-1 sm:col-span-2">
+          <span className="text-xs text-[#716D64]">Sort</span>
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
+            className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+          >
+            <option value="latest_booking">Latest booking</option>
+            <option value="closest_class">Closest class date</option>
+          </select>
+        </label>
         <button
           onClick={search}
           className="px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition"
@@ -216,6 +299,9 @@ export function AdminBookingsView() {
               setQ("");
               setDateKey("");
               setDetachedOnly(false);
+              setStarredOnly(false);
+              setTodayOnly(false);
+              setSortMode("latest_booking");
               search();
             }}
             className="px-6 py-3 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition"
@@ -250,14 +336,19 @@ export function AdminBookingsView() {
 
       {!loading && (
         <div className="mt-6 space-y-3">
-          {sortedItems.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <div className="text-sm text-[#716D64]">No results.</div>
           ) : (
-            sortedItems.map((b) => (
-              <div
-                key={b.id}
-                className="relative rounded-3xl border border-[#E8DDD4] bg-white/80 px-5 py-4 overflow-hidden"
-              >
+            visibleItems.map((b) => {
+              const isPast = b.dateKey < todayDateKey;
+              return (
+                <div
+                  key={b.id}
+                  className={cn(
+                    "relative rounded-3xl border border-[#E8DDD4] px-5 py-4 overflow-hidden",
+                    isPast ? "bg-white/80 opacity-80" : "bg-white/80"
+                  )}
+                >
                 {!!b.itemColor && (
                   <div className="absolute left-0 top-0 bottom-0 w-2" style={{ backgroundColor: b.itemColor }} />
                 )}
@@ -268,6 +359,24 @@ export function AdminBookingsView() {
                     </div>
 
                     <div className="mt-1 flex items-baseline gap-2 flex-wrap min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStarred(b.id, !b.starred).catch((err) =>
+                            setError(err instanceof Error ? err.message : "Failed to update star")
+                          );
+                        }}
+                        className={cn(
+                          "inline-flex items-center justify-center h-8 w-8 rounded-full border text-sm transition cursor-pointer",
+                          b.starred
+                            ? "bg-[#DFD1C9] border-[#DFD1C9]"
+                            : "bg-white/80 border-[#E8DDD4] hover:shadow-sm"
+                        )}
+                        aria-label={b.starred ? "Unstar booking" : "Star booking"}
+                        title={b.starred ? "Starred" : "Star"}
+                      >
+                        ★
+                      </button>
                       {!!b.code && <div className="text-xs font-mono text-[#716D64]">#{b.code}</div>}
                       <div className="text-sm font-semibold truncate">{b.name}</div>
                     </div>
@@ -322,6 +431,25 @@ export function AdminBookingsView() {
                             ? "no-show"
                             : "cancelled"}
                       </span>
+
+                      {b.status === "confirmed" && b.dateKey === todayDateKey ? (
+                        <span className="text-[10px] px-2 py-1 rounded-full bg-[#FFF7E6] text-[#8A5A00] border border-[#F2D3A2]">
+                          오늘수업
+                        </span>
+                      ) : null}
+
+                      {(() => {
+                        const rel = DateTime.fromISO(b.createdAt).toRelative({
+                          base: DateTime.now(),
+                        });
+                        if (!rel) return null;
+                        return (
+                          <span className="text-[10px] px-2 py-1 rounded-full bg-white/70 text-[#716D64] border border-[#E8DDD4]">
+                            booked {rel}
+                          </span>
+                        );
+                      })()}
+
                       {!!b.detached && (
                         <span className="text-[10px] px-2 py-1 rounded-full bg-[#FCE8E6] text-[#B42318] border border-[#F1B3B0]">
                           unassigned
@@ -398,8 +526,9 @@ export function AdminBookingsView() {
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
+                </div>
+              );
+            })
           )}
         </div>
       )}

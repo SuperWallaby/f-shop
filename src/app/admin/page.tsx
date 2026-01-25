@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import { DayPicker } from "react-day-picker";
 import { DateTime } from "luxon";
@@ -25,6 +26,8 @@ import {
 } from "./_lib/adminTime";
 
 export default function AdminPage() {
+ const router = useRouter();
+ const searchParams = useSearchParams();
  const [checking, setChecking] = useState(true);
  const [authed, setAuthed] = useState(false);
  const [password, setPassword] = useState("");
@@ -76,9 +79,25 @@ export default function AdminPage() {
   setAuthed(false);
  }
 
- const [tab, setTab] = useState<
-  "time" | "config" | "items" | "calendar" | "settings" | "bookings"
- >("time");
+ const allowedTabs = useMemo(
+  () =>
+   [
+    "time",
+    "config",
+    "items",
+    "calendar",
+    "settings",
+    "bookings",
+   ] as const,
+  []
+ );
+ type TabKey = (typeof allowedTabs)[number];
+ const tabFromUrl = (searchParams.get("tab") ?? "").trim() as TabKey;
+ const initialTab: TabKey = (allowedTabs as readonly string[]).includes(tabFromUrl)
+  ? tabFromUrl
+  : "calendar";
+
+ const [tab, setTab] = useState<TabKey>(initialTab);
  const [selectedDay, setSelectedDay] = useState<Date | undefined>(
   () => new Date()
  );
@@ -198,7 +217,24 @@ export default function AdminPage() {
    if (!ok) return;
   }
   setTab(next);
+  try {
+   const params = new URLSearchParams(searchParams.toString());
+   params.set("tab", next);
+   router.replace(`/admin?${params.toString()}`, { scroll: false });
+  } catch {
+   // ignore
+  }
  }
+
+ // If user navigates (back/forward) and tab param changes, sync state.
+ useEffect(() => {
+  const raw = (searchParams.get("tab") ?? "").trim() as TabKey;
+  const nextTab: TabKey = (allowedTabs as readonly string[]).includes(raw)
+   ? raw
+   : "calendar";
+  if (nextTab !== tab) setTab(nextTab);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ }, [searchParams]);
 
  async function saveAdminItemsDraft() {
   if (adminItemsSaving) return;
@@ -453,6 +489,7 @@ export default function AdminPage() {
   dayKey: string;
   rows: Array<{ start: string; end: string }>;
  } | null>(null);
+ const [loadedWeeklyPatternCount, setLoadedWeeklyPatternCount] = useState<number | null>(null);
  const [savingSettings, setSavingSettings] = useState(false);
  const [saveSettingsMsg, setSaveSettingsMsg] = useState<string | null>(null);
 
@@ -506,6 +543,12 @@ export default function AdminPage() {
     string,
     Array<{ startMin: number; endMin: number; itemId: string }>
    >;
+   // Keep a snapshot of how many rows were loaded from DB so we can prevent accidental wipes.
+   let loadedCount = 0;
+   for (const v of Object.values(pattern)) {
+    loadedCount += Array.isArray(v) ? v.length : 0;
+   }
+   setLoadedWeeklyPatternCount(loadedCount);
    const emptyWeek = () => ({
     "0": [] as Array<{ start: string; end: string }>,
     "1": [] as Array<{ start: string; end: string }>,
@@ -643,6 +686,10 @@ export default function AdminPage() {
   setSavingSettings(true);
   setSaveSettingsMsg(null);
   try {
+   if (settingsLoading || !settingsLoaded) {
+    throw new Error("Settings not loaded yet. Please click Reload and wait before saving.");
+   }
+
    const weeklyPattern: Record<
     string,
     Array<{ startMin: number; endMin: number; itemId: string }>
@@ -669,12 +716,26 @@ export default function AdminPage() {
     weeklyPattern[key] = merged;
    }
 
+   // Safety: prevent accidental wipe if we previously loaded a non-empty pattern.
+   const uiCount = Object.values(weeklyPattern).reduce((acc, v) => acc + v.length, 0);
+   const loadedCount = typeof loadedWeeklyPatternCount === "number" ? loadedWeeklyPatternCount : null;
+   const wouldWipe = uiCount === 0 && (loadedCount ?? 0) > 0;
+   const confirmEmptyWeeklyPattern = wouldWipe
+    ? window.confirm(
+      "Weekly pattern is empty. Saving now will ERASE the previously saved pattern. Continue?"
+     )
+    : false;
+   if (wouldWipe && !confirmEmptyWeeklyPattern) {
+    throw new Error("Cancelled.");
+   }
+
    const res = await fetch("/api/admin/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
      businessTimeZone,
      weeklyPattern,
+     ...(confirmEmptyWeeklyPattern ? { confirmEmptyWeeklyPattern: true } : {}),
      bookingRules: { minNoticeHours, maxDaysAhead },
     }),
    });
@@ -688,6 +749,42 @@ export default function AdminPage() {
    setSaveSettingsMsg(
     e instanceof Error ? e.message : "Failed to save settings"
    );
+  } finally {
+   setSavingSettings(false);
+  }
+ }
+
+ async function saveRulesOnly() {
+  setSavingSettings(true);
+  setSaveSettingsMsg(null);
+  try {
+   // Fetch existing weeklyPattern so "Save rules" never wipes it.
+   const res0 = await fetch("/api/admin/settings", { cache: "no-store" });
+   const json0 = await res0.json().catch(() => null);
+   if (!res0.ok || !json0?.ok) {
+    throw new Error(json0?.error?.message ?? "Failed to load current settings");
+   }
+   const weeklyPattern = (json0.data?.weeklyPattern ?? {}) as Record<
+    string,
+    Array<{ startMin: number; endMin: number; itemId: string }>
+   >;
+
+   const res = await fetch("/api/admin/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+     businessTimeZone,
+     weeklyPattern,
+     bookingRules: { minNoticeHours, maxDaysAhead },
+    }),
+   });
+   const json = await res.json().catch(() => null);
+   if (!res.ok || !json?.ok) {
+    throw new Error(json?.error?.message ?? "Failed to save rules");
+   }
+   setSaveSettingsMsg("Saved");
+  } catch (e) {
+   setSaveSettingsMsg(e instanceof Error ? e.message : "Failed to save rules");
   } finally {
    setSavingSettings(false);
   }
@@ -1381,7 +1478,7 @@ export default function AdminPage() {
        )}
        <button
         onClick={saveSettings}
-        disabled={savingSettings}
+        disabled={savingSettings || settingsLoading || !settingsLoaded}
         className="mt-5 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition disabled:opacity-50"
        >
         {savingSettings ? "Saving…" : "Save configuration"}
@@ -2070,7 +2167,7 @@ export default function AdminPage() {
 
       <div className="mt-6 flex items-center gap-3">
        <button
-        onClick={saveSettings}
+        onClick={saveRulesOnly}
         disabled={savingSettings}
         className="px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition disabled:opacity-50"
        >
