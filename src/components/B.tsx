@@ -19,15 +19,9 @@ const ScheduleSection = () => {
   <section id="Time" className="py-28 px-6 bg-[#FAF8F6] text-[#444444]">
    <RevealTrigger rootSelector="#Time" />
    <div className="max-w-5xl mx-auto text-center mb-16">
-    <h3 className="font-serif mb-3 leading-snug text-3xl sm:text-4xl font-bold">
-     Group Class <span className="whitespace-nowrap">Weekly Schedule</span>
+    <h3 className="font-serif leading-snug text-3xl sm:text-4xl font-bold">
+     Math Group Class <span className="whitespace-nowrap">Weekly Schedule</span>
     </h3>
-    <p className="reveal text-[#5C574F] text-base sm:text-lg mb-10">
-     <span className="text-[#A66A4A] font-semibold">Private</span>
-     <span> &amp; </span>
-     <span className="text-[#A66A4A] font-semibold">Duet</span>
-     <span> class schedule is flexible between 11 am – 6 pm.</span>
-    </p>
    </div>
    {/*  */}
    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6 max-w-6xl mx-auto text-center">
@@ -52,6 +46,13 @@ const ScheduleSection = () => {
     <h3 className="font-serif mb-3 leading-snug text-3xl sm:text-4xl font-bold">
      Reformer Group <span className="whitespace-nowrap">Weekly Schedule</span>
     </h3>
+    <p className="reveal text-[#5C574F] text-base sm:text-lg mb-10">
+        Reformer{" "}
+     <span className="text-[#A66A4A] font-semibold">Private</span>
+     <span> &amp; </span>
+     <span className="text-[#A66A4A] font-semibold">Duet</span>
+     <span> class schedule is flexible between 11 am – 6 pm.</span>
+    </p>
    </div>
    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 gap-6 max-w-2xl mx-auto text-center">
     {reformerGroupSchedule.map(({ day, times }, idx) => (
