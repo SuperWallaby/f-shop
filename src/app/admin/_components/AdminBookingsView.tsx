@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DateTime } from "luxon";
 import { cn } from "@/lib/cn";
 import { Switch } from "@/components/Switch";
@@ -21,6 +21,16 @@ export function AdminBookingsView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<BookingListItem[]>([]);
+
+  // Keep latest filter values for polling (so we can set the interval only once).
+  const qRef = useRef(q);
+  const dateKeyRef = useRef(dateKey);
+  const detachedOnlyRef = useRef(detachedOnly);
+  const starredOnlyRef = useRef(starredOnly);
+  useEffect(() => void (qRef.current = q), [q]);
+  useEffect(() => void (dateKeyRef.current = dateKey), [dateKey]);
+  useEffect(() => void (detachedOnlyRef.current = detachedOnly), [detachedOnly]);
+  useEffect(() => void (starredOnlyRef.current = starredOnly), [starredOnly]);
 
   const todayDateKey = useMemo(() => {
     return DateTime.now().setZone(BUSINESS_TIME_ZONE).toISODate() ?? "";
@@ -88,15 +98,24 @@ export function AdminBookingsView() {
     return list;
   }, [sortedItems, sortMode, todayDateKey, todayOnly]);
 
-  async function search() {
+  async function search(opts?: {
+    q?: string;
+    dateKey?: string;
+    detachedOnly?: boolean;
+    starredOnly?: boolean;
+  }) {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (q.trim()) params.set("q", q.trim());
-      if (dateKey.trim()) params.set("dateKey", dateKey.trim());
-      if (detachedOnly) params.set("detached", "true");
-      if (starredOnly) params.set("starred", "true");
+      const qv = (opts?.q ?? qRef.current).trim();
+      const dkv = (opts?.dateKey ?? dateKeyRef.current).trim();
+      const detachedV = opts?.detachedOnly ?? detachedOnlyRef.current;
+      const starredV = opts?.starredOnly ?? starredOnlyRef.current;
+      if (qv) params.set("q", qv);
+      if (dkv) params.set("dateKey", dkv);
+      if (detachedV) params.set("detached", "true");
+      if (starredV) params.set("starred", "true");
       const res = await fetch(`/api/admin/bookings/search?${params.toString()}`, {
         cache: "no-store",
       });
@@ -113,6 +132,17 @@ export function AdminBookingsView() {
 
   useEffect(() => {
     search();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Poll every 30 minutes for new bookings / changes.
+  useEffect(() => {
+    const pollMs = 30 * 60 * 1000;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      search().catch(() => null);
+    }, pollMs);
+    return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -439,13 +469,22 @@ export function AdminBookingsView() {
                       ) : null}
 
                       {(() => {
-                        const rel = DateTime.fromISO(b.createdAt).toRelative({
-                          base: DateTime.now(),
-                        });
+                        const now = DateTime.now().setZone(BUSINESS_TIME_ZONE);
+                        const when = DateTime.fromISO(b.createdAt).setZone(BUSINESS_TIME_ZONE);
+                        const rel = when.toRelative({ base: now });
                         if (!rel) return null;
+                        const isUnderDay = when > now.minus({ hours: 24 });
                         return (
                           <span className="text-[10px] px-2 py-1 rounded-full bg-white/70 text-[#716D64] border border-[#E8DDD4]">
-                            booked {rel}
+                            booked{" "}
+                            <span
+                              className={cn(
+                                "transition-colors",
+                                isUnderDay ? "text-[#5B3F35] font-medium" : "text-[#716D64]"
+                              )}
+                            >
+                              {rel}
+                            </span>
                           </span>
                         );
                       })()}

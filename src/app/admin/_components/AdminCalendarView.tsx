@@ -28,6 +28,10 @@ export function AdminCalendarView() {
   );
   const fromDateKey = useMemo(() => monthDt.startOf("month").toISODate()!, [monthDt]);
   const toDateKey = useMemo(() => monthDt.endOf("month").toISODate()!, [monthDt]);
+  const fromDateKeyRef = useRef(fromDateKey);
+  const toDateKeyRef = useRef(toDateKey);
+  useEffect(() => void (fromDateKeyRef.current = fromDateKey), [fromDateKey]);
+  useEffect(() => void (toDateKeyRef.current = toDateKey), [toDateKey]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -258,10 +262,10 @@ export function AdminCalendarView() {
   }, [mobileDateKey, loading]);
 
   async function reloadMonth() {
+    const from = fromDateKeyRef.current;
+    const to = toDateKeyRef.current;
     const res2 = await fetch(
-      `/api/admin/calendar?fromDateKey=${encodeURIComponent(fromDateKey)}&toDateKey=${encodeURIComponent(
-        toDateKey
-      )}`,
+      `/api/admin/calendar?fromDateKey=${encodeURIComponent(from)}&toDateKey=${encodeURIComponent(to)}`,
       { cache: "no-store" }
     );
     const json2 = await res2.json();
@@ -270,6 +274,17 @@ export function AdminCalendarView() {
     }
     setDays(json2.data.days ?? []);
   }
+
+  // Poll every 30 minutes for updates.
+  useEffect(() => {
+    const pollMs = 30 * 60 * 1000;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      reloadMonth().catch(() => null);
+    }, pollMs);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function clearSelection() {
     setSelectedSlotIds(new Set());
@@ -1151,33 +1166,46 @@ export function AdminCalendarView() {
                             <div className="text-xs text-[#716D64] truncate">{b.whatsapp}</div>
                             <div className="text-[10px] text-[#716D64]">
                               {(() => {
-                                const statusLabel =
-                                  b.status === "confirmed"
-                                    ? "booked"
-                                    : b.status === "no_show"
-                                      ? "no-show"
-                                      : "cancelled";
+                                let statusLabel = "booked";
+                                if (b.status === "cancelled") statusLabel = "cancelled";
+                                if (b.status === "no_show") statusLabel = "no-show";
 
                                 let whenIso: string | null = null;
                                 if (b.status === "cancelled" && typeof b.cancelledAt === "string") {
                                   whenIso = b.cancelledAt;
-                                } else if (b.status === "no_show" && typeof b.noShowAt === "string") {
+                                }
+                                if (b.status === "no_show" && typeof b.noShowAt === "string") {
                                   whenIso = b.noShowAt;
-                                } else if (typeof b.createdAt === "string") {
+                                }
+                                if (!whenIso && typeof b.createdAt === "string") {
                                   whenIso = b.createdAt;
                                 }
 
-                                const rel =
-                                  whenIso
-                                    ? DateTime.fromISO(whenIso).toRelative({
-                                        base: DateTime.now(),
-                                      })
-                                    : null;
+                                let rel: string | null = null;
+                                let isUnderDay = false;
+                                if (whenIso) {
+                                  const now = DateTime.now().setZone(BUSINESS_TIME_ZONE);
+                                  const when = DateTime.fromISO(whenIso).setZone(BUSINESS_TIME_ZONE);
+                                  rel = when.toRelative({ base: now });
+                                  isUnderDay = when > now.minus({ hours: 24 });
+                                }
 
                                 return (
                                   <>
                                     {statusLabel}
-                                    {rel ? ` · ${rel}` : null}
+                                    {rel ? (
+                                      <>
+                                        {" · "}
+                                        <span
+                                          className={cn(
+                                            "transition-colors",
+                                            isUnderDay ? "text-[#5B3F35] font-medium" : "text-[#716D64]"
+                                          )}
+                                        >
+                                          {rel}
+                                        </span>
+                                      </>
+                                    ) : null}
                                   </>
                                 );
                               })()}

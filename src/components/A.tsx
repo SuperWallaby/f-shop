@@ -40,25 +40,14 @@ const PriceSection = () => {
    strong: true,
    price: "RM 50",
    title: "Single Class",
-   details: [
-    "Promo single class RM 26",
-    "Non-shareable",
-    "Non-refundable",
-   ],
-   originalPrice: "RM 50",
-   discountedPrice: "RM 26",
-   promotion: {
-    active: true,
-    discount: "RM 26",
-    label: "Promo price",
-   },
+   details: ["First timer 30% off (RM 35)", "Non-shareable", "Non-refundable"],
   },
   {
    price: "RM 160",
    originalPrice: "RM 160",
    discountedPrice: "RM 120",
    title: "4 Classes",
-   details: ["2 Month Validity", "Non-shareable", "Non-refundable"],
+   details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
    //  promotion: {
    //   active: true,
    //   discount: "25%",
@@ -68,7 +57,7 @@ const PriceSection = () => {
   {
    price: "RM 280",
    title: "8 Classes",
-   details: ["3 Month Validity", "Non-shareable", "Non-refundable"],
+   details: ["2 Month Validity", "Non-shareable", "Non-refundable"],
   },
  ];
 
@@ -76,7 +65,7 @@ const PriceSection = () => {
   {
    price: "RM 170",
    title: "Single Class",
-   details: ["First Timer get 10% off", "Non-shareable", "Non-refundable"],
+     details: ["First timer 10% off", "Non-shareable", "Non-refundable"],
   },
   {
    price: "RM 480",
@@ -97,7 +86,7 @@ const PriceSection = () => {
    priceNote: "/ per head",
    title: "Single Class",
    details: [
-    "First trial 10% off (RM 108)",
+     "First timer 10% off (RM 108)",
     "Non-shareable",
     "Non-refundable",
    ],
@@ -106,13 +95,13 @@ const PriceSection = () => {
    price: "RM 460",
    priceNote: "/ per head",
    title: "4 Classes",
-   details: ["2 Month Validity", "Non-shareable", "Non-refundable"],
+   details: ["1 Month Validity", "Non-shareable", "Non-refundable"],
   },
   {
    price: "RM 880",
    priceNote: "/ per head",
    title: "8 Classes",
-   details: ["3 Month Validity", "Non-shareable", "Non-refundable"],
+   details: ["2 Month Validity", "Non-shareable", "Non-refundable"],
   },
  ];
 
@@ -121,11 +110,7 @@ const PriceSection = () => {
    strong: true,
    price: "RM 90",
    title: "Single Class",
-   details: [
-    "Promo single class RM 70",
-    "Non-shareable",
-    "Non-refundable",
-   ],
+   details: ["Promo single class RM 70", "Non-shareable", "Non-refundable"],
    originalPrice: "RM 90",
    discountedPrice: "RM 70",
    promotion: {
