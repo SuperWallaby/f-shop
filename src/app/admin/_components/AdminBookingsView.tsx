@@ -273,7 +273,8 @@ export function AdminBookingsView() {
           <div className="text-xs text-[#716D64] mt-1">Total: {visibleItems.length}</div>
         </div>
         <button
-          onClick={search}
+
+          onClick={() => search()}
           className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition"
         >
           Refresh
@@ -317,7 +318,7 @@ export function AdminBookingsView() {
           </select>
         </label>
         <button
-          onClick={search}
+          onClick={() => search()}
           className="px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition"
         >
           Search

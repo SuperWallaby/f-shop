@@ -31,23 +31,23 @@ export default function AdminPage() {
  const [error, setError] = useState<string | null>(null);
  const [submitting, setSubmitting] = useState(false);
 
- useEffect(() => {
+useEffect(() => {
   let cancelled = false;
   async function check() {
-   setChecking(true);
-   try {
-    const res = await fetch("/api/admin/me", { cache: "no-store" });
-    const json = await res.json();
-    if (!cancelled) setAuthed(Boolean(json?.data?.authed));
-   } finally {
-    if (!cancelled) setChecking(false);
-   }
+    setChecking(true);
+    try {
+      const res = await fetch("/api/admin/me", { cache: "no-store" });
+      const json = await res.json();
+      if (!cancelled) setAuthed(Boolean(json?.data?.authed));
+    } finally {
+      if (!cancelled) setChecking(false);
+    }
   }
   check();
   return () => {
-   cancelled = true;
+    cancelled = true;
   };
- }, []);
+}, []);
 
  async function login() {
   setSubmitting(true);
@@ -343,19 +343,36 @@ export default function AdminPage() {
 
  const [newStart, setNewStart] = useState("09:00");
  const [newEnd, setNewEnd] = useState("10:00");
- const [newItemId, setNewItemId] = useState<string>("");
+ // Single selector for the Time manage tab:
+ // - drives what sessions are shown
+ // - drives which class type is used when creating a session
+ const [timeItemId, setTimeItemId] = useState<string>("");
  const [createSlotError, setCreateSlotError] = useState<string | null>(null);
  const [creatingSlot, setCreatingSlot] = useState(false);
 
  useEffect(() => {
-  if (newItemId) return;
+  if (timeItemId) return;
   const first = adminItems.find((it) => it.active)?.id ?? adminItems[0]?.id;
-  if (first) setNewItemId(first);
- }, [adminItems, newItemId]);
+  if (first) setTimeItemId(first);
+ }, [adminItems, timeItemId]);
+
+ // When the class type changes, reload the day so the Sessions list is always fresh.
+ useEffect(() => {
+  if (!authed || !dateKey) return;
+  loadDay(dateKey);
+  // Also reset booking draft selection because the session list changes.
+  setAdminBookSlotId("");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ }, [authed, dateKey, timeItemId]);
+
+ const visibleDaySlots = useMemo(() => {
+  if (!timeItemId) return [];
+  return daySlots.filter((s) => s.itemId === timeItemId);
+ }, [daySlots, timeItemId]);
 
  async function createSlot() {
   if (!dateKey) return;
-  if (!newItemId) {
+  if (!timeItemId) {
    setCreateSlotError("Select a class type");
    return;
   }
@@ -377,7 +394,7 @@ export default function AdminPage() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
      dateKey,
-     itemId: newItemId,
+     itemId: timeItemId,
      startMin,
      endMin,
     }),
@@ -942,6 +959,29 @@ export default function AdminPage() {
       <section className="space-y-6">
        <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
         <div className="flex items-baseline justify-between gap-4">
+         <h2 className="font-serif text-xl font-semibold">Class Type</h2>
+        </div>
+        <div className="mt-4">
+         <ItemSelectField
+          label="Selected class type"
+          value={timeItemId}
+          onChange={(next) => {
+           setTimeItemId(next);
+           setCreateSlotError(null);
+          }}
+          items={adminItems}
+          loading={adminItemsLoading}
+          error={adminItemsError}
+          placeholder="Select a class type…"
+         />
+         <div className="mt-2 text-xs text-[#716D64]">
+          Changing this will reload the sessions for the selected date.
+         </div>
+        </div>
+       </div>
+
+       <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+        <div className="flex items-baseline justify-between gap-4">
          <h2 className="font-serif text-xl font-semibold">Create Session</h2>
         </div>
 
@@ -984,22 +1024,12 @@ export default function AdminPage() {
            {hhmmToAmPmLabel(newEnd) ?? ""}
           </span>
          </label>
-         <ItemSelectField
-          className="sm:col-span-2"
-          label="Class Type"
-          value={newItemId}
-          onChange={setNewItemId}
-          items={adminItems}
-          loading={adminItemsLoading}
-          error={adminItemsError}
-          placeholder="Select a class type…"
-         />
         </div>
         {createSlotError ? (
          <div className="mt-3 text-sm text-red-700">{createSlotError}</div>
         ) : null}
         <button
-         disabled={!dateKey || !newItemId || creatingSlot}
+         disabled={!dateKey || !timeItemId || creatingSlot}
          onClick={createSlot}
          className="mt-4 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -1030,13 +1060,13 @@ export default function AdminPage() {
           ))}
          </div>
         )}
-        {!dayLoading && daySlots.length === 0 ? (
+        {!dayLoading && visibleDaySlots.length === 0 ? (
          <div className="text-sm text-[#716D64]">
           No sessions for this date.
          </div>
         ) : (
          <div className="space-y-4">
-          {daySlots.map((s) => (
+          {visibleDaySlots.map((s) => (
            <div
             key={s.id}
             className="rounded-3xl border border-[#E8DDD4] p-5"
@@ -1214,7 +1244,7 @@ export default function AdminPage() {
            className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
           >
            <option value="">Select a session…</option>
-           {daySlots
+           {visibleDaySlots
             .filter((s) => !s.cancelled && s.available > 0)
             .map((s) => (
              <option key={s.id} value={s.id}>
