@@ -32,6 +32,13 @@ const optionalQueryItemIdSchema = z.preprocess((v) => {
   return trimmed.length === 0 ? undefined : trimmed;
 }, z.string().min(1).optional());
 
+const optionalBodyItemIdSchema = z.preprocess((v) => {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v !== "string") return v;
+  const trimmed = v.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}, z.string().min(1).optional());
+
 export const publicSlotsQuerySchema = z.object({
   dateKey: dateKeySchema,
   itemId: optionalQueryItemIdSchema,
@@ -87,6 +94,7 @@ export const publicCancelBookingSchema = z
 export const adminGenerateSlotsSchema = z.object({
   fromDateKey: dateKeySchema,
   toDateKey: dateKeySchema,
+  itemId: optionalBodyItemIdSchema,
   force: z.boolean().optional(),
   replaceOverlaps: z.boolean().optional(),
 });

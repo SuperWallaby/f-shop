@@ -35,7 +35,10 @@ export async function POST(req: NextRequest) {
       return jsonError("Invalid body", 400, parsed.error.flatten());
     }
 
-    const { fromDateKey, toDateKey, force, replaceOverlaps } = parsed.data;
+    const { fromDateKey, toDateKey, itemId, force, replaceOverlaps } = parsed.data;
+    if (itemId && !ObjectId.isValid(itemId)) {
+      return jsonError("Invalid itemId", 400);
+    }
 
     const { settings, timeSlots } = await getCollections();
     const settingsDoc = await settings.findOne({ _id: "singleton" });
@@ -58,6 +61,7 @@ export async function POST(req: NextRequest) {
       const weekdayKey = weekdayKeyForDate(dateKey, tz);
       const items = pattern[weekdayKey] ?? [];
       for (const item of items) {
+        if (itemId && item.itemId !== itemId) continue;
         const itemObjectId = ObjectId.isValid(item.itemId)
           ? new ObjectId(item.itemId)
           : null;

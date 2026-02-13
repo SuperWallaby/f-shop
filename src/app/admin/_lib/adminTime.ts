@@ -2,8 +2,16 @@ import { DateTime } from "luxon";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 
 export function dateToDateKeyBusiness(date: Date): string {
-  const iso = DateTime.fromJSDate(date).setZone(BUSINESS_TIME_ZONE).toISODate();
-  return iso ?? DateTime.fromJSDate(date).toISODate() ?? "";
+  // IMPORTANT:
+  // Treat DayPicker's Date as a "date-only" value, not an instant in time.
+  // Converting a JS Date instant across timezones can shift the calendar day
+  // (e.g. Korea local midnight -> KL becomes previous day 23:00).
+  return (
+    DateTime.fromObject(
+      { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() },
+      { zone: BUSINESS_TIME_ZONE }
+    ).toISODate() ?? ""
+  );
 }
 
 export function hhmmToMinutes(hhmm: string): number | null {

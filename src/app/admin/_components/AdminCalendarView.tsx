@@ -335,6 +335,57 @@ export function AdminCalendarView() {
     }
   }
 
+  async function deleteAllSlotsForDate(dateKey: string) {
+    const day = days.find((d) => d.dateKey === dateKey);
+    const slots = day?.slots ?? [];
+    if (slots.length === 0) return;
+
+    const ok = window.confirm(
+      `Delete all ${slots.length} sessions on ${dateKey}? Bookings will become unassigned.`
+    );
+    if (!ok) return;
+
+    setSaving(true);
+    setActionError(null);
+    try {
+      for (const s of slots) {
+        if (!s.cancelled) {
+          const r1 = await fetch(`/api/admin/slots/${encodeURIComponent(s.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cancelled: true }),
+          });
+          const j1 = (await r1.json().catch(() => null)) as {
+            ok?: boolean;
+            error?: { message?: unknown };
+          } | null;
+          if (!r1.ok || !j1?.ok)
+            throw new Error(String(j1?.error?.message ?? "Failed to cancel slot"));
+        }
+
+        const r2 = await fetch(`/api/admin/slots/${encodeURIComponent(s.id)}/delete`, {
+          method: "POST",
+        });
+        const j2 = (await r2.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: { message?: unknown };
+        } | null;
+        if (!r2.ok || !j2?.ok)
+          throw new Error(String(j2?.error?.message ?? "Failed to delete slot"));
+      }
+
+      await reloadMonth();
+      clearSelection();
+      setSelectMode(false);
+      setDayModalDateKey(null);
+      if (selected && selected.dateKey === dateKey) setSelected(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function patchSlot(slotId: string, patch: Record<string, unknown>) {
     setSaving(true);
     setActionError(null);
@@ -697,6 +748,16 @@ export function AdminCalendarView() {
         <div className="mt-4 rounded-3xl border border-[#E8DDD4] bg-white/80 p-5">
           <div className="flex items-baseline justify-between gap-3">
             <div className="font-serif text-xl font-semibold">{mobileDateKey}</div>
+            {(days.find((d) => d.dateKey === mobileDateKey)?.slots?.length ?? 0) > 0 ? (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => deleteAllSlotsForDate(mobileDateKey)}
+                className="px-3 py-2 rounded-full border border-[#F1B3B0] bg-[#FCE8E6] text-[#B42318] text-xs hover:brightness-95 transition cursor-pointer disabled:opacity-50"
+              >
+                {saving ? "Deleting…" : "Delete day"}
+              </button>
+            ) : null}
           </div>
 
           <div className="mt-4 space-y-3">
@@ -803,6 +864,15 @@ export function AdminCalendarView() {
                     </span>
                   ) : null}
                 </div>
+                {slots.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setDayModalDateKey(item.dateKey)}
+                    className="text-[11px] text-[#7A4B3A] underline hover:text-[#5E3A2D] cursor-pointer"
+                  >
+                    View day
+                  </button>
+                ) : null}
               </div>
               <div className="mt-2 space-y-1">
                 {slots.length === 0 ? (
@@ -884,13 +954,7 @@ export function AdminCalendarView() {
                       );
                     })}
                     {!!extraSlotsCount && (
-                      <button
-                        type="button"
-                        onClick={() => setDayModalDateKey(item.dateKey)}
-                        className="text-[11px] text-[#7A4B3A] underline px-2 hover:text-[#5E3A2D] cursor-pointer text-left"
-                      >
-                        +{extraSlotsCount} more
-                      </button>
+                      <div className="text-[11px] text-[#716D64] px-2">+{extraSlotsCount} more</div>
                     )}
                   </>
                 )}
@@ -919,13 +983,23 @@ export function AdminCalendarView() {
                   <h3 className="font-serif text-2xl font-bold">{dayModalDateKey}</h3>
                   <div className="mt-2 text-sm text-[#716D64]">Click a session to open details.</div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDayModalDateKey(null)}
-                  className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
-                >
-                  Close
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={saving || (days.find((d) => d.dateKey === dayModalDateKey)?.slots?.length ?? 0) === 0}
+                    onClick={() => deleteAllSlotsForDate(dayModalDateKey)}
+                    className="px-4 py-2 rounded-full border border-[#F1B3B0] bg-[#FCE8E6] text-[#B42318] text-sm hover:brightness-95 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {saving ? "Deleting…" : "Delete day"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDayModalDateKey(null)}
+                    className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
 
               <div className="mt-5 space-y-3">
