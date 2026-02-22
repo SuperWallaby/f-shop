@@ -9,9 +9,9 @@
     "start": "next start",
     "lint": "next lint",
     "vercel:unlink": "rm -rf .vercel",
-    "vercel:link:fasea": "npx --yes vercel link --yes --project fasea",
-    "vercel:pull": "npx --yes vercel pull --yes --environment=preview",
-    "deploy": "npx --yes vercel deploy --yes --prod",
+    "vercel:link:fasea": "ya link --yes --project fasea",
+    "vercel:pull": "vercel pull --yes --environment=preview",
+    "deploy": "vercel deploy --yes --prod",
     "dev:worker": "npx --yes wrangler dev --config cloudflare/cron-worker/wrangler.toml",
     "deploy:worker": "npx --yes wrangler deploy --config cloudflare/cron-worker/wrangler.toml"
   },
@@ -41,5 +41,6 @@
     "eslint-config-next": "15.3.1",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "packageManager": "yarn@1.22.19"
 }
