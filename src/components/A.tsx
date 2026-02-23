@@ -120,9 +120,9 @@ const PriceSection = () => {
       title: "Single Class",
       details: ["First timer 10% off", "Non-shareable", "Non-refundable"],
       originalPrice: "RM 90",
-      discountedPrice: "RM 81",
+      // discountedPrice: "RM 81",
       promotion: {
-        active: true,
+        active: false,
         discount: "RM 81",
         label: "Promo price",
       },
