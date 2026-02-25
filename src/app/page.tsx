@@ -14,102 +14,104 @@ import WhatsAppCtaButton from "../components/WhatsAppCtaButton";
 import { FaInstagram } from "@react-icons/all-files/fa/FaInstagram";
 import { FaWhatsapp } from "@react-icons/all-files/fa/FaWhatsapp";
 import Link from "next/link";
+import SalesPopup from "@/components/SalesPopup";
 
 const HeroSection = () => {
- //  const heroRef = useRef<HTMLDivElement>(null);
+  //  const heroRef = useRef<HTMLDivElement>(null);
 
- //  const [navSolid, setNavSolid] = useState(false);
+  //  const [navSolid, setNavSolid] = useState(false);
 
- //  useEffect(() => {
- //   const handleScroll = () => {
- //    const scrolled = window.scrollY;
- //    setNavSolid(scrolled > window.innerHeight);
- //   };
+  //  useEffect(() => {
+  //   const handleScroll = () => {
+  //    const scrolled = window.scrollY;
+  //    setNavSolid(scrolled > window.innerHeight);
+  //   };
 
- //   window.addEventListener("scroll", handleScroll);
- //   return () => window.removeEventListener("scroll", handleScroll);
- //  }, []);
+  //   window.addEventListener("scroll", handleScroll);
+  //   return () => window.removeEventListener("scroll", handleScroll);
+  //  }, []);
 
- return (
-  <div className="text-[#444444] ">
-   <RevealTrigger rootSelector="#Hero" />
-   <SiteHeader />
-   <div
-    id="Hero"
-    // ref={heroRef}
-    className="min-h-[105svh] md:min-h-[100svh] justify-center overflow-x-hidden bg-hero-animated relative flex flex-col items-center px-6 py-12 "
-   >
-    {/* Hero Content */}
-    <main className="!bg-transparent w-full max-w-screen mt-5 px-4 text-center flex flex-col items-center">
-     <h2 className="font-serif text-4xl sm:text-5xl font-extrabold mb-6 leading-snug reveal transition-none">
-      Your Personal <br /> Pilates Studio for Wellness & Balance
-     </h2>
-     <p className="text-lg sm:text-xl text-[#716D64] max-w-xl mb-8 reveal transition-none">
-      Faséa is your space to strengthen your body and calm your mind. Start your
-      journey today.
-     </p>
-     <div className="flex flex-wrap justify-center gap-4 bg-transparent">
-      <InstaCtaButton
-       ariaLabel="Book via Instagram"
-       source="hero"
-       className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal flex items-center gap-2"
+  return (
+    <div className="text-[#444444] ">
+      <RevealTrigger rootSelector="#Hero" />
+      <SiteHeader />
+      <div
+        id="Hero"
+        // ref={heroRef}
+        className="min-h-[105svh] md:min-h-[100svh] justify-center overflow-x-hidden bg-hero-animated relative flex flex-col items-center px-6 py-12 "
       >
-       <FaInstagram className="h-4 w-4" />
-       Insta DM 
-      </InstaCtaButton>
+        {/* Hero Content */}
+        <main className="!bg-transparent w-full max-w-screen mt-5 px-4 text-center flex flex-col items-center">
+          <h2 className="font-serif text-4xl sm:text-5xl font-extrabold mb-6 leading-snug reveal transition-none">
+            Your Personal <br /> Pilates Studio for Wellness & Balance
+          </h2>
+          <p className="text-lg sm:text-xl text-[#716D64] max-w-xl mb-8 reveal transition-none">
+            Faséa is your space to strengthen your body and calm your mind.
+            Start your journey today.
+          </p>
+          <div className="flex flex-wrap justify-center gap-4 bg-transparent">
+            <InstaCtaButton
+              ariaLabel="Book via Instagram"
+              source="hero"
+              className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal flex items-center gap-2"
+            >
+              <FaInstagram className="h-4 w-4" />
+              Insta DM
+            </InstaCtaButton>
 
-      <WhatsAppCtaButton
-       ariaLabel="Book via WhatsApp"
-       source="hero"
-       className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal flex items-center gap-2"
-      >
-       <FaWhatsapp className="h-4 w-4" />
-       WhatsApp
-      </WhatsAppCtaButton>
+            <WhatsAppCtaButton
+              ariaLabel="Book via WhatsApp"
+              source="hero"
+              className="px-6 py-3 rounded-full text-white text-sm font-medium button-gradient shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:brightness-110 hover:shadow-lg reveal flex items-center gap-2"
+            >
+              <FaWhatsapp className="h-4 w-4" />
+              WhatsApp
+            </WhatsAppCtaButton>
 
-      <Link
-       aria-label="Book now"
-       href="/booking"
-       className="px-6 py-3 rounded-full bg-[#FAF8F6] text-sm font-medium shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:shadow-lg reveal"
-      >
-       Book Now
-      </Link>
-     </div>
-    </main>
-   </div>
-   <WhyChooseSection />
-   <ReviewSection />
-   <PriceSection />
-   <ScheduleSection />
+            <Link
+              aria-label="Book now"
+              href="/booking"
+              className="px-6 py-3 rounded-full bg-[#FAF8F6] text-sm font-medium shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] transform hover:scale-[1.04] hover:shadow-lg reveal"
+            >
+              Book Now
+            </Link>
+          </div>
+        </main>
+      </div>
+      <WhyChooseSection />
+      <ReviewSection />
+      <PriceSection />
+      <ScheduleSection />
+      <SalesPopup />
 
-   <ContactSection />
-   <LocationSection />
-   <section className="py-24 px-6 bg-[#F8F0EE] text-[#444444] text-center">
-    <h3 className="font-serif text-3xl sm:text-4xl font-bold mb-6">
-     Ready to begin your Pilates journey?
-    </h3>
-    <p className="text-[#716D64] text-base sm:text-lg mb-10">
-     Your body deserves to feel strong, calm, and centered.
-    </p>
-    <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-     <InstaCtaButton
-      ariaLabel="Book Link"
-      source="home_footer"
-      className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition"
-     >
-      Book Your First Class
-     </InstaCtaButton>
-     <Link
-      aria-label="Learn more about Faséa"
-      href="/about"
-      className="px-6 py-3 rounded-full text-sm font-medium text-[#444444] bg-white shadow-sm hover:shadow-md transition"
-     >
-      Learn more about Faséa
-     </Link>
+      <ContactSection />
+      <LocationSection />
+      <section className="py-24 px-6 bg-[#F8F0EE] text-[#444444] text-center">
+        <h3 className="font-serif text-3xl sm:text-4xl font-bold mb-6">
+          Ready to begin your Pilates journey?
+        </h3>
+        <p className="text-[#716D64] text-base sm:text-lg mb-10">
+          Your body deserves to feel strong, calm, and centered.
+        </p>
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+          <InstaCtaButton
+            ariaLabel="Book Link"
+            source="home_footer"
+            className="px-6 py-3 rounded-full text-white font-medium button-gradient button-shadow-md hover:opacity-90 transition"
+          >
+            Book Your First Class
+          </InstaCtaButton>
+          <Link
+            aria-label="Learn more about Faséa"
+            href="/about"
+            className="px-6 py-3 rounded-full text-sm font-medium text-[#444444] bg-white shadow-sm hover:shadow-md transition"
+          >
+            Learn more about Faséa
+          </Link>
+        </div>
+      </section>
     </div>
-   </section>
-  </div>
- );
+  );
 };
 
 export default HeroSection;
