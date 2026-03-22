@@ -82,7 +82,7 @@ const HeroSection = () => {
       <ReviewSection />
       <PriceSection />
       <ScheduleSection />
-      <SalesPopup />
+      {/* <SalesPopup /> */}
 
       <ContactSection />
       <LocationSection />
