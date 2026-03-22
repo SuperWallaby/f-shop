@@ -132,7 +132,6 @@ export function AdminBookingsView() {
 
   useEffect(() => {
     search();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Poll every 30 minutes for new bookings / changes.
@@ -143,7 +142,6 @@ export function AdminBookingsView() {
       search().catch(() => null);
     }, pollMs);
     return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadAssignableSlots(dk: string) {

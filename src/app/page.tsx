@@ -14,7 +14,6 @@ import WhatsAppCtaButton from "../components/WhatsAppCtaButton";
 import { FaInstagram } from "@react-icons/all-files/fa/FaInstagram";
 import { FaWhatsapp } from "@react-icons/all-files/fa/FaWhatsapp";
 import Link from "next/link";
-import SalesPopup from "@/components/SalesPopup";
 
 const HeroSection = () => {
   //  const heroRef = useRef<HTMLDivElement>(null);

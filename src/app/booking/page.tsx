@@ -276,7 +276,7 @@ function BookingPageInner() {
 
   if (disableAll) return () => true;
   return (date: Date) => !availableDateKeys.has(dateToDateKeyBusiness(date));
- }, [availableDateKeys, loadingCalendar, month]);
+ }, [availableDateKeys, loadingCalendar]);
 
  useEffect(() => {
   let cancelled = false;

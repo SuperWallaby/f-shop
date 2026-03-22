@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 
 const WHATSAPP_URL = "https://wa.me/60145403560";
@@ -77,10 +78,13 @@ const SalesPopup = () => {
           className="max-w-lg cursor-pointer relative w-full aspect-auto sm:max-h-[85vh] rounded-lg overflow-hidden shadow-2xl block cursor-pointer"
           aria-label="Contact via WhatsApp for Ramadan Sales"
         >
-          <img
+          <Image
             src="/promotion.png"
             alt="Promotion"
+            width={1200}
+            height={1200}
             className="object-contain w-full h-full"
+            sizes="(max-width: 640px) 100vw, 32rem"
           />
         </a>
       </div>

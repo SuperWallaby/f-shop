@@ -372,7 +372,6 @@ export default function AdminPage() {
     loadDay(dateKey);
     // Also reset booking draft selection because the session list changes.
     setAdminBookSlotId("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, dateKey, timeItemId]);
 
   const visibleDaySlots = useMemo(() => {

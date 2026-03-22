@@ -283,7 +283,6 @@ export function AdminCalendarView() {
       reloadMonth().catch(() => null);
     }, pollMs);
     return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function clearSelection() {
