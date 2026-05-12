@@ -94,10 +94,9 @@ export default function RootLayout({
  );
 }
 
-/** Canonical site URL (Open Graph, link previews). */
-export const metadataBase = new URL("https://fasea.studio");
-
+/** @see https://nextjs.org/docs/app/api-reference/functions/generate-metadata#metadatabase */
 export const metadata = {
+  metadataBase: new URL("https://fasea.studio"),
  title: "Faséa – Pilates Studio for Wellness & Balance",
  description:
   "Faséa is your personal pilates space in TRG. Strengthen your body and calm your mind with tailored sessions.",
