@@ -91,7 +91,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_booking_confirmed_en_v8" "$(cat <<'JSON'
-"Fasea Pilates booking confirmed\nDate {{1}}\nTime {{2}}\nReference https://fasea.plantweb.io/info/booking"
+"Fasea Pilates booking confirmed\nDate {{1}}\nTime {{2}}\nReference https://fasea.studio/info/booking"
 JSON
 )" "${SAMPLE_VARS}"
 
@@ -100,7 +100,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_booking_reminder_en_v8" "$(cat <<'JSON'
-"Fasea Pilates booking reminder\nDate {{1}}\nTime {{2}}\nReference https://fasea.plantweb.io/info/booking"
+"Fasea Pilates booking reminder\nDate {{1}}\nTime {{2}}\nReference https://fasea.studio/info/booking"
 JSON
 )" "${SAMPLE_VARS}"
 
@@ -109,7 +109,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_booking_cancelled_by_client_en_v8" "$(cat <<'JSON'
-"Fasea Pilates booking cancelled\nDate {{1}}\nTime {{2}}\nReference https://fasea.plantweb.io/info/booking"
+"Fasea Pilates booking cancelled\nDate {{1}}\nTime {{2}}\nReference https://fasea.studio/info/booking"
 JSON
 )" "${SAMPLE_VARS}"
 
@@ -118,7 +118,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_class_cancelled_by_instructor_en_v8" "$(cat <<'JSON'
-"Fasea Pilates class cancelled\nDate {{1}}\nTime {{2}}\nReference https://fasea.plantweb.io/info/booking"
+"Fasea Pilates class cancelled\nDate {{1}}\nTime {{2}}\nReference https://fasea.studio/info/booking"
 JSON
 )" "${SAMPLE_VARS}"
 
@@ -127,7 +127,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_no_show_en_v8" "$(cat <<'JSON'
-"Fasea Pilates attendance not recorded\nDate {{1}}\nTime {{2}}\nReference https://fasea.plantweb.io/info/booking"
+"Fasea Pilates attendance not recorded\nDate {{1}}\nTime {{2}}\nReference https://fasea.studio/info/booking"
 JSON
 )" "${SAMPLE_VARS}"
 

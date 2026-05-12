@@ -66,8 +66,8 @@ export default function RootLayout({
       "@context": "https://schema.org",
       "@type": "LocalBusiness",
       name: "Faséa Pilates Studio",
-      image: "https://fasea.com/og-image.jpg",
-      url: "https://fasea.com",
+      image: "https://fasea.studio/og-image.jpg",
+      url: "https://fasea.studio",
       telephone: "+60145403560",
       address: {
        "@type": "PostalAddress",
@@ -93,6 +93,10 @@ export default function RootLayout({
   </html>
  );
 }
+
+/** Canonical site URL (Open Graph, link previews). */
+export const metadataBase = new URL("https://fasea.studio");
+
 export const metadata = {
  title: "Faséa – Pilates Studio for Wellness & Balance",
  description:
@@ -103,7 +107,7 @@ export const metadata = {
  openGraph: {
   title: "Faséa – Wellness & Balance",
   description: "Experience Pilates in the most elegant and calm space in TRG.",
-  url: "https://fasea.com", // 도메인에 맞게 변경
+  url: "https://fasea.studio",
   siteName: "Faséa Pilates Studio",
   locale: "en_US",
   type: "website",

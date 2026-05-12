@@ -90,7 +90,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_booking_confirmed_en_v7" "$(cat <<'JSON'
-"Booking status update: confirmed.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+"Booking status update: confirmed.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.studio/info/booking"
 JSON
 )" "$(cat <<'JSON'
 {"1":"2026-01-20","2":"7:00 PM"}
@@ -102,7 +102,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_booking_reminder_en_v7" "$(cat <<'JSON'
-"Booking status update: reminder.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+"Booking status update: reminder.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.studio/info/booking"
 JSON
 )" "$(cat <<'JSON'
 {"1":"2026-01-20","2":"7:00 PM"}
@@ -114,7 +114,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_booking_cancelled_by_client_en_v7" "$(cat <<'JSON'
-"Booking status update: cancelled.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+"Booking status update: cancelled.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.studio/info/booking"
 JSON
 )" "$(cat <<'JSON'
 {"1":"2026-01-20","2":"7:00 PM"}
@@ -126,7 +126,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_class_cancelled_by_instructor_en_v7" "$(cat <<'JSON'
-"Booking status update: class cancelled.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+"Booking status update: class cancelled.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.studio/info/booking"
 JSON
 )" "$(cat <<'JSON'
 {"1":"2026-01-20","2":"7:00 PM"}
@@ -138,7 +138,7 @@ JSON
 #  {{1}} date label
 #  {{2}} time label
 post_content "fasea_no_show_en_v7" "$(cat <<'JSON'
-"Booking status update: attendance not recorded.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.plantweb.io/info/booking"
+"Booking status update: attendance not recorded.\nDate: {{1}}\nTime: {{2}}\nReference: https://fasea.studio/info/booking"
 JSON
 )" "$(cat <<'JSON'
 {"1":"2026-01-20","2":"7:00 PM"}

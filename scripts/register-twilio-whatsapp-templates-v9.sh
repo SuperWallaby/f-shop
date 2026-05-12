@@ -29,7 +29,7 @@ fi
 ACCOUNT_SID="${TWILIO_ACCOUNT_SID:?Missing TWILIO_ACCOUNT_SID (set it in .env.local or export it)}"
 AUTH_TOKEN="${TWILIO_AUTH_TOKEN:?Missing TWILIO_AUTH_TOKEN (set it in .env.local or export it)}"
 
-REFERENCE_URL="https://fasea.plantweb.io/info/booking"
+REFERENCE_URL="https://fasea.studio/info/booking"
 
 post_content() {
   local friendly_name="$1"

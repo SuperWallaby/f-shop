@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://fasea.plantweb.io/sitemap.xml
+Sitemap: https://fasea.studio/sitemap.xml
