@@ -1,0 +1,55 @@
+Running `(cd /Users/minjaekim/.pub-cache/hosted/pub.dev/objective_c-9.3.0/; TMPDIR=/var/folders/n7/5f3t9tkn5kv_jjwyj18g4pth0000gn/T/ PATH=/Applications/Xcode.app/Contents/SharedFrameworks/SwiftBuild.framework/Versions/A/PlugIns/SWBBuildService.bundle/Contents/PlugIns/SWBUniversalPlatformPlugin.bundle/Contents/Frameworks/SWBUniversalPlatform.framework/Resources:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/local/bin:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/libexec:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/usr/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/usr/local/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/local/bin:/Applications/Xcode.app/Contents/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/usr/local/bin:/Users/minjaekim/.browser-use-env/bin:/Users/minjaekim/.local/bin:/opt/homebrew/share/flutter/bin:/usr/local/opt/openjdk@21/bin:/Users/minjaekim/.bun/bin:/Users/minjaekim/.nvm/versions/node/v22.22.1/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/Users/minjaekim/Library/pnpm:/Users/minjaekim/.cargo/bin:/Users/minjaekim/.yarn/bin:/opt/homebrew/opt/python@3.11/bin HOME=/Users/minjaekim /opt/homebrew/share/flutter/bin/cache/dart-sdk/bin/dart --packages=/Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/package_config.json /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/objective_c/84fd4fa0ea/hook.dill --config=/Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/objective_c/84fd4fa0ea/input.json )`.
+INFO: 2026-05-11 23:25:59.621301: Running `/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang --version`.
+
+INFO: 2026-05-11 23:25:59.642732: Running `/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang --version`.
+
+INFO: 2026-05-11 23:25:59.659403: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.4.sdk -target arm64-apple-ios-simulator -mios-version-min=13 -c /Users/minjaekim/.pub-cache/hosted/pub.dev/objective_c-9.3.0/src/include/dart_api_dl.c -fpic -I src -o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/include/dart_api_dl.c.o
+
+INFO: 2026-05-11 23:25:59.659900: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.4.sdk -target arm64-apple-ios-simulator -mios-version-min=13 -c /Users/minjaekim/.pub-cache/hosted/pub.dev/objective_c-9.3.0/src/objective_c.c -fpic -I src -o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/objective_c.c.o
+
+INFO: 2026-05-11 23:25:59.660091: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.4.sdk -target arm64-apple-ios-simulator -mios-version-min=13 -x objective-c -fobjc-arc -c /Users/minjaekim/.pub-cache/hosted/pub.dev/objective_c-9.3.0/src/input_stream_adapter.m -fpic -I src -o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/input_stream_adapter.m.o
+
+INFO: 2026-05-11 23:25:59.660536: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.4.sdk -target arm64-apple-ios-simulator -mios-version-min=13 -x objective-c -fobjc-arc -c /Users/minjaekim/.pub-cache/hosted/pub.dev/objective_c-9.3.0/src/observer.m -fpic -I src -o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/observer.m.o
+
+.m.o
+
+INFO: 2026-05-11 23:25:59.660659: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.4.sdk -target arm64-apple-ios-simulator -mios-version-min=13 -x objective-c -fobjc-arc -c /Users/minjaekim/.pub-cache/hosted/pub.dev/objective_c-9.3.0/src/ns_number.m -fpic -I src -o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/ns_number.m.o
+
+INFO: 2026-05-11 23:25:59.660760: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.4.sdk -target arm64-apple-ios-simulator -mios-version-min=13 -x objective-c -fobjc-arc -c /Users/minjaekim/.pub-cache/hosted/pub.dev/objective_c-9.3.0/src/protocol.m -fpic -I src -o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/protocol.m.o
+
+INFO: 2026-05-11 23:25:59.660887: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.4.sdk -target arm64-apple-ios-simulator -mios-version-min=13 -x objective-c -fobjc-arc -c /Users/minjaekim/.pub-cache/hosted/pub.dev/objective_c-9.3.0/src/objective_c_bindings_generated.m -fpic -I src -o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/objective_c_bindings_generated.m.o
+
+INFO: 2026-05-11 23:25:59.877236: 
+INFO: 2026-05-11 23:25:59.877345: 
+INFO: 2026-05-11 23:25:59.877379: Generated /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/observer.m.o
+INFO: 2026-05-11 23:25:59.877482: 
+INFO: 2026-05-11 23:25:59.877496: 
+INFO: 2026-05-11 23:25:59.877505: Generated /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/objective_c.c.o
+
+INFO: 2026-05-11 23:25:59.884599: 
+INFO: 2026-05-11 23:25:59.884645: 
+INFO: 2026-05-11 23:25:59.884658: Generated /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/include/dart_api_dl.c.o
+
+INFO: 2026-05-11 23:25:59.900519: 
+INFO: 2026-05-11 23:25:59.900566: 
+INFO: 2026-05-11 23:25:59.900605: Generated /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/protocol.m.o
+
+INFO: 2026-05-11 23:26:00.317913: 
+INFO: 2026-05-11 23:26:00.318280: 
+INFO: 2026-05-11 23:26:00.318301: Generated /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/ns_number.m.o
+
+INFO: 2026-05-11 23:26:00.393499: 
+INFO: 2026-05-11 23:26:00.393552: 
+INFO: 2026-05-11 23:26:00.393563: Generated /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/objective_c.m.o
+
+INFO: 2026-05-11 23:26:00.399929: 
+INFO: 2026-05-11 23:26:00.399972: 
+INFO: 2026-05-11 23:26:00.399983: Generated /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/input_stream_adapter.m.o
+
+INFO: 2026-05-11 23:26:00.404977: Running: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -shared -Wl,-encryptable -undefined dynamic_lookup -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.4.sdk -target arm64-apple-ios-simulator -mios-version-min=13 /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/include/dart_api_dl.c.o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/objective_c.c.o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/input_stream_adapter.m.o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/objective_c.m.o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/observer.m.o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/ns_number.m.o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/protocol.m.o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/obj/src/objective_c_bindings_generated.m.o -o /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/objective_c.dylib
+
+INFO: 2026-05-11 23:26:00.458293: 
+INFO: 2026-05-11 23:26:00.458409: ld: warning: -undefined dynamic_lookup is deprecated on iOS-simulator
+
+INFO: 2026-05-11 23:26:00.458427: Generated /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/objective_c.dylib
+

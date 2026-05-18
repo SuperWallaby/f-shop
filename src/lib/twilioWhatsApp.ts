@@ -323,7 +323,7 @@ export async function sendNoShowWhatsApp(args: {
     `Booking status update: attendance not recorded.\n` +
     `Date: ${dateLabel}\n` +
     `Time: ${timeLabel}\n\n` +
-    `Reference: https://fasea.plantweb.io/info/booking`;
+    `Reference: https://fasea.studio/info/booking`;
 
   if (!sid) {
     await sendTwilioWhatsApp({ to: args.to, body });

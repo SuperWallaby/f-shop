@@ -1,0 +1,1 @@
+ /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/build/9b0f30a15972ccd5a8654bef7ab39d05/dart_build_result.json:  /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/.dart_tool/package_config.json /Users/minjaekim/Desktop/projects/f-shop/apps/mobile/pubspec.yaml /opt/homebrew/share/flutter/bin/cache/dart-sdk/version
