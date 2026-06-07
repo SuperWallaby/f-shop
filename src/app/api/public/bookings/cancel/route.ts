@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return jsonError("Invalid body", 400, parsed.error.flatten());
 
     const { code, email, whatsapp } = parsed.data;
-    const { bookings, timeSlots, exclusiveLocks, items } = await getCollections();
+    const { bookings, timeSlots, exclusiveLocks, items, creditLedger } =
+      await getCollections();
     const now = new Date();
 
     const booking = await bookings.findOne({
@@ -114,6 +115,35 @@ export async function POST(req: NextRequest) {
           businessTimeZone: tz,
         }).catch(() => {}),
       ]);
+
+      const clientOid = booking.clientId;
+      if (clientOid && booking._id) {
+        try {
+          const already = await creditLedger.findOne({
+            bookingId: booking._id,
+            type: "booking_cancel_refund",
+          });
+          if (!already) {
+            const consumed = await creditLedger.findOne({
+              bookingId: booking._id,
+              type: "booking_consume",
+              amount: { $lt: 0 },
+            });
+            if (consumed && consumed.amount < 0) {
+              await creditLedger.insertOne({
+                clientId: clientOid,
+                type: "booking_cancel_refund",
+                amount: -consumed.amount,
+                bookingId: booking._id,
+                note: "Credit restored after client cancellation",
+                createdAt: now,
+              });
+            }
+          }
+        } catch {
+          // best-effort; booking is already cancelled
+        }
+      }
     }
 
     return jsonOk({ cancelled: true });

@@ -1,4 +1,4 @@
-import { ObjectId, type Collection } from "mongodb";
+import { ObjectId, type ClientSession, type Collection } from "mongodb";
 import type {
   ClientDb,
   CreditLedgerDb,
@@ -220,37 +220,95 @@ export async function ensureDefaultPlans(plans: Collection<PlanDb>) {
   );
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Serialized credit-expiry windows for member + admin UI. */
+export type PublicExpiryAlert = {
+  expiresAt: string;
+  windowStart: string;
+  windowEnd: string;
+  credits: number;
+  expiryApproved: boolean;
+  showBanner: boolean;
+  ledgerIds: string[];
+};
+
+/**
+ * Positive grants past expiresAt count only when expiryApproved === false (grace).
+ * Legacy rows (expiryApproved unset) that are past expiry stay excluded from balance.
+ */
+export function ledgerRowCountsTowardBalance(row: CreditLedgerDb, now: Date): boolean {
+  if (row.amount < 0) return true;
+  if (row.amount <= 0) return false;
+  if (!row.expiresAt) return true;
+  if (row.expiresAt > now) return true;
+  return row.expiryApproved === false;
+}
+
+function buildExpiryAlerts(countingRows: CreditLedgerDb[], now: Date): PublicExpiryAlert[] {
+  const grants = countingRows.filter((r) => r.amount > 0 && r.expiresAt);
+  const byExpiry = new Map<number, CreditLedgerDb[]>();
+  for (const r of grants) {
+    const k = r.expiresAt!.getTime();
+    const list = byExpiry.get(k) ?? [];
+    list.push(r);
+    byExpiry.set(k, list);
+  }
+  const out: PublicExpiryAlert[] = [];
+  for (const [, list] of byExpiry) {
+    const credits = list.reduce((s, r) => s + r.amount, 0);
+    if (credits <= 0) continue;
+    const exp = list[0].expiresAt!;
+    const windowStart = new Date(exp.getTime() - 7 * MS_PER_DAY);
+    const windowEnd = new Date(exp.getTime() + 7 * MS_PER_DAY);
+    const t = now.getTime();
+    const showBanner = t >= windowStart.getTime() && t <= windowEnd.getTime();
+    const expiryApproved =
+      list.length > 0 && list.every((r) => r.expiryApproved === true);
+    out.push({
+      expiresAt: exp.toISOString(),
+      windowStart: windowStart.toISOString(),
+      windowEnd: windowEnd.toISOString(),
+      credits,
+      expiryApproved,
+      showBanner,
+      ledgerIds: list.map((r) => r._id!.toHexString()),
+    });
+  }
+  out.sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
+  return out;
+}
+
 export async function getCreditBalance(args: {
   creditLedger: Collection<CreditLedgerDb>;
   clientId: ObjectId;
   now?: Date;
+  session?: ClientSession;
 }) {
   const now = args.now ?? new Date();
   const rows = await args.creditLedger
-    .find({
-      clientId: args.clientId,
-      $or: [
-        { amount: { $lt: 0 } },
-        { expiresAt: { $exists: false } },
-        { expiresAt: { $gt: now } },
-      ],
-    })
+    .find({ clientId: args.clientId }, { session: args.session })
     .toArray();
 
-  const balance = rows.reduce((sum, row) => sum + row.amount, 0);
-  const expiringCredits = rows
+  const countingRows = rows.filter((row) => ledgerRowCountsTowardBalance(row, now));
+  const balance = countingRows.reduce((sum, row) => sum + row.amount, 0);
+  const expiringCredits = countingRows
     .filter((row) => row.amount > 0 && row.expiresAt)
     .sort((a, b) => a.expiresAt!.getTime() - b.expiresAt!.getTime())
     .map((row) => ({
       amount: row.amount,
       expiresAt: row.expiresAt!,
       source: row.type,
+      expiryApproved: row.expiryApproved === true,
     }));
+
+  const expiryAlerts = buildExpiryAlerts(countingRows, now);
 
   return {
     balance: Math.max(0, balance),
     rawBalance: balance,
     expiringCredits,
+    expiryAlerts,
   };
 }
 

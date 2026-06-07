@@ -13,6 +13,7 @@ import { Switch } from "@/components/Switch";
 import { normalizeHexColor, pickUnusedPastelRandom } from "@/lib/itemColor";
 import { AdminBookingsView } from "./_components/AdminBookingsView";
 import { AdminCalendarView } from "./_components/AdminCalendarView";
+import { AdminClientsView } from "./_components/AdminClientsView";
 import { Pill } from "./_components/Pill";
 import type { AdminDaySlot } from "./_lib/types";
 import {
@@ -78,7 +79,15 @@ export default function AdminPage() {
 
   const allowedTabs = useMemo(
     () =>
-      ["time", "config", "items", "calendar", "settings", "bookings"] as const,
+      [
+        "time",
+        "config",
+        "items",
+        "calendar",
+        "clients",
+        "settings",
+        "bookings",
+      ] as const,
     [],
   );
   type TabKey = (typeof allowedTabs)[number];
@@ -201,9 +210,7 @@ export default function AdminPage() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [tab, hasAdminItemsChanges]);
 
-  function setTabSafe(
-    next: "time" | "config" | "items" | "calendar" | "settings" | "bookings",
-  ) {
+  function setTabSafe(next: TabKey) {
     if (next === tab) return;
     if (tab === "items" && hasAdminItemsChanges) {
       const ok = window.confirm(
@@ -984,6 +991,7 @@ export default function AdminPage() {
               { key: "config", label: "Pattern" },
               { key: "items", label: "Class Types" },
               { key: "calendar", label: "Calendar" },
+              { key: "clients", label: "Clients & credits" },
               { key: "settings", label: "Settings" },
               { key: "bookings", label: "Bookings" },
             ] as const
@@ -2445,6 +2453,8 @@ export default function AdminPage() {
           </section>
         ) : tab === "calendar" ? (
           <AdminCalendarView />
+        ) : tab === "clients" ? (
+          <AdminClientsView />
         ) : tab === "settings" ? (
           <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
             <h2 className="font-serif text-2xl font-semibold">Booking rules</h2>

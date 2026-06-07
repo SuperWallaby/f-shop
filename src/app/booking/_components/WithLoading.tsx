@@ -8,7 +8,7 @@ export function WithLoading(props: {
   children: ReactNode;
 }) {
   if (props.loading) {
-    return props.fallback ?? <div className="text-sm text-[#716D64]">Loading…</div>;
+    return props.fallback ?? <div className="text-sm text-fasea-secondary">Loading…</div>;
   }
   return <>{props.children}</>;
 }

@@ -109,3 +109,35 @@ export function pickUnusedPastel(existingColors: Iterable<string>): string {
   return "#e9e4d8";
 }
 
+/** Blend a pastel hex toward white — used as light tinted card fills. */
+export function tintHexColor(hex: string, mixWithWhite = 0.35): string | null {
+  const n = normalizeHexColor(hex);
+  if (!n) return null;
+  const raw = n.slice(1);
+  const r = parseInt(raw.slice(0, 2), 16);
+  const g = parseInt(raw.slice(2, 4), 16);
+  const b = parseInt(raw.slice(4, 6), 16);
+  const t = Math.min(1, Math.max(0, mixWithWhite));
+  const rr = Math.round(r + (255 - r) * t);
+  const gg = Math.round(g + (255 - g) * t);
+  const bb = Math.round(b + (255 - b) * t);
+  return `rgb(${rr} ${gg} ${bb})`;
+}
+
+/** Soft tinted shadows keyed off the accent color (warm studio palette). */
+export function accentTintedBoxShadowPair(
+  accentHex: string,
+): { rest: string; hover: string } | null {
+  const n = normalizeHexColor(accentHex);
+  if (!n) return null;
+  const raw = n.slice(1);
+  const r = parseInt(raw.slice(0, 2), 16);
+  const g = parseInt(raw.slice(2, 4), 16);
+  const b = parseInt(raw.slice(4, 6), 16);
+  const base = `${r} ${g} ${b}`;
+  return {
+    rest: `0 1px 2px rgb(${base} / 0.05), 0 12px 28px rgb(${base} / 0.09)`,
+    hover: `0 10px 32px rgb(${base} / 0.13)`,
+  };
+}
+

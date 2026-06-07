@@ -10,7 +10,6 @@ export function usePlanPurchase(options: Options = {}) {
   const [plans, setPlans] = useState<PublicPlanDto[]>([]);
   const [plansLoading, setPlansLoading] = useState(false);
   const [planOrderLoading, setPlanOrderLoading] = useState<string | null>(null);
-  const [planOrderMessage, setPlanOrderMessage] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,7 +39,6 @@ export function usePlanPurchase(options: Options = {}) {
 
   const payForPlan = useCallback(async (planId: string) => {
     setPlanOrderLoading(planId);
-    setPlanOrderMessage(null);
     setOrderError(null);
     try {
       const res = await fetch("/api/public/orders", {
@@ -51,9 +49,6 @@ export function usePlanPurchase(options: Options = {}) {
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error?.message ?? "Order failed");
       const url = json.data.order.whatsappUrl as string;
-      setPlanOrderMessage(
-        `Order ${json.data.order.orderRef} created. Send the WhatsApp payment request, then admin will apply credits.`,
-      );
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
       setOrderError(e instanceof Error ? e.message : "Order failed");
@@ -66,7 +61,6 @@ export function usePlanPurchase(options: Options = {}) {
     plans,
     plansLoading,
     planOrderLoading,
-    planOrderMessage,
     orderError,
     setOrderError,
     payForPlan,

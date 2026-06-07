@@ -76,6 +76,8 @@ export type BookingDb = {
  detachedAt?: Date | null;
  detachedFromSlotId?: ObjectId;
  itemId: ObjectId;
+ /** Present for member bookings (credit-backed). Guest / admin-only rows omit. */
+ clientId?: ObjectId;
  // snapshot of item's exclusiveKey at booking time (used for mutual-exclusion enforcement)
  exclusiveKey?: string;
  name: string;
@@ -99,6 +101,110 @@ export type BookingDb = {
  endMin: number;
  businessTimeZone: string;
  capacityAtBooking: number;
+};
+
+export type PlanCategory =
+ | "group_mat"
+ | "reformer_private"
+ | "duet"
+ | "reformer_group";
+
+export type PlanDb = {
+ _id?: ObjectId;
+ code: string;
+ title: string;
+ cardTitle?: string;
+ category: PlanCategory;
+ classCount: number;
+ priceRm: number;
+ studentPriceRm?: number;
+ listPriceRm?: number;
+ validityDays: number;
+ active: boolean;
+ sortOrder: number;
+ detailLines?: string[];
+ priceNote?: string;
+ promotionActive?: boolean;
+ promotionDiscount?: string;
+ promotionLabel?: string;
+ createdAt: Date;
+ updatedAt: Date;
+};
+
+export type OrderDb = {
+ _id?: ObjectId;
+ orderRef: string;
+ clientId: ObjectId;
+ planId: ObjectId;
+ planCode: string;
+ planTitle: string;
+ classCount: number;
+ amountRm: number;
+ currency: "MYR";
+ status: "pending" | "paid" | "cancelled";
+ whatsappMessage: string;
+ createdAt: Date;
+ paidAt?: Date;
+ adminNote?: string;
+};
+
+export type StudentStatus = "none" | "pending" | "verified" | "rejected";
+
+export type ClientDb = {
+ _id?: ObjectId;
+ customerKey: string;
+ name: string;
+ email: string;
+ whatsapp: string;
+ studentStatus: StudentStatus;
+ studentName?: string;
+ studentAge?: number | null;
+ schoolName?: string;
+ studentId?: string;
+ universityEndYear?: number | null;
+ createdAt: Date;
+ updatedAt: Date;
+ lastLoginAt?: Date;
+ googleSub?: string;
+ appleSub?: string;
+};
+
+export type CreditLedgerDb = {
+ _id?: ObjectId;
+ clientId: ObjectId;
+ type:
+  | "purchase_grant"
+  | "admin_adjust"
+  | "booking_consume"
+  | "booking_cancel_refund"
+  | string;
+ amount: number;
+ expiresAt?: Date;
+ /** When true and expiresAt has passed, this grant stops counting toward balance. Explicit false = grace until studio approves expiry; omit on legacy rows (expired grants stay excluded). */
+ expiryApproved?: boolean;
+ orderId?: ObjectId;
+ planId?: ObjectId;
+ bookingId?: ObjectId;
+ note?: string;
+ createdAt: Date;
+};
+
+export type EventDb = {
+ _id?: ObjectId;
+ title: string;
+ summary: string;
+ description?: string;
+ imageUrl?: string;
+ startsAt?: Date;
+ endsAt?: Date;
+ location?: string;
+ priceLabel?: string;
+ capacityLabel?: string;
+ whatsappText?: string;
+ active: boolean;
+ sortOrder: number;
+ createdAt: Date;
+ updatedAt: Date;
 };
 
 export type ExclusiveLockDb = {
@@ -125,7 +231,7 @@ declare global {
 const MONGODB_URI = () => requireEnv("MONGODB_URI");
 const MONGODB_DB = () => optionalEnv("MONGODB_DB");
 
-async function getMongoClient(): Promise<MongoClient> {
+export async function getMongoClient(): Promise<MongoClient> {
  if (!global._mongoClientPromise) {
   const client = new MongoClient(MONGODB_URI());
   global._mongoClientPromise = client.connect();
@@ -149,6 +255,11 @@ export async function getCollections(db?: Db): Promise<{
  timeSlots: Collection<TimeSlotDb>;
  bookings: Collection<BookingDb>;
  exclusiveLocks: Collection<ExclusiveLockDb>;
+ plans: Collection<PlanDb>;
+ orders: Collection<OrderDb>;
+ clients: Collection<ClientDb>;
+ creditLedger: Collection<CreditLedgerDb>;
+ events: Collection<EventDb>;
 }> {
  const resolvedDb = db ?? (await getDb());
  return {
@@ -159,6 +270,11 @@ export async function getCollections(db?: Db): Promise<{
   timeSlots: resolvedDb.collection<TimeSlotDb>("timeSlots"),
   bookings: resolvedDb.collection<BookingDb>("bookings"),
   exclusiveLocks: resolvedDb.collection<ExclusiveLockDb>("exclusiveLocks"),
+  plans: resolvedDb.collection<PlanDb>("plans"),
+  orders: resolvedDb.collection<OrderDb>("orders"),
+  clients: resolvedDb.collection<ClientDb>("clients"),
+  creditLedger: resolvedDb.collection<CreditLedgerDb>("creditLedger"),
+  events: resolvedDb.collection<EventDb>("events"),
  };
 }
 
@@ -170,6 +286,11 @@ async function ensureIndexes(db: Db): Promise<void> {
  const items = db.collection<ItemDb>("items");
  const exclusiveLocks = db.collection<ExclusiveLockDb>("exclusiveLocks");
  const settingsHistory = db.collection<SettingsHistoryDb>("settingsHistory");
+ const clients = db.collection<ClientDb>("clients");
+ const plans = db.collection<PlanDb>("plans");
+ const orders = db.collection<OrderDb>("orders");
+ const creditLedger = db.collection<CreditLedgerDb>("creditLedger");
+ const eventsColl = db.collection<EventDb>("events");
  // const settings = db.collection<SettingsDoc>("settings"); // _id index exists by default
 
  try {
@@ -192,6 +313,16 @@ async function ensureIndexes(db: Db): Promise<void> {
    const idx = await bookings.indexes();
    if (idx.some((i) => i.name === "uniq_exclusive_time_confirmed")) {
     await bookings.dropIndex("uniq_exclusive_time_confirmed");
+   }
+  } catch {
+   // ignore
+  }
+
+  // Legacy clients.customerKey unique index used a shorter name; rename by drop + recreate below.
+  try {
+   const idx = await clients.indexes();
+   if (idx.some((i) => i.name === "uniq_customer_key")) {
+    await clients.dropIndex("uniq_customer_key");
    }
   } catch {
    // ignore
@@ -227,6 +358,16 @@ async function ensureIndexes(db: Db): Promise<void> {
     { settingsId: 1, createdAt: -1 },
     { name: "settings_id_createdAt" }
    ),
+   clients.createIndex({ email: 1 }, { unique: true, name: "uniq_client_email" }),
+   clients.createIndex({ customerKey: 1 }, { unique: true, name: "uniq_client_customerKey" }),
+   clients.createIndex({ appleSub: 1 }, { unique: true, sparse: true, name: "uniq_client_appleSub" }),
+   plans.createIndex({ code: 1 }, { unique: true, name: "uniq_plan_code" }),
+   orders.createIndex({ orderRef: 1 }, { unique: true, name: "uniq_order_ref" }),
+   orders.createIndex({ clientId: 1 }, { name: "order_client" }),
+   creditLedger.createIndex({ clientId: 1 }, { name: "ledger_clientId" }),
+   creditLedger.createIndex({ bookingId: 1 }, { sparse: true, name: "ledger_bookingId" }),
+   bookings.createIndex({ clientId: 1 }, { sparse: true, name: "booking_clientId" }),
+   eventsColl.createIndex({ active: 1, sortOrder: 1, startsAt: 1 }, { name: "events_active_sort" }),
   ]);
 
   global._mongoIndexesEnsured = true;

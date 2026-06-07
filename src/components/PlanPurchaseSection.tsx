@@ -1,27 +1,22 @@
 "use client";
 
-import { useMemo, type CSSProperties, type ReactNode } from "react";
-import { cn } from "@/lib/cn";
+import { useMemo, type ReactNode } from "react";
 import { planDisplayTitle, type PublicPlanDto } from "@/lib/planDto";
 import {
   PLAN_CATEGORY_DISPLAY_ORDER,
-  planCategoryAccentHex,
   planPurchaseGroupHeading,
 } from "@/lib/planCategoryDisplay";
-import { tintHexColor, accentTintedBoxShadowPair } from "@/lib/itemColor";
 import SparklesIcon from "@heroicons/react/24/outline/SparklesIcon";
-import { FaWhatsapp } from "react-icons/fa";
 
 type Props = {
   studentStatus?: string | null;
   plans: PublicPlanDto[];
   plansLoading: boolean;
   planOrderLoading: string | null;
-  planOrderMessage: string | null;
   orderError?: string | null;
   onPay: (planId: string) => void;
   title?: string;
-  /** Rich text ok — default includes a small WhatsApp mark after “WhatsApp”. */
+  /** Rich text ok */
   description?: ReactNode;
 };
 
@@ -52,32 +47,13 @@ function PlanPayCard({
       ? plan.studentPriceRm
       : plan.priceRm;
   const busy = planOrderLoading === plan.id;
-  const accent = planCategoryAccentHex(plan.category);
-  const cardTint = tintHexColor(accent, 0.62);
-  const shadowPair = accentTintedBoxShadowPair(accent);
-  const cardStyle = {
-    ...(cardTint ? { backgroundColor: cardTint } : {}),
-    ...(shadowPair
-      ? {
-          "--plan-card-shadow": shadowPair.rest,
-          "--plan-card-shadow-hover": shadowPair.hover,
-        }
-      : {}),
-  } as CSSProperties;
   return (
     <button
       type="button"
       disabled={busy}
       aria-busy={busy}
       onClick={() => onPay(plan.id)}
-      style={cardStyle}
-      className={cn(
-        "w-full rounded-3xl border border-[#E8DDD4] px-5 py-4 text-left transition-[box-shadow,border-color] duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A66A4A] cursor-pointer disabled:cursor-wait disabled:brightness-[0.97]",
-        !cardTint && "bg-white",
-        shadowPair
-          ? "[box-shadow:var(--plan-card-shadow)] hover:[box-shadow:var(--plan-card-shadow-hover)] hover:border-[#D4C4BA]/90"
-          : "shadow-sm hover:shadow-md hover:border-[#D4C4BA]",
-      )}
+      className="w-full rounded-3xl border border-[#E8DDD4] bg-white px-5 py-4 text-left shadow-sm transition-[box-shadow,border-color] duration-200 hover:shadow-md hover:border-[#D4C4BA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A66A4A] cursor-pointer disabled:cursor-wait disabled:brightness-[0.97]"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -98,35 +74,29 @@ function PlanPayCard({
 function StudioPlanBenefits() {
   return (
     <div className="rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6]/80 px-5 py-4 mb-6">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-[#716D64] uppercase tracking-wide">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-[#716D64] tracking-wide">
         <SparklesIcon className="h-3 w-3 shrink-0 text-[#A66A4A]" aria-hidden />
-        Studio benefits
+        Special Discount
       </div>
       <ul className="mt-3 space-y-2 text-sm text-[#444444] list-disc pl-4">
-        <li>First-time visitors: 10% off your first package.</li>
         <li>
-          Students: complete student verification to unlock discounted package pricing on eligible
-          plans.
+          <span className="font-semibold">First-time visitors</span>{" "}
+          <span className="font-semibold text-[#A66A4A]">10% off</span> your first package.
+        </li>
+        <li>
+          <span className="font-semibold">Students</span> complete student verification to unlock
+          discounted package pricing on eligible plans.
         </li>
       </ul>
     </div>
   );
 }
 
-/** Line ending in “… send the payment request by WhatsApp · [icon].” */
+/** Lead line for plan purchase (WhatsApp payment flow). */
 export function PlanPurchaseWhatsAppLead({ beforeSend }: { beforeSend: string }) {
   return (
     <p className="text-sm text-[#716D64]">
-      {beforeSend}{" "}
-      send the payment request by{" "}
-      <span className="inline-flex items-center gap-0.5 align-text-bottom whitespace-nowrap">
-        <span className="font-semibold text-[#444444]">WhatsApp</span>
-        <span className="font-normal text-[#716D64]" aria-hidden>
-          ·
-        </span>
-        <FaWhatsapp className="h-3 w-3 shrink-0 text-[#25D366]" aria-hidden />
-      </span>
-      .
+      {beforeSend}{" "}send the payment request by WhatsApp.
     </p>
   );
 }
@@ -136,7 +106,6 @@ export function PlanPurchaseSection({
   plans,
   plansLoading,
   planOrderLoading,
-  planOrderMessage,
   orderError,
   onPay,
   title = "Choose Plan",
@@ -193,9 +162,6 @@ export function PlanPurchaseSection({
           ))}
         </div>
       )}
-      {planOrderMessage ? (
-        <div className="mt-4 text-sm text-[#716D64]">{planOrderMessage}</div>
-      ) : null}
     </div>
   );
 }

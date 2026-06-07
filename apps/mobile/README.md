@@ -1,6 +1,11 @@
 # fasea
 
-A new Flutter project.
+Faséa Pilates — Flutter companion app.
+
+## Design system
+
+- **`DESIGN.md`** at the **repository root** follows the [official DESIGN.md format](https://github.com/google-labs-code/design.md) (YAML tokens + markdown). It is the source of truth for Faséa look & feel on web and mobile.
+- The app maps those tokens in **`lib/fasea_design_system.dart`** (`buildFaseaTheme()`, `FaseaColors`, spacing, radii). Update both when changing the palette.
 
 ## Getting Started
 

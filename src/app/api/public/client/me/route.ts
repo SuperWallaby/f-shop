@@ -16,9 +16,11 @@ export async function GET(req: NextRequest) {
     return clearClientSessionCookie(res);
   }
   const balance = await getCreditBalance({ creditLedger, clientId });
+  const needsName = !(client.name ?? "").trim();
   return jsonOk({
     authed: true,
     client: publicClient(client),
     balance,
+    needsName,
   });
 }

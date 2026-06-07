@@ -20,6 +20,13 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Design system
+
+Brand tokens and component guidance live in **[`DESIGN.md`](./DESIGN.md)** at the repo root.
+
+- **Web:** CSS variables `--fasea-*` and Tailwind `fasea-*` colors/radii are defined in **`src/app/globals.css`** (`@theme inline`).
+- **Flutter app:** `apps/mobile/lib/fasea_design_system.dart`; see **`apps/mobile/README.md`**.
+
 ## Environment variables (booking/admin)
 
 Copy `env.template` to `.env.local` and fill in values:

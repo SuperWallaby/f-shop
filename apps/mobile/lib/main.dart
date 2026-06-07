@@ -11,6 +11,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'fasea_design_system.dart';
+
 /// Optional compile-time URL: `--dart-define=API_BASE_URL=https://...`
 const String _kApiBaseUrlFromDefine = String.fromEnvironment(
   'API_BASE_URL',
@@ -52,15 +54,7 @@ class FaseaApp extends StatelessWidget {
     return MaterialApp(
       title: 'Faséa',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFFAF8F6),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFA66A4A),
-          primary: const Color(0xFFA66A4A),
-          surface: Colors.white,
-        ),
-      ),
+      theme: buildFaseaTheme(),
       home: const AppBootstrap(),
     );
   }
@@ -221,7 +215,6 @@ class _FaseaShellState extends State<FaseaShell> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Faséa', style: TextStyle(fontFamily: 'serif')),
-        backgroundColor: const Color(0xFFFAF8F6),
       ),
       body: pages[safeIndex],
       bottomNavigationBar: NavigationBar(
@@ -583,7 +576,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 32),
           const Text(
             'Welcome to',
-            style: TextStyle(letterSpacing: 4, color: Color(0xFFA66A4A)),
+            style: TextStyle(letterSpacing: 4, color: FaseaColors.primary),
           ),
           const Text(
             'Faséa',
@@ -627,7 +620,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                 ],
                 if (error != null)
-                  Text(error!, style: const TextStyle(color: Colors.red)),
+                  Text(error!, style: const TextStyle(color: FaseaColors.error)),
                 const SizedBox(height: 12),
                 FilledButton(
                   onPressed: loading ? null : submit,
@@ -840,9 +833,9 @@ class _BookScreenState extends State<BookScreen> {
         ...slots.map(
           (slot) => ListTile(
             selected: selectedSlotId == slot.id,
-            selectedTileColor: const Color(0xFFE8DDD4),
+            selectedTileColor: FaseaColors.border,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(FaseaRadii.md),
             ),
             onTap: () => setState(() => selectedSlotId = slot.id),
             title: Text(
@@ -855,7 +848,7 @@ class _BookScreenState extends State<BookScreen> {
           ),
         ),
         if (message != null)
-          Text(message!, style: const TextStyle(color: Color(0xFFA66A4A))),
+          Text(message!, style: const TextStyle(color: FaseaColors.primary)),
         FilledButton(
           onPressed: booking || selectedSlotId == null ? null : _submit,
           child: Text(booking ? 'Submitting…' : 'Submit booking'),
@@ -910,7 +903,7 @@ class _PlanPurchaseViewState extends State<PlanPurchaseView> {
           if (snap.connectionState != ConnectionState.done)
             const LinearProgressIndicator(),
           if (message != null)
-            Text(message!, style: const TextStyle(color: Color(0xFFA66A4A))),
+            Text(message!, style: const TextStyle(color: FaseaColors.primary)),
           for (final entry in groups.entries) ...[
             Padding(
               padding: const EdgeInsets.only(top: 20, bottom: 8),
@@ -1238,14 +1231,14 @@ class FaseaCard extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.symmetric(vertical: 8),
+    margin: const EdgeInsets.symmetric(vertical: FaseaSpacing.sm),
     elevation: 0,
-    color: Colors.white.withValues(alpha: .75),
+    color: FaseaColors.surface.withValues(alpha: .75),
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(24),
-      side: const BorderSide(color: Color(0xFFE8DDD4)),
+      borderRadius: BorderRadius.circular(FaseaRadii.lg),
+      side: const BorderSide(color: FaseaColors.border),
     ),
-    child: Padding(padding: const EdgeInsets.all(18), child: child),
+    child: Padding(padding: const EdgeInsets.all(FaseaSpacing.gutter), child: child),
   );
 }
 
@@ -1315,6 +1308,10 @@ class PlanTile extends StatelessWidget {
               ),
               FilledButton(
                 onPressed: onPay,
+                style: FilledButton.styleFrom(
+                  backgroundColor: FaseaColors.primary,
+                  foregroundColor: FaseaColors.onPrimary,
+                ),
                 child: const Text('Pay via WhatsApp'),
               ),
             ],
@@ -1335,7 +1332,7 @@ class EventCard extends StatelessWidget {
       children: [
         if (event.imageUrl != null)
           ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(FaseaRadii.md),
             child: Image.network(
               event.imageUrl!,
               height: 160,

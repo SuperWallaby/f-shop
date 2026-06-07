@@ -21,11 +21,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const client = await clients.findOne({ _id: clientId });
     if (!client) return jsonError("Client not found", 404);
 
+    const expiresAt = parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : undefined;
     await creditLedger.insertOne({
       clientId,
       type: "admin_adjust",
       amount: parsed.data.amount,
-      ...(parsed.data.expiresAt ? { expiresAt: new Date(parsed.data.expiresAt) } : {}),
+      ...(expiresAt ? { expiresAt, expiryApproved: false } : {}),
       note: parsed.data.note,
       createdAt: new Date(),
     });

@@ -11,7 +11,7 @@ export function Skeleton(props: {
   return (
     <div
       className={cn(
-        "animate-pulse bg-[#E8DDD4]/60",
+        "animate-pulse bg-fasea-border/60",
         props.rounded ?? "rounded-2xl",
         props.className
       )}
