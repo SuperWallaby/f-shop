@@ -347,6 +347,7 @@ export async function sendAdminWhatsAppNotification(args: {
   kind:
     | "booking_confirmed"
     | "booking_cancelled_by_client"
+    | "booking_rescheduled"
     | "class_cancelled_by_instructor"
     | "reminder_sent"
     | "no_show_marked";

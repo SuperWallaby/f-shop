@@ -59,3 +59,29 @@ export function minutesToAmPmRange(startMin: number, endMin: number): string {
   return `${minutesToAmPm(startMin)}–${minutesToAmPm(endMin)}`;
 }
 
+export function formatSlotHeaderDate(dateKey: string): string {
+  const dt = DateTime.fromISO(dateKey, { zone: BUSINESS_TIME_ZONE });
+  return dt.isValid ? dt.toFormat("EEEE, MMMM d, yyyy") : dateKey;
+}
+
+/** 15-minute steps, 6:00–22:00 — for admin time pickers */
+export const ADMIN_TIME_PICKER_OPTIONS: Array<{ value: string; label: string }> = (() => {
+  const out: Array<{ value: string; label: string }> = [];
+  for (let min = 6 * 60; min <= 22 * 60; min += 15) {
+    out.push({ value: minutesToHhmm(min), label: minutesToAmPm(min) });
+  }
+  return out;
+})();
+
+export function adminTimePickerOptions(current?: string): Array<{ value: string; label: string }> {
+  const base = [...ADMIN_TIME_PICKER_OPTIONS];
+  const v = (current ?? "").trim();
+  if (v && !base.some((o) => o.value === v)) {
+    base.push({ value: v, label: hhmmToAmPmLabel(v) ?? v });
+    base.sort(
+      (a, b) => (hhmmToMinutes(a.value) ?? 0) - (hhmmToMinutes(b.value) ?? 0)
+    );
+  }
+  return base;
+}
+

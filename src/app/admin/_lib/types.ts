@@ -61,6 +61,7 @@ export type BookingListItem = {
   name: string;
   email: string;
   whatsapp: string;
+  itemId: string;
   itemName: string;
   itemColor: string;
   adminNote: string;

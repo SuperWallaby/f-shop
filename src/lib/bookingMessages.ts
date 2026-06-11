@@ -78,6 +78,45 @@ export function buildCustomerCancelledByInstructorMessage(args: {
   );
 }
 
+export function buildCustomerRescheduledMessage(args: {
+  name: string;
+  classTypeName: string;
+  bookingCode?: string;
+  previousDateKey: string;
+  previousStartMin: number;
+  previousEndMin: number;
+  dateKey: string;
+  startMin: number;
+  endMin: number;
+  tz: string;
+}): string {
+  const prev = formatKlParts({
+    dateKey: args.previousDateKey,
+    startMin: args.previousStartMin,
+    endMin: args.previousEndMin,
+    tz: args.tz,
+  });
+  const next = formatKlParts({
+    dateKey: args.dateKey,
+    startMin: args.startMin,
+    endMin: args.endMin,
+    tz: args.tz,
+  });
+  return (
+    `Hi ${args.name} 🤍\n` +
+    `Your Pilates class booking has been rescheduled.\n\n` +
+    `Class Type: ${args.classTypeName}\n` +
+    `Previous: ${prev.dateLabel} at ${prev.timeRangeLabel}\n` +
+    `New: ${next.dateLabel} at ${next.timeRangeLabel}\n` +
+    (args.bookingCode ? `Booking Code: ${args.bookingCode}\n` : ``) +
+    `\n` +
+    `Please bring grip socks, wear comfortable attire, and bring a water bottle.\n` +
+    `Kindly arrive 10–15 minutes earlier before class.\n\n` +
+    `If this change was not expected, please reply to this email or contact us on WhatsApp.\n\n` +
+    `Looking forward to seeing you ✨`
+  );
+}
+
 export function buildCustomerCancelledByClientMessage(args: {
   name: string;
   classTypeName: string;
@@ -121,6 +160,7 @@ export function buildAdminBookingMessage(args: {
   kind:
     | "booking_confirmed"
     | "booking_cancelled_by_client"
+    | "booking_rescheduled"
     | "class_cancelled_by_instructor"
     | "reminder_sent"
     | "no_show_marked";
@@ -140,7 +180,9 @@ export function buildAdminBookingMessage(args: {
       ? "New booking"
       : args.kind === "booking_cancelled_by_client"
         ? "Booking cancelled (client)"
-        : args.kind === "class_cancelled_by_instructor"
+        : args.kind === "booking_rescheduled"
+          ? "Booking rescheduled"
+          : args.kind === "class_cancelled_by_instructor"
           ? "Class cancelled (instructor)"
           : args.kind === "reminder_sent"
             ? "Reminder job"

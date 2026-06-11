@@ -7,27 +7,46 @@ import { cn } from "@/lib/cn";
 import { Switch } from "@/components/Switch";
 import { Skeleton, SkeletonLine } from "./Skeleton";
 import type { CalendarDayDto } from "../_lib/types";
+import XMarkIcon from "@heroicons/react/24/outline/XMarkIcon";
+import InformationCircleIcon from "@heroicons/react/24/outline/InformationCircleIcon";
 import {
-  hhmmToAmPmLabel,
+  adminTimePickerOptions,
+  formatSlotHeaderDate,
   hhmmToMinutes,
   minutesToAmPmRange,
   minutesToHhmm,
 } from "../_lib/adminTime";
+import {
+  AdminRescheduleBookingModal,
+  type RescheduleBookingTarget,
+} from "./AdminRescheduleBookingModal";
+import {
+  AdminSlotBookingCard,
+  AdminTimeSelect,
+  toRescheduleTarget,
+} from "./AdminSlotBookingCard";
 
 export function AdminCalendarView() {
   const [monthKey, setMonthKey] = useState(() =>
-    DateTime.now().setZone(BUSINESS_TIME_ZONE).toFormat("yyyy-LL")
+    DateTime.now().setZone(BUSINESS_TIME_ZONE).toFormat("yyyy-LL"),
   );
   const todayDateKey = useMemo(
     () => DateTime.now().setZone(BUSINESS_TIME_ZONE).toISODate() ?? "",
-    []
+    [],
   );
   const monthDt = useMemo(
-    () => DateTime.fromFormat(monthKey, "yyyy-LL", { zone: BUSINESS_TIME_ZONE }),
-    [monthKey]
+    () =>
+      DateTime.fromFormat(monthKey, "yyyy-LL", { zone: BUSINESS_TIME_ZONE }),
+    [monthKey],
   );
-  const fromDateKey = useMemo(() => monthDt.startOf("month").toISODate()!, [monthDt]);
-  const toDateKey = useMemo(() => monthDt.endOf("month").toISODate()!, [monthDt]);
+  const fromDateKey = useMemo(
+    () => monthDt.startOf("month").toISODate()!,
+    [monthDt],
+  );
+  const toDateKey = useMemo(
+    () => monthDt.endOf("month").toISODate()!,
+    [monthDt],
+  );
   const fromDateKeyRef = useRef(fromDateKey);
   const toDateKeyRef = useRef(toDateKey);
   useEffect(() => void (fromDateKeyRef.current = fromDateKey), [fromDateKey]);
@@ -42,9 +61,13 @@ export function AdminCalendarView() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [copiedCodeBookingId, setCopiedCodeBookingId] = useState<string | null>(null);
+  const [copiedCodeBookingId, setCopiedCodeBookingId] = useState<string | null>(
+    null,
+  );
   const [selectMode, setSelectMode] = useState(false);
-  const [selectedSlotIds, setSelectedSlotIds] = useState<Set<string>>(() => new Set());
+  const [selectedSlotIds, setSelectedSlotIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const selectedSlotIdsRef = useRef<Set<string>>(new Set());
   const [dragSelecting, setDragSelecting] = useState(false);
   const dragModeRef = useRef<"add" | "remove">("add");
@@ -82,11 +105,26 @@ export function AdminCalendarView() {
   const [editItemId, setEditItemId] = useState<string>("");
 
   const [calendarItems, setCalendarItems] = useState<
-    Array<{ id: string; name: string; capacity: number; active: boolean; color: string }>
+    Array<{
+      id: string;
+      name: string;
+      capacity: number;
+      active: boolean;
+      color: string;
+    }>
   >([]);
 
   const [calendarFilterItemId, setCalendarFilterItemId] = useState<string>("");
   const [calendarBookedOnly, setCalendarBookedOnly] = useState<boolean>(false);
+  const [rescheduleTarget, setRescheduleTarget] =
+    useState<RescheduleBookingTarget | null>(null);
+  const [openBookingMenuId, setOpenBookingMenuId] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    setOpenBookingMenuId(null);
+  }, [selected?.slot.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +140,8 @@ export function AdminCalendarView() {
             active: boolean;
           }>;
           if (!calendarFilterItemId && Array.isArray(list) && list.length > 0) {
-            const firstActive = list.find((x) => x.active)?.id ?? list[0]?.id ?? "";
+            const firstActive =
+              list.find((x) => x.active)?.id ?? list[0]?.id ?? "";
             if (firstActive) setCalendarFilterItemId(firstActive);
           }
         }
@@ -139,7 +178,8 @@ export function AdminCalendarView() {
     return days
       .map((d) => {
         const slots = (d.slots ?? []).filter((s) => {
-          if (calendarFilterItemId && s.itemId !== calendarFilterItemId) return false;
+          if (calendarFilterItemId && s.itemId !== calendarFilterItemId)
+            return false;
           if (calendarBookedOnly) {
             const confirmed = s.bookings?.some((b) => b.status === "confirmed");
             return Boolean(confirmed);
@@ -205,9 +245,9 @@ export function AdminCalendarView() {
       try {
         const res = await fetch(
           `/api/admin/calendar?fromDateKey=${encodeURIComponent(fromDateKey)}&toDateKey=${encodeURIComponent(
-            toDateKey
+            toDateKey,
           )}`,
-          { cache: "no-store" }
+          { cache: "no-store" },
         );
         const json = await res.json();
         if (!res.ok || !json?.ok) {
@@ -215,7 +255,8 @@ export function AdminCalendarView() {
         }
         if (!cancelled) setDays(json.data.days ?? []);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load calendar");
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Failed to load calendar");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -266,13 +307,38 @@ export function AdminCalendarView() {
     const to = toDateKeyRef.current;
     const res2 = await fetch(
       `/api/admin/calendar?fromDateKey=${encodeURIComponent(from)}&toDateKey=${encodeURIComponent(to)}`,
-      { cache: "no-store" }
+      { cache: "no-store" },
     );
     const json2 = await res2.json();
     if (!res2.ok || !json2?.ok) {
       throw new Error(json2?.error?.message ?? "Failed to reload calendar");
     }
     setDays(json2.data.days ?? []);
+  }
+
+  async function reloadMonthAndRefreshSelection() {
+    const from = fromDateKeyRef.current;
+    const to = toDateKeyRef.current;
+    const res = await fetch(
+      `/api/admin/calendar?fromDateKey=${encodeURIComponent(from)}&toDateKey=${encodeURIComponent(to)}`,
+      { cache: "no-store" },
+    );
+    const json = await res.json();
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.error?.message ?? "Failed to reload calendar");
+    }
+    const newDays = (json.data.days ?? []) as CalendarDayDto[];
+    setDays(newDays);
+    setSelected((prev) => {
+      if (!prev) return null;
+      const updatedDay = newDays.find((d) => d.dateKey === prev.dateKey);
+      const updatedSlot =
+        updatedDay?.slots?.find((s) => s.id === prev.slot.id) ?? null;
+      if (!updatedSlot) return null;
+      const next = { dateKey: prev.dateKey, slot: updatedSlot };
+      queueMicrotask(() => syncEditorFromSelected(next));
+      return next;
+    });
   }
 
   // Poll every 30 minutes for updates.
@@ -292,7 +358,9 @@ export function AdminCalendarView() {
   async function deleteSelectedSlots() {
     const ids = Array.from(selectedSlotIdsRef.current.values());
     if (ids.length === 0) return;
-    const ok = window.confirm(`Delete ${ids.length} sessions? Bookings will become unassigned.`);
+    const ok = window.confirm(
+      `Delete ${ids.length} sessions? Bookings will become unassigned.`,
+    );
     if (!ok) return;
     setSaving(true);
     setActionError(null);
@@ -301,27 +369,37 @@ export function AdminCalendarView() {
         const slot = slotById.get(slotId);
         if (!slot) continue;
         if (!slot.cancelled) {
-          const r1 = await fetch(`/api/admin/slots/${encodeURIComponent(slotId)}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cancelled: true }),
-          });
+          const r1 = await fetch(
+            `/api/admin/slots/${encodeURIComponent(slotId)}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cancelled: true }),
+            },
+          );
           const j1 = (await r1.json().catch(() => null)) as {
             ok?: boolean;
             error?: { message?: unknown };
           } | null;
           if (!r1.ok || !j1?.ok)
-            throw new Error(String(j1?.error?.message ?? "Failed to cancel slot"));
+            throw new Error(
+              String(j1?.error?.message ?? "Failed to cancel slot"),
+            );
         }
-        const r2 = await fetch(`/api/admin/slots/${encodeURIComponent(slotId)}/delete`, {
-          method: "POST",
-        });
+        const r2 = await fetch(
+          `/api/admin/slots/${encodeURIComponent(slotId)}/delete`,
+          {
+            method: "POST",
+          },
+        );
         const j2 = (await r2.json().catch(() => null)) as {
           ok?: boolean;
           error?: { message?: unknown };
         } | null;
         if (!r2.ok || !j2?.ok)
-          throw new Error(String(j2?.error?.message ?? "Failed to delete slot"));
+          throw new Error(
+            String(j2?.error?.message ?? "Failed to delete slot"),
+          );
       }
       await reloadMonth();
       clearSelection();
@@ -340,7 +418,7 @@ export function AdminCalendarView() {
     if (slots.length === 0) return;
 
     const ok = window.confirm(
-      `Delete all ${slots.length} sessions on ${dateKey}? Bookings will become unassigned.`
+      `Delete all ${slots.length} sessions on ${dateKey}? Bookings will become unassigned.`,
     );
     if (!ok) return;
 
@@ -349,28 +427,38 @@ export function AdminCalendarView() {
     try {
       for (const s of slots) {
         if (!s.cancelled) {
-          const r1 = await fetch(`/api/admin/slots/${encodeURIComponent(s.id)}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ cancelled: true }),
-          });
+          const r1 = await fetch(
+            `/api/admin/slots/${encodeURIComponent(s.id)}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cancelled: true }),
+            },
+          );
           const j1 = (await r1.json().catch(() => null)) as {
             ok?: boolean;
             error?: { message?: unknown };
           } | null;
           if (!r1.ok || !j1?.ok)
-            throw new Error(String(j1?.error?.message ?? "Failed to cancel slot"));
+            throw new Error(
+              String(j1?.error?.message ?? "Failed to cancel slot"),
+            );
         }
 
-        const r2 = await fetch(`/api/admin/slots/${encodeURIComponent(s.id)}/delete`, {
-          method: "POST",
-        });
+        const r2 = await fetch(
+          `/api/admin/slots/${encodeURIComponent(s.id)}/delete`,
+          {
+            method: "POST",
+          },
+        );
         const j2 = (await r2.json().catch(() => null)) as {
           ok?: boolean;
           error?: { message?: unknown };
         } | null;
         if (!r2.ok || !j2?.ok)
-          throw new Error(String(j2?.error?.message ?? "Failed to delete slot"));
+          throw new Error(
+            String(j2?.error?.message ?? "Failed to delete slot"),
+          );
       }
 
       await reloadMonth();
@@ -389,11 +477,14 @@ export function AdminCalendarView() {
     setSaving(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/admin/slots/${encodeURIComponent(slotId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
+      const res = await fetch(
+        `/api/admin/slots/${encodeURIComponent(slotId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        },
+      );
       const json = await res.json();
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error?.message ?? "Failed to update slot");
@@ -402,9 +493,9 @@ export function AdminCalendarView() {
       // Reload month
       const res2 = await fetch(
         `/api/admin/calendar?fromDateKey=${encodeURIComponent(fromDateKey)}&toDateKey=${encodeURIComponent(
-          toDateKey
+          toDateKey,
         )}`,
-        { cache: "no-store" }
+        { cache: "no-store" },
       );
       const json2 = await res2.json();
       if (!res2.ok || !json2?.ok) {
@@ -413,8 +504,13 @@ export function AdminCalendarView() {
       setDays(json2.data.days ?? []);
 
       // Keep modal open and refresh selected slot from updated data
-      const updatedDay = (json2.data.days ?? []).find((d: CalendarDayDto) => d.dateKey === selected?.dateKey);
-      const updatedSlot = updatedDay?.slots?.find((s: CalendarDayDto["slots"][number]) => s.id === slotId) ?? null;
+      const updatedDay = (json2.data.days ?? []).find(
+        (d: CalendarDayDto) => d.dateKey === selected?.dateKey,
+      );
+      const updatedSlot =
+        updatedDay?.slots?.find(
+          (s: CalendarDayDto["slots"][number]) => s.id === slotId,
+        ) ?? null;
       if (updatedSlot && selected) {
         const nextSel = { dateKey: selected.dateKey, slot: updatedSlot };
         setSelected(nextSel);
@@ -431,18 +527,22 @@ export function AdminCalendarView() {
     setSaving(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/admin/slots/${encodeURIComponent(slotId)}/delete`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `/api/admin/slots/${encodeURIComponent(slotId)}/delete`,
+        {
+          method: "POST",
+        },
+      );
       const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error?.message ?? "Failed to delete slot");
+      if (!res.ok || !json?.ok)
+        throw new Error(json?.error?.message ?? "Failed to delete slot");
 
       // Reload month
       const res2 = await fetch(
         `/api/admin/calendar?fromDateKey=${encodeURIComponent(fromDateKey)}&toDateKey=${encodeURIComponent(
-          toDateKey
+          toDateKey,
         )}`,
-        { cache: "no-store" }
+        { cache: "no-store" },
       );
       const json2 = await res2.json();
       if (!res2.ok || !json2?.ok) {
@@ -463,9 +563,12 @@ export function AdminCalendarView() {
     setSaving(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/admin/bookings/${encodeURIComponent(bookingId)}/cancel`, {
-        method: "POST",
-      });
+      const res = await fetch(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/cancel`,
+        {
+          method: "POST",
+        },
+      );
       const json = await res.json();
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error?.message ?? "Failed to cancel booking");
@@ -474,9 +577,9 @@ export function AdminCalendarView() {
       // Reload month (same as patchSlot)
       const res2 = await fetch(
         `/api/admin/calendar?fromDateKey=${encodeURIComponent(fromDateKey)}&toDateKey=${encodeURIComponent(
-          toDateKey
+          toDateKey,
         )}`,
-        { cache: "no-store" }
+        { cache: "no-store" },
       );
       const json2 = await res2.json();
       if (!res2.ok || !json2?.ok) {
@@ -485,9 +588,13 @@ export function AdminCalendarView() {
       setDays(json2.data.days ?? []);
 
       if (selected) {
-        const updatedDay = (json2.data.days ?? []).find((d: CalendarDayDto) => d.dateKey === selected.dateKey);
+        const updatedDay = (json2.data.days ?? []).find(
+          (d: CalendarDayDto) => d.dateKey === selected.dateKey,
+        );
         const updatedSlot =
-          updatedDay?.slots?.find((s: CalendarDayDto["slots"][number]) => s.id === selected.slot.id) ?? null;
+          updatedDay?.slots?.find(
+            (s: CalendarDayDto["slots"][number]) => s.id === selected.slot.id,
+          ) ?? null;
         if (updatedSlot) {
           const nextSel = { dateKey: selected.dateKey, slot: updatedSlot };
           setSelected(nextSel);
@@ -502,14 +609,16 @@ export function AdminCalendarView() {
   }
 
   async function markNoShow(bookingId: string) {
-    const ok = window.confirm("Mark this booking as no-show? (This will send a notice)");
+    const ok = window.confirm(
+      "Mark this booking as no-show? (This will send a notice)",
+    );
     if (!ok) return;
     setSaving(true);
     setActionError(null);
     try {
       const res = await fetch(
         `/api/admin/bookings/${encodeURIComponent(bookingId)}/no-show`,
-        { method: "POST", cache: "no-store" }
+        { method: "POST", cache: "no-store" },
       );
       const json = await res.json();
       if (!res.ok || !json?.ok) {
@@ -519,9 +628,9 @@ export function AdminCalendarView() {
       // Reload month and refresh selected slot
       const res2 = await fetch(
         `/api/admin/calendar?fromDateKey=${encodeURIComponent(fromDateKey)}&toDateKey=${encodeURIComponent(
-          toDateKey
+          toDateKey,
         )}`,
-        { cache: "no-store" }
+        { cache: "no-store" },
       );
       const json2 = await res2.json();
       if (!res2.ok || !json2?.ok) {
@@ -531,11 +640,11 @@ export function AdminCalendarView() {
 
       if (selected) {
         const updatedDay = (json2.data.days ?? []).find(
-          (d: CalendarDayDto) => d.dateKey === selected.dateKey
+          (d: CalendarDayDto) => d.dateKey === selected.dateKey,
         );
         const updatedSlot =
           updatedDay?.slots?.find(
-            (s: CalendarDayDto["slots"][number]) => s.id === selected.slot.id
+            (s: CalendarDayDto["slots"][number]) => s.id === selected.slot.id,
           ) ?? null;
         if (updatedSlot) {
           const nextSel = { dateKey: selected.dateKey, slot: updatedSlot };
@@ -558,7 +667,9 @@ export function AdminCalendarView() {
     const startWeekday = start.weekday === 7 ? 0 : start.weekday; // 0..6
     const offset = startWeekday; // how many blanks before day 1
 
-    const list: Array<{ kind: "blank" } | { kind: "day"; dateKey: string; dt: DateTime }> = [];
+    const list: Array<
+      { kind: "blank" } | { kind: "day"; dateKey: string; dt: DateTime }
+    > = [];
     for (let i = 0; i < offset; i++) list.push({ kind: "blank" });
 
     let cur = start;
@@ -584,14 +695,22 @@ export function AdminCalendarView() {
             <option value="">All class types</option>
             {calendarItems
               .slice()
-              .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
+              .sort(
+                (a, b) =>
+                  Number(b.active) - Number(a.active) ||
+                  a.name.localeCompare(b.name),
+              )
               .map((it) => (
                 <option key={it.id} value={it.id}>
                   {it.name}
                 </option>
               ))}
           </select>
-          <Switch checked={calendarBookedOnly} onCheckedChange={setCalendarBookedOnly} label="Booked only" />
+          <Switch
+            checked={calendarBookedOnly}
+            onCheckedChange={setCalendarBookedOnly}
+            label="Booked only"
+          />
           <button
             type="button"
             onClick={() => {
@@ -601,7 +720,9 @@ export function AdminCalendarView() {
             }}
             className={cn(
               "px-4 py-2 rounded-full border text-sm hover:shadow-sm transition cursor-pointer",
-              selectMode ? "bg-[#DFD1C9] border-[#DFD1C9]" : "bg-white/80 border-[#E8DDD4]"
+              selectMode
+                ? "bg-[#DFD1C9] border-[#DFD1C9]"
+                : "bg-white/80 border-[#E8DDD4]",
             )}
           >
             {selectMode ? "Selecting…" : "Select & delete"}
@@ -629,7 +750,9 @@ export function AdminCalendarView() {
             </>
           ) : null}
           <button
-            onClick={() => setMonthKey(monthDt.minus({ months: 1 }).toFormat("yyyy-LL"))}
+            onClick={() =>
+              setMonthKey(monthDt.minus({ months: 1 }).toFormat("yyyy-LL"))
+            }
             className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
           >
             Prev
@@ -638,7 +761,9 @@ export function AdminCalendarView() {
             {monthDt.toFormat("LLLL yyyy")}
           </div>
           <button
-            onClick={() => setMonthKey(monthDt.plus({ months: 1 }).toFormat("yyyy-LL"))}
+            onClick={() =>
+              setMonthKey(monthDt.plus({ months: 1 }).toFormat("yyyy-LL"))
+            }
             className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
           >
             Next
@@ -679,12 +804,18 @@ export function AdminCalendarView() {
           {/* Desktop skeleton */}
           <div className="hidden md:grid grid-cols-7 gap-3">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-              <div key={d} className="text-xs font-semibold text-[#716D64] px-2">
+              <div
+                key={d}
+                className="text-xs font-semibold text-[#716D64] px-2"
+              >
                 {d}
               </div>
             ))}
             {Array.from({ length: 42 }).map((_, i) => (
-              <div key={i} className="min-h-[220px] rounded-2xl border border-[#E8DDD4] bg-white/80 p-2">
+              <div
+                key={i}
+                className="min-h-[220px] rounded-2xl border border-[#E8DDD4] bg-white/80 p-2"
+              >
                 <div className="flex items-center justify-between">
                   <SkeletonLine className="w-6" />
                 </div>
@@ -699,7 +830,9 @@ export function AdminCalendarView() {
         </div>
       )}
       {!!error && <div className="mt-4 text-sm text-red-700">{error}</div>}
-      {!!actionError && <div className="mt-4 text-sm text-red-700">{actionError}</div>}
+      {!!actionError && (
+        <div className="mt-4 text-sm text-red-700">{actionError}</div>
+      )}
 
       {/* Mobile: horizontal day strip + selected day detail */}
       <div className="md:hidden mt-6">
@@ -708,8 +841,9 @@ export function AdminCalendarView() {
             const slots = dayMap.get(d.dateKey)?.slots ?? [];
             const hasSlots = slots.length > 0;
             const bookingCount = slots.reduce(
-              (acc, s) => acc + s.bookings.filter((b) => b.status === "confirmed").length,
-              0
+              (acc, s) =>
+                acc + s.bookings.filter((b) => b.status === "confirmed").length,
+              0,
             );
             const selectedDay = d.dateKey === mobileDateKey;
             const isToday = d.dateKey === todayDateKey;
@@ -725,8 +859,10 @@ export function AdminCalendarView() {
                     ? "bg-[#DFD1C9] border-[#DFD1C9]"
                     : cn(
                         "bg-white/80 border-[#E8DDD4] hover:shadow-sm",
-                        isToday ? "ring-2 ring-[#A66A4A] ring-offset-2 ring-offset-[#FAF8F6]" : ""
-                      )
+                        isToday
+                          ? "ring-2 ring-[#A66A4A] ring-offset-2 ring-offset-[#FAF8F6]"
+                          : "",
+                      ),
                 )}
               >
                 <div className="text-[10px] text-[#716D64] flex items-center gap-2">
@@ -737,8 +873,12 @@ export function AdminCalendarView() {
                     </span>
                   ) : null}
                 </div>
-                <div className="text-lg font-semibold leading-none mt-1">{d.dt.day}</div>
-                <div className="mt-2 text-[10px] text-[#716D64]">{hasSlots ? `${bookingCount} bookings` : "—"}</div>
+                <div className="text-lg font-semibold leading-none mt-1">
+                  {d.dt.day}
+                </div>
+                <div className="mt-2 text-[10px] text-[#716D64]">
+                  {hasSlots ? `${bookingCount} bookings` : "—"}
+                </div>
               </button>
             );
           })}
@@ -746,8 +886,11 @@ export function AdminCalendarView() {
 
         <div className="mt-4 rounded-3xl border border-[#E8DDD4] bg-white/80 p-5">
           <div className="flex items-baseline justify-between gap-3">
-            <div className="font-serif text-xl font-semibold">{mobileDateKey}</div>
-            {(days.find((d) => d.dateKey === mobileDateKey)?.slots?.length ?? 0) > 0 ? (
+            <div className="font-serif text-xl font-semibold">
+              {mobileDateKey}
+            </div>
+            {(days.find((d) => d.dateKey === mobileDateKey)?.slots?.length ??
+              0) > 0 ? (
               <button
                 type="button"
                 disabled={saving}
@@ -764,7 +907,9 @@ export function AdminCalendarView() {
               <div className="text-sm text-[#716D64]">No sessions</div>
             ) : (
               (dayMap.get(mobileDateKey)?.slots ?? []).map((s) => {
-                const confirmed = s.bookings.filter((b) => b.status === "confirmed");
+                const confirmed = s.bookings.filter(
+                  (b) => b.status === "confirmed",
+                );
                 const isSelected = selectedSlotIds.has(s.id);
                 return (
                   <button
@@ -802,24 +947,38 @@ export function AdminCalendarView() {
                     }}
                     className={cn(
                       "w-full text-left rounded-3xl border bg-white px-4 py-4 hover:shadow-sm transition cursor-pointer",
-                      isSelected ? "ring-2 ring-[#A66A4A] border-[#A66A4A]" : "border-[#E8DDD4]"
+                      isSelected
+                        ? "ring-2 ring-[#A66A4A] border-[#A66A4A]"
+                        : "border-[#E8DDD4]",
                     )}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium">{minutesToAmPmRange(s.startMin, s.endMin)}</div>
-                      {s.cancelled ? <div className="text-xs text-[#B42318] font-semibold">Cancelled</div> : null}
+                      <div className="text-sm font-medium">
+                        {minutesToAmPmRange(s.startMin, s.endMin)}
+                      </div>
+                      {s.cancelled ? (
+                        <div className="text-xs text-[#B42318] font-semibold">
+                          Cancelled
+                        </div>
+                      ) : null}
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-3">
                       <div
                         className={cn(
                           "text-xs",
-                          confirmed.length > 0 ? "text-[#444444] font-semibold" : "text-[#716D64]"
+                          confirmed.length > 0
+                            ? "text-[#444444] font-semibold"
+                            : "text-[#716D64]",
                         )}
                       >
                         {confirmed.length} bookings
                       </div>
                     </div>
-                    {!!s.notes && <div className="text-xs text-[#716D64] mt-2">{s.notes}</div>}
+                    {!!s.notes && (
+                      <div className="text-xs text-[#716D64] mt-2">
+                        {s.notes}
+                      </div>
+                    )}
                   </button>
                 );
               })
@@ -843,7 +1002,10 @@ export function AdminCalendarView() {
           const day = dayMap.get(item.dateKey);
           const slots = day?.slots ?? [];
           const visibleSlots = slots.slice(0, 3);
-          const extraSlotsCount = Math.max(0, slots.length - visibleSlots.length);
+          const extraSlotsCount = Math.max(
+            0,
+            slots.length - visibleSlots.length,
+          );
           return (
             <div
               key={item.dateKey}
@@ -851,7 +1013,7 @@ export function AdminCalendarView() {
                 "min-h-[220px] rounded-2xl border bg-white/80 p-2",
                 isToday
                   ? "border-[#A66A4A] ring-2 ring-[#A66A4A] ring-offset-2 ring-offset-[#FAF8F6]"
-                  : "border-[#E8DDD4]"
+                  : "border-[#E8DDD4]",
               )}
             >
               <div className="flex items-center justify-between">
@@ -879,8 +1041,12 @@ export function AdminCalendarView() {
                 ) : (
                   <>
                     {visibleSlots.map((s) => {
-                      const confirmed = s.bookings.filter((b) => b.status === "confirmed");
-                      const tone = s.cancelled ? "bg-[#F3ECE6] text-[#716D64]" : "text-[#444444]";
+                      const confirmed = s.bookings.filter(
+                        (b) => b.status === "confirmed",
+                      );
+                      const tone = s.cancelled
+                        ? "bg-[#F3ECE6] text-[#716D64]"
+                        : "text-[#444444]";
                       const isSelected = selectedSlotIds.has(s.id);
                       return (
                         <button
@@ -891,7 +1057,9 @@ export function AdminCalendarView() {
                             if (e.button !== 0) return;
                             e.preventDefault();
                             e.stopPropagation();
-                            const already = selectedSlotIdsRef.current.has(s.id);
+                            const already = selectedSlotIdsRef.current.has(
+                              s.id,
+                            );
                             dragModeRef.current = already ? "remove" : "add";
                             setDragSelecting(true);
                             setSelectedSlotIds((prev) => {
@@ -916,34 +1084,50 @@ export function AdminCalendarView() {
                             setSelected(nextSel);
                             syncEditorFromSelected(nextSel);
                           }}
-                          style={!s.cancelled && s.itemColor ? { backgroundColor: s.itemColor } : undefined}
+                          style={
+                            !s.cancelled && s.itemColor
+                              ? { backgroundColor: s.itemColor }
+                              : undefined
+                          }
                           className={cn(
                             "w-full text-left rounded-xl px-2.5 py-2 transition cursor-pointer",
                             tone,
                             "hover:brightness-95",
-                            isSelected ? "ring-2 ring-[#A66A4A]" : ""
+                            isSelected ? "ring-2 ring-[#A66A4A]" : "",
                           )}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <div className={s.cancelled ? "line-through opacity-70" : ""}>
+                            <div
+                              className={
+                                s.cancelled ? "line-through opacity-70" : ""
+                              }
+                            >
                               <div className="text-[11px] font-semibold">
                                 {minutesToAmPmRange(s.startMin, s.endMin)}
                               </div>
                               {s.notes ? (
-                                <div className="text-[10px] opacity-90 truncate">{s.notes}</div>
+                                <div className="text-[10px] opacity-90 truncate">
+                                  {s.notes}
+                                </div>
                               ) : (
-                                <div className="text-[10px] opacity-80">No notes</div>
+                                <div className="text-[10px] opacity-80">
+                                  No notes
+                                </div>
                               )}
                             </div>
                             {s.cancelled ? (
-                              <div className="text-[10px] font-semibold text-[#B42318]">Cancelled</div>
+                              <div className="text-[10px] font-semibold text-[#B42318]">
+                                Cancelled
+                              </div>
                             ) : null}
                           </div>
                           <div className="mt-1 flex items-center justify-between gap-2">
                             <span
                               className={cn(
                                 "text-[10px]",
-                                confirmed.length > 0 ? "text-[#444444] font-semibold" : "text-[#716D64]"
+                                confirmed.length > 0
+                                  ? "text-[#444444] font-semibold"
+                                  : "text-[#716D64]",
                               )}
                             >
                               {confirmed.length} bookings
@@ -953,7 +1137,9 @@ export function AdminCalendarView() {
                       );
                     })}
                     {!!extraSlotsCount && (
-                      <div className="text-[11px] text-[#716D64] px-2">+{extraSlotsCount} more</div>
+                      <div className="text-[11px] text-[#716D64] px-2">
+                        +{extraSlotsCount} more
+                      </div>
                     )}
                   </>
                 )}
@@ -979,13 +1165,21 @@ export function AdminCalendarView() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-xs text-[#716D64]">Sessions</div>
-                  <h3 className="font-serif text-2xl font-bold">{dayModalDateKey}</h3>
-                  <div className="mt-2 text-sm text-[#716D64]">Click a session to open details.</div>
+                  <h3 className="font-serif text-2xl font-bold">
+                    {dayModalDateKey}
+                  </h3>
+                  <div className="mt-2 text-sm text-[#716D64]">
+                    Click a session to open details.
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    disabled={saving || (days.find((d) => d.dateKey === dayModalDateKey)?.slots?.length ?? 0) === 0}
+                    disabled={
+                      saving ||
+                      (days.find((d) => d.dateKey === dayModalDateKey)?.slots
+                        ?.length ?? 0) === 0
+                    }
                     onClick={() => deleteAllSlotsForDate(dayModalDateKey)}
                     className="px-4 py-2 rounded-full border border-[#F1B3B0] bg-[#FCE8E6] text-[#B42318] text-sm hover:brightness-95 transition cursor-pointer disabled:opacity-50"
                   >
@@ -1006,7 +1200,9 @@ export function AdminCalendarView() {
                   <div className="text-sm text-[#716D64]">No sessions.</div>
                 ) : (
                   (dayMap.get(dayModalDateKey)?.slots ?? []).map((s) => {
-                    const confirmed = s.bookings.filter((b) => b.status === "confirmed");
+                    const confirmed = s.bookings.filter(
+                      (b) => b.status === "confirmed",
+                    );
                     return (
                       <button
                         key={s.id}
@@ -1017,26 +1213,40 @@ export function AdminCalendarView() {
                           syncEditorFromSelected(nextSel);
                           setDayModalDateKey(null);
                         }}
-                        style={!s.cancelled && s.itemColor ? { backgroundColor: s.itemColor } : undefined}
+                        style={
+                          !s.cancelled && s.itemColor
+                            ? { backgroundColor: s.itemColor }
+                            : undefined
+                        }
                         className={cn(
-                          "w-full text-left rounded-3xl border border-[#E8DDD4] bg-white px-5 py-4 hover:brightness-95 transition cursor-pointer"
+                          "w-full text-left rounded-3xl border border-[#E8DDD4] bg-white px-5 py-4 hover:brightness-95 transition cursor-pointer",
                         )}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <div className={cn("text-sm font-semibold", s.cancelled ? "line-through opacity-70" : "")}>
+                          <div
+                            className={cn(
+                              "text-sm font-semibold",
+                              s.cancelled ? "line-through opacity-70" : "",
+                            )}
+                          >
                             {minutesToAmPmRange(s.startMin, s.endMin)}
                           </div>
                           {s.cancelled ? (
-                            <div className="text-xs font-semibold text-[#B42318]">Cancelled</div>
+                            <div className="text-xs font-semibold text-[#B42318]">
+                              Cancelled
+                            </div>
                           ) : null}
                         </div>
                         <div className="mt-2 text-xs text-[#716D64]">
-                          {calendarItems.find((it) => it.id === s.itemId)?.name ?? ""}
+                          {calendarItems.find((it) => it.id === s.itemId)
+                            ?.name ?? ""}
                         </div>
                         <div className="mt-1 text-xs">
                           <span
                             className={cn(
-                              confirmed.length > 0 ? "text-[#444444] font-semibold" : "text-[#716D64]"
+                              confirmed.length > 0
+                                ? "text-[#444444] font-semibold"
+                                : "text-[#716D64]",
                             )}
                           >
                             {confirmed.length} bookings
@@ -1052,87 +1262,92 @@ export function AdminCalendarView() {
         </div>
       ) : null}
 
-      {/* Modal */}
+      {/* Slot detail modal */}
       {selected ? (
         <div
-          className="fixed inset-0 z-[100] px-4 py-6 overflow-y-auto flex items-start md:items-center justify-center"
+          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto px-4 py-6 md:items-center"
           role="dialog"
           aria-modal="true"
+          aria-label="Session details"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setSelected(null);
           }}
         >
           <div className="absolute inset-0 bg-black/30 pointer-events-none" />
-          <div className="relative w-full max-w-2xl mx-auto rounded-3xl border border-[#E8DDD4] bg-[#FAF8F6] shadow-lg max-h-[calc(100vh-3rem)] overflow-hidden flex flex-col">
-            <div className="p-6 overflow-y-auto">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-xs text-[#716D64]">{selected.dateKey}</div>
-                  <h3 className="font-serif text-2xl font-bold">
-                    {minutesToAmPmRange(selected.slot.startMin, selected.slot.endMin)}
-                  </h3>
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <div className="text-sm text-[#716D64]">
-                      {selected.slot.bookedCount}/{selected.slot.capacity} booked
-                    </div>
-                    {selected.slot.cancelled ? (
-                      <div className="text-xs font-semibold text-[#B42318]">Cancelled</div>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={saving || selected.slot.cancelled}
-                    onClick={() => {
-                      const ok = window.confirm("Cancel this session? Bookings will become unassigned.");
-                      if (!ok) return;
-                      patchSlot(selected.slot.id, { cancelled: true });
-                    }}
-                    className="px-4 py-2 rounded-full border border-[#F1B3B0] bg-[#FCE8E6] text-[#B42318] text-sm hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(null)}
-                    className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
+          <div className="relative flex max-h-[calc(100vh-3rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] shadow-lg">
+            <div className="relative border-b border-[#E8DDD4] bg-white/90 px-6 py-5 pr-14">
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[#E8DDD4] bg-white text-[#716D64] transition hover:bg-[#FAF8F6] hover:text-[#444444] outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#DFD1C9] focus-visible:ring-offset-1"
+                aria-label="Close"
+              >
+                <XMarkIcon className="h-5 w-5" aria-hidden />
+              </button>
 
-              {actionError ? <div className="mt-4 text-sm text-red-700">{actionError}</div> : null}
+              <p className="font-serif text-xl font-semibold leading-snug text-[#444444] sm:text-2xl">
+                {formatSlotHeaderDate(selected.dateKey)}
+              </p>
+              <p className="mt-1 text-sm text-[#716D64]">
+                <span className="font-medium text-[#444444]">
+                  {minutesToAmPmRange(
+                    selected.slot.startMin,
+                    selected.slot.endMin,
+                  )}
+                </span>
+                <span className="mx-2 text-[#D4C4BA]">|</span>
+                <span>
+                  {selected.slot.bookedCount}/{selected.slot.capacity} booked
+                </span>
+                {selected.slot.itemName ? (
+                  <>
+                    <span className="mx-2 text-[#D4C4BA]">|</span>
+                    <span>{selected.slot.itemName}</span>
+                  </>
+                ) : null}
+              </p>
+              {selected.slot.cancelled ? (
+                <span className="mt-2 inline-flex rounded-full border border-[#F1B3B0] bg-[#FCE8E6] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#B42318]">
+                  Session cancelled
+                </span>
+              ) : null}
+            </div>
 
-              <div className="mt-6 grid gap-4  md:grid-cols-2">
-                <div className="rounded-3xl  border border-[#E8DDD4] bg-white/70 p-5">
-                  <div className="font-serif font-semibold mb-3">Edit slot</div>
-                  <div className="grid gap-3">
-                    <label className="grid gap-1">
-                      <span className="text-xs text-[#716D64]">Start (24h)</span>
-                      <input
+            <div className="overflow-y-auto p-6">
+              {actionError ? (
+                <div className="mb-4 rounded-2xl border border-[#F1B3B0] bg-[#FCE8E6] px-4 py-3 text-sm text-[#B42318]">
+                  {actionError}
+                </div>
+              ) : null}
+
+              <div className="flex flex-col gap-6">
+                <section className="rounded-2xl border border-[#E8DDD4] bg-white p-5">
+                  <h4 className="font-serif text-lg font-semibold text-[#444444]">
+                    Edit session
+                  </h4>
+                  <div className="mt-4 grid gap-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <AdminTimeSelect
+                        label="Start"
                         value={editStart}
-                        onChange={(e) => setEditStart(e.target.value)}
-                        className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                        onChange={setEditStart}
+                        options={adminTimePickerOptions(editStart)}
                       />
-                      <span className="text-[11px] text-[#716D64]">{hhmmToAmPmLabel(editStart) ?? ""}</span>
-                    </label>
-                    <label className="grid gap-1">
-                      <span className="text-xs text-[#716D64]">End (24h)</span>
-                      <input
+                      <AdminTimeSelect
+                        label="End"
                         value={editEnd}
-                        onChange={(e) => setEditEnd(e.target.value)}
-                        className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                        onChange={setEditEnd}
+                        options={adminTimePickerOptions(editEnd)}
                       />
-                      <span className="text-[11px] text-[#716D64]">{hhmmToAmPmLabel(editEnd) ?? ""}</span>
-                    </label>
+                    </div>
                     <label className="grid gap-1">
-                      <span className="text-xs text-[#716D64]">Class Type</span>
+                      <span className="text-xs font-medium text-[#716D64]">
+                        Class type
+                      </span>
                       <select
                         value={editItemId}
                         onChange={(e) => setEditItemId(e.target.value)}
-                        className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                        className="w-full rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
                       >
                         <option value="">Select…</option>
                         {calendarItems.map((it) => (
@@ -1143,6 +1358,7 @@ export function AdminCalendarView() {
                         ))}
                       </select>
                     </label>
+
                     <button
                       type="button"
                       disabled={saving}
@@ -1150,7 +1366,7 @@ export function AdminCalendarView() {
                         const startMin = hhmmToMinutes(editStart);
                         const endMin = hhmmToMinutes(editEnd);
                         if (startMin === null || endMin === null) {
-                          setActionError("Invalid time format");
+                          setActionError("Invalid time");
                           return;
                         }
                         if (endMin <= startMin) {
@@ -1167,9 +1383,9 @@ export function AdminCalendarView() {
                           endMin,
                         });
                       }}
-                      className="mt-2 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition disabled:opacity-50"
+                      className="w-full rounded-2xl bg-[#A66A4A] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
                     >
-                      {saving ? "Saving…" : "Save"}
+                      {saving ? "Saving…" : "Save changes"}
                     </button>
 
                     {selected.slot.cancelled ? (
@@ -1178,217 +1394,131 @@ export function AdminCalendarView() {
                         disabled={saving}
                         onClick={() => {
                           const ok = window.confirm(
-                            "Delete this cancelled session? Bookings will become unassigned."
+                            "Delete this cancelled session? Bookings will become unassigned.",
                           );
                           if (ok) deleteSlot(selected.slot.id);
                         }}
-                        className="mt-2 px-6 py-3 rounded-full bg-[#F3ECE6] text-sm font-medium hover:brightness-95 transition disabled:opacity-50"
+                        className="w-full rounded-2xl border border-[#E8DDD4] bg-[#F3ECE6] px-6 py-3 text-sm font-medium text-[#444444] transition hover:brightness-95 disabled:opacity-50"
                       >
                         {saving ? "Deleting…" : "Delete session"}
                       </button>
                     ) : (
-                      <div className="mt-3 text-xs text-[#716D64]">
-                        Delete is available only after the session is cancelled.
-                      </div>
+                      <>
+                        <div className="flex items-start gap-2 rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] px-3 py-2.5">
+                          <InformationCircleIcon
+                            className="mt-0.5 h-4 w-4 shrink-0 text-[#716D64]"
+                            aria-hidden
+                          />
+                          <p className="text-xs leading-relaxed text-[#716D64]">
+                            Session delete is available only after you cancel
+                            this session. Bookings will become unassigned.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => {
+                            const ok = window.confirm(
+                              "Cancel this session? Bookings will become unassigned.",
+                            );
+                            if (!ok) return;
+                            patchSlot(selected.slot.id, { cancelled: true });
+                          }}
+                          className="text-sm font-medium text-[#B42318] underline-offset-2 transition hover:underline disabled:opacity-50"
+                        >
+                          Cancel this session
+                        </button>
+                      </>
                     )}
                   </div>
-                </div>
+                </section>
 
-                <div className="rounded-3xl border border-[#E8DDD4] bg-white/70 p-5">
-                  <div className="font-serif font-semibold mb-3">Bookings</div>
-                  <div className="space-y-2 max-h-[360px] overflow-auto pr-1">
+                <section className="rounded-2xl border border-[#E8DDD4] bg-white p-5">
+                  <div className="mb-4 flex items-baseline justify-between gap-3">
+                    <h4 className="font-serif text-lg font-semibold text-[#444444]">
+                      Bookings
+                    </h4>
+                    <span className="text-xs text-[#716D64]">
+                      {selected.slot.bookings.length} total
+                    </span>
+                  </div>
+                  <div className="space-y-2">
                     {selected.slot.bookings.length === 0 ? (
-                      <div className="text-sm text-[#716D64]">No bookings.</div>
+                      <div className="rounded-2xl border border-dashed border-[#E8DDD4] bg-[#FAF8F6] px-4 py-8 text-center text-sm text-[#716D64]">
+                        No bookings for this session yet.
+                      </div>
                     ) : (
                       selected.slot.bookings.map((b) => (
-                        <div
+                        <AdminSlotBookingCard
                           key={b.id}
-                          className="rounded-2xl border border-[#E8DDD4] px-4 py-3"
-                          style={{
-                            backgroundColor: selected.slot.itemColor
-                              ? selected.slot.itemColor
-                              : "rgba(255,255,255,0.9)",
-                            opacity: b.status === "cancelled" ? 0.7 : 1,
-                          }}
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-baseline gap-2 flex-wrap min-w-0">
-                              {!!b.code && (
-                                <div className="flex items-baseline gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => copyBookingCode(b.id, b.code)}
-                                    className="text-xs font-mono text-[#716D64] hover:text-[#444444] hover:underline underline-offset-2"
-                                    title="Click to copy booking code"
-                                  >
-                                    #{b.code}
-                                  </button>
-                                  {copiedCodeBookingId === b.id ? (
-                                    <span className="text-[10px] text-[#716D64]">
-                                      copied
-                                    </span>
-                                  ) : null}
-                                </div>
-                              )}
-                              <div className="text-sm font-medium truncate min-w-0">
-                                {b.starred ? <span title="Starred">★ </span> : null}
-                                {b.name}
-                              </div>
-                            </div>
-                            <div className="text-xs text-[#716D64] truncate">{b.email}</div>
-                            <div className="text-xs text-[#716D64] truncate">{b.whatsapp}</div>
-                            <div className="text-[10px] text-[#716D64]">
-                              {(() => {
-                                let statusLabel = "booked";
-                                if (b.status === "cancelled") statusLabel = "cancelled";
-                                if (b.status === "no_show") statusLabel = "no-show";
-
-                                let whenIso: string | null = null;
-                                if (b.status === "cancelled" && typeof b.cancelledAt === "string") {
-                                  whenIso = b.cancelledAt;
-                                }
-                                if (b.status === "no_show" && typeof b.noShowAt === "string") {
-                                  whenIso = b.noShowAt;
-                                }
-                                if (!whenIso && typeof b.createdAt === "string") {
-                                  whenIso = b.createdAt;
-                                }
-
-                                let rel: string | null = null;
-                                let isUnderDay = false;
-                                if (whenIso) {
-                                  const now = DateTime.now().setZone(BUSINESS_TIME_ZONE);
-                                  const when = DateTime.fromISO(whenIso).setZone(BUSINESS_TIME_ZONE);
-                                  rel = when.toRelative({ base: now });
-                                  isUnderDay = when > now.minus({ hours: 24 });
-                                }
-
-                                return (
-                                  <>
-                                    {statusLabel}
-                                    {rel ? (
-                                      <>
-                                        {" · "}
-                                        <span
-                                          className={cn(
-                                            "transition-colors",
-                                            isUnderDay ? "text-[#5B3F35] font-medium" : "text-[#716D64]"
-                                          )}
-                                        >
-                                          {rel}
-                                        </span>
-                                      </>
-                                    ) : null}
-                                  </>
+                          booking={b}
+                          itemColor={selected.slot.itemColor}
+                          saving={saving}
+                          copiedCodeBookingId={copiedCodeBookingId}
+                          menuOpen={openBookingMenuId === b.id}
+                          onToggleMenu={() =>
+                            setOpenBookingMenuId((prev) =>
+                              prev === b.id ? null : b.id,
+                            )
+                          }
+                          onCloseMenu={() => setOpenBookingMenuId(null)}
+                          onCopyCode={copyBookingCode}
+                          onReschedule={() =>
+                            setRescheduleTarget(
+                              toRescheduleTarget({
+                                booking: b,
+                                slot: selected.slot,
+                                dateKey: selected.dateKey,
+                              }),
+                            )
+                          }
+                          onCancelBooking={() => cancelBooking(b.id)}
+                          onMarkNoShow={() => markNoShow(b.id)}
+                          onDeleteCancelled={async () => {
+                            const ok = window.confirm(
+                              "Delete this cancelled booking? This cannot be undone.",
+                            );
+                            if (!ok) return;
+                            setSaving(true);
+                            setActionError(null);
+                            try {
+                              const res = await fetch(
+                                `/api/admin/bookings/${encodeURIComponent(b.id)}`,
+                                { method: "DELETE", cache: "no-store" },
+                              );
+                              const json = await res.json();
+                              if (!res.ok || !json?.ok)
+                                throw new Error(
+                                  json?.error?.message ??
+                                    "Failed to delete booking",
                                 );
-                              })()}
-                            </div>
-                            {!!b.adminNote && b.adminNote.trim().length > 0 ? (
-                              <div className="mt-1 text-[10px] text-[#444444] line-clamp-2">
-                                Memo: {b.adminNote.trim()}
-                              </div>
-                            ) : null}
-                          </div>
-
-                          {b.status === "confirmed" ? (
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => cancelBooking(b.id)}
-                                className="px-3 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-xs hover:shadow-sm transition disabled:opacity-50 cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => markNoShow(b.id)}
-                                className="px-3 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-xs hover:shadow-sm transition disabled:opacity-50 cursor-pointer"
-                              >
-                                No show
-                              </button>
-                            </div>
-                          ) : b.status === "cancelled" ? (
-                            <div className="mt-2 flex flex-col items-start gap-2">
-                              <button
-                                type="button"
-                                disabled={saving}
-                                onClick={async () => {
-                                  const ok = window.confirm(
-                                    "Delete this cancelled booking? This cannot be undone."
-                                  );
-                                  if (!ok) return;
-                                  setSaving(true);
-                                  setActionError(null);
-                                  try {
-                                    const res = await fetch(
-                                      `/api/admin/bookings/${encodeURIComponent(b.id)}`,
-                                      { method: "DELETE", cache: "no-store" }
-                                    );
-                                    const json = await res.json();
-                                    if (!res.ok || !json?.ok)
-                                      throw new Error(
-                                        json?.error?.message ?? "Failed to delete booking"
-                                      );
-
-                                    // Reload month and refresh selected slot
-                                    const res2 = await fetch(
-                                      `/api/admin/calendar?fromDateKey=${encodeURIComponent(
-                                        fromDateKey
-                                      )}&toDateKey=${encodeURIComponent(toDateKey)}`,
-                                      { cache: "no-store" }
-                                    );
-                                    const json2 = await res2.json();
-                                    if (!res2.ok || !json2?.ok) {
-                                      throw new Error(
-                                        json2?.error?.message ?? "Failed to reload calendar"
-                                      );
-                                    }
-                                    setDays(json2.data.days ?? []);
-                                    const updatedDay = (json2.data.days ?? []).find(
-                                      (d: CalendarDayDto) => d.dateKey === selected?.dateKey
-                                    );
-                                    const updatedSlot =
-                                      updatedDay?.slots?.find(
-                                        (s: CalendarDayDto["slots"][number]) =>
-                                          s.id === selected.slot.id
-                                      ) ?? null;
-                                    if (updatedSlot) {
-                                      const nextSel = {
-                                        dateKey: selected.dateKey,
-                                        slot: updatedSlot,
-                                      };
-                                      setSelected(nextSel);
-                                      syncEditorFromSelected(nextSel);
-                                    } else {
-                                      setSelected(null);
-                                    }
-                                  } catch (e) {
-                                    setActionError(e instanceof Error ? e.message : "Failed");
-                                  } finally {
-                                    setSaving(false);
-                                  }
-                                }}
-                                className="px-3 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-xs hover:shadow-sm transition disabled:opacity-50 cursor-pointer"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
+                              await reloadMonthAndRefreshSelection();
+                            } catch (e) {
+                              setActionError(
+                                e instanceof Error ? e.message : "Failed",
+                              );
+                            } finally {
+                              setSaving(false);
+                            }
+                          }}
+                        />
                       ))
                     )}
                   </div>
-
-                  {/* Unassigned bookings removed from this modal (kept in Bookings tab) */}
-                </div>
+                </section>
               </div>
             </div>
           </div>
         </div>
       ) : null}
+
+      <AdminRescheduleBookingModal
+        target={rescheduleTarget}
+        onClose={() => setRescheduleTarget(null)}
+        onSuccess={async () => {
+          await reloadMonthAndRefreshSelection();
+        }}
+      />
     </section>
   );
 }
-
