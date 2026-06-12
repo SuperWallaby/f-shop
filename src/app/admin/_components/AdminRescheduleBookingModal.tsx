@@ -19,6 +19,7 @@ type SessionOption = {
   id: string;
   label: string;
   available: number;
+  selectable: boolean;
 };
 
 type Props = {
@@ -29,38 +30,39 @@ type Props = {
 
 async function fetchRescheduleSlots(
   dateKey: string,
-  itemId: string,
-  currentSlotId: string | null
+  bookingId: string
 ): Promise<SessionOption[]> {
-  const res = await fetch(`/api/admin/day?dateKey=${encodeURIComponent(dateKey)}`, {
+  const params = new URLSearchParams({ dateKey, bookingId });
+  const res = await fetch(`/api/admin/bookings/reschedule-slots?${params.toString()}`, {
     cache: "no-store",
   });
   const json = await res.json();
-  if (!res.ok || !json?.ok) throw new Error(json?.error?.message ?? "Failed to load day");
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error?.message ?? "Failed to load sessions");
+  }
 
   const slots = (json.data.slots ?? []) as Array<{
     id: string;
-    itemId: string;
     startMin: number;
     endMin: number;
     available: number;
     capacity: number;
-    cancelled: boolean;
+    selectable: boolean;
+    blockedByExclusive: boolean;
   }>;
 
-  return slots
-    .filter(
-      (s) =>
-        !s.cancelled &&
-        s.itemId === itemId &&
-        s.id !== currentSlotId &&
-        s.available > 0
-    )
-    .map((s) => ({
+  return slots.map((s) => {
+    let suffix = `(${s.available}/${s.capacity})`;
+    if (s.blockedByExclusive) suffix = "(blocked)";
+    else if (!s.selectable) suffix = "(full)";
+
+    return {
       id: s.id,
-      label: `${minutesToAmPmRange(s.startMin, s.endMin)} (${s.available}/${s.capacity})`,
+      label: `${minutesToAmPmRange(s.startMin, s.endMin)} ${suffix}`,
       available: s.available,
-    }));
+      selectable: s.selectable,
+    };
+  });
 }
 
 export function AdminRescheduleBookingModal({ target, onClose, onSuccess }: Props) {
@@ -82,7 +84,7 @@ export function AdminRescheduleBookingModal({ target, onClose, onSuccess }: Prop
     setDateKey(target.dateKey);
     setSlotId("");
     setError(null);
-    fetchRescheduleSlots(target.dateKey, target.itemId, target.slotId)
+    fetchRescheduleSlots(target.dateKey, target.id)
       .then(setSlots)
       .catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load sessions")
@@ -97,13 +99,15 @@ export function AdminRescheduleBookingModal({ target, onClose, onSuccess }: Prop
     setSlotId("");
     setError(null);
     try {
-      const options = await fetchRescheduleSlots(nextDateKey, target.itemId, target.slotId);
+      const options = await fetchRescheduleSlots(nextDateKey, target.id);
       setSlots(options);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load sessions");
       setSlots([]);
     }
   }
+
+  const selectableSlots = slots.filter((s) => s.selectable);
 
   async function save() {
     if (!target || !slotId) return;
@@ -182,7 +186,7 @@ export function AdminRescheduleBookingModal({ target, onClose, onSuccess }: Prop
               >
                 <option value="">Select a session…</option>
                 {slots.map((s) => (
-                  <option key={s.id} value={s.id}>
+                  <option key={s.id} value={s.id} disabled={!s.selectable}>
                     {s.label}
                   </option>
                 ))}
@@ -190,7 +194,11 @@ export function AdminRescheduleBookingModal({ target, onClose, onSuccess }: Prop
             </label>
             {slots.length === 0 ? (
               <div className="text-xs text-[#716D64]">
-                No open sessions for this class on the selected date.
+                No sessions for this class on the selected date.
+              </div>
+            ) : selectableSlots.length === 0 ? (
+              <div className="text-xs text-[#716D64]">
+                Sessions exist but are full or blocked — pick another date or time.
               </div>
             ) : null}
             {error ? <div className="text-sm text-red-700">{error}</div> : null}
