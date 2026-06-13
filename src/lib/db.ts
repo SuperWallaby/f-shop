@@ -338,6 +338,8 @@ async function ensureIndexes(db: Db): Promise<void> {
     { name: "item_date_cancelled" }
    ),
    bookings.createIndex({ slotId: 1, status: 1 }, { name: "slot_status" }),
+   bookings.createIndex({ createdAt: -1 }, { name: "createdAt_desc" }),
+   bookings.createIndex({ dateKey: 1, startMin: 1 }, { name: "date_start" }),
    bookings.createIndex({ itemId: 1, dateKey: 1 }, { name: "item_date" }),
    bookings.createIndex({ code: 1 }, { unique: true, name: "uniq_code" }),
    bookings.createIndex(

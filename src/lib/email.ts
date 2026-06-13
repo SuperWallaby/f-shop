@@ -8,6 +8,7 @@ import {
   buildCustomerCancelledByInstructorMessage,
   buildCustomerNoShowMessage,
   buildCustomerReminderMessage,
+  buildCustomerRescheduledMessage,
 } from "./bookingMessages";
 
 const STUDIO_NOTIFY_EMAIL = "faseabooking@gmail.com";
@@ -144,6 +145,73 @@ export async function sendBookingCancelledEmail(args: {
       endMin: args.endMin,
       tz: args.businessTimeZone,
       extra: `When: ${when}`,
+    }),
+  });
+}
+
+export async function sendBookingRescheduledEmail(args: {
+  to: string;
+  name: string;
+  classTypeName: string;
+  whatsapp?: string;
+  bookingCode?: string;
+  businessTimeZone: string;
+  previousDateKey: string;
+  previousStartMin: number;
+  previousEndMin: number;
+  dateKey: string;
+  startMin: number;
+  endMin: number;
+}) {
+  const resend = getResend();
+  const from = getFrom();
+  const previousWhen = formatSlot(
+    args.previousDateKey,
+    args.previousStartMin,
+    args.previousEndMin,
+    args.businessTimeZone
+  );
+  const newWhen = formatSlot(
+    args.dateKey,
+    args.startMin,
+    args.endMin,
+    args.businessTimeZone
+  );
+
+  await resend.emails.send({
+    from,
+    to: args.to,
+    subject: "Booking rescheduled",
+    text: buildCustomerRescheduledMessage({
+      name: args.name,
+      classTypeName: args.classTypeName,
+      bookingCode: args.bookingCode,
+      previousDateKey: args.previousDateKey,
+      previousStartMin: args.previousStartMin,
+      previousEndMin: args.previousEndMin,
+      dateKey: args.dateKey,
+      startMin: args.startMin,
+      endMin: args.endMin,
+      tz: args.businessTimeZone,
+    }),
+  });
+
+  await resend.emails.send({
+    from,
+    to: STUDIO_NOTIFY_EMAIL,
+    subject: "Booking rescheduled",
+    text: buildAdminBookingMessage({
+      kind: "booking_rescheduled",
+      name: args.name,
+      email: args.to,
+      whatsapp: args.whatsapp ?? "",
+      bookingCode: args.bookingCode,
+      classTypeName: args.classTypeName,
+      dateKey: args.dateKey,
+      startMin: args.startMin,
+      endMin: args.endMin,
+      tz: args.businessTimeZone,
+      extra: `Previous: ${previousWhen}\nNew: ${newWhen}`,
     }),
   });
 }
