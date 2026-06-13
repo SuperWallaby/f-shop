@@ -126,6 +126,20 @@ export function AdminRescheduleBookingModal({ target, onClose, onSuccess }: Prop
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error?.message ?? "Failed to reschedule");
       }
+
+      const data = json.data as {
+        dateKey?: string;
+        startMin?: number;
+        endMin?: number;
+      };
+      const newWhen =
+        data.dateKey &&
+        typeof data.startMin === "number" &&
+        typeof data.endMin === "number"
+          ? `${data.dateKey} · ${minutesToAmPmRange(data.startMin, data.endMin)}`
+          : dateKey;
+      window.alert(`Reschedule complete.\n${target.name} → ${newWhen}`);
+
       await onSuccess?.();
       onClose();
     } catch (e) {
