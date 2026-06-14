@@ -3,7 +3,7 @@ import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "../../_utils/http";
 import { publicAvailableDatesQuerySchema } from "@/lib/schemas";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
-import { getBookingRulesFromSettings, isSlotBookableByRules } from "@/lib/bookingRules";
+import { getBookingRulesFromSettings } from "@/lib/bookingRules";
 import { DateTime } from "luxon";
 import { ObjectId } from "mongodb";
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { fromDateKey, toDateKey, itemId } = parsed.data;
-    const { settings, timeSlots, items, bookings } = await getCollections();
+    const { settings, timeSlots, items } = await getCollections();
     const itemObjectId =
       itemId && ObjectId.isValid(itemId) ? new ObjectId(itemId) : null;
 
@@ -39,8 +39,7 @@ export async function GET(req: NextRequest) {
 
     const settingsDoc = await settings.findOne({ _id: "singleton" });
     const rules = getBookingRulesFromSettings(settingsDoc);
-    const now = new Date();
-    const latestAllowedDateKey = DateTime.fromJSDate(now)
+    const latestAllowedDateKey = DateTime.now()
       .setZone(BUSINESS_TIME_ZONE)
       .plus({ days: rules.maxDaysAhead })
       .toISODate()!;
@@ -56,88 +55,18 @@ export async function GET(req: NextRequest) {
           projection: {
             _id: 0,
             dateKey: 1,
-            startMin: 1,
-            endMin: 1,
             itemId: 1,
-            bookedCount: 1,
           },
         }
       )
       .toArray();
 
-    const exclusiveKeys = Array.from(
-      new Set(
-        activeItems
-          .map((it) => (it.exclusiveKey ?? "").trim())
-          .filter((x) => x.length > 0)
-      )
-    );
-    const exclusiveBookingsByGroup = new Map<
-      string,
-      Array<{ itemId: string; startMin: number; endMin: number }>
-    >();
-    if (exclusiveKeys.length > 0) {
-      const bs = await bookings
-        .find(
-          {
-            dateKey: { $gte: fromDateKey, $lte: toDateKey },
-            status: "confirmed",
-            exclusiveKey: { $in: exclusiveKeys },
-          },
-          {
-            projection: {
-              _id: 0,
-              exclusiveKey: 1,
-              dateKey: 1,
-              itemId: 1,
-              startMin: 1,
-              endMin: 1,
-            },
-          }
-        )
-        .toArray();
-      for (const b of bs) {
-        const k = (b.exclusiveKey ?? "").trim();
-        if (!k) continue;
-        const groupKey = `${k}|${b.dateKey}`;
-        const list = exclusiveBookingsByGroup.get(groupKey) ?? [];
-        list.push({
-          itemId: b.itemId?.toHexString?.() ?? "",
-          startMin: b.startMin,
-          endMin: b.endMin,
-        });
-        exclusiveBookingsByGroup.set(groupKey, list);
-      }
-    }
-
     const dateKeysSet = new Set<string>();
     for (const s of slotDocs) {
       const it = itemById.get(s.itemId.toHexString());
       if (!it) continue;
-      const exKey = (it.exclusiveKey ?? "").trim();
-      const cap = it.capacity;
-      const bookedCount = s.bookedCount;
-      const isBlockedByExclusive =
-        !!exKey &&
-        (exclusiveBookingsByGroup.get(`${exKey}|${s.dateKey}`) ?? []).some(
-          (b) =>
-            b.itemId !== it._id?.toHexString?.() &&
-            b.startMin < s.endMin &&
-            b.endMin > s.startMin
-        );
-      if (bookedCount >= cap) continue;
-      if (isBlockedByExclusive) continue;
       if (s.dateKey > latestAllowedDateKey) continue;
-      if (
-        isSlotBookableByRules({
-          now,
-          dateKey: s.dateKey,
-          startMin: s.startMin,
-          rules,
-        })
-      ) {
-        dateKeysSet.add(s.dateKey);
-      }
+      dateKeysSet.add(s.dateKey);
     }
 
     const dateKeys = Array.from(dateKeysSet.values()).sort();

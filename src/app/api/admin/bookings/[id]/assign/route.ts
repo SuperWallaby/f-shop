@@ -6,6 +6,7 @@ import { requireAdmin } from "../../../../_utils/adminAuth";
 import { z } from "zod";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { acquireExclusiveLocks, releaseExclusiveLocksAfterBookingRemoved } from "@/lib/exclusiveLocks";
+import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 
 const assignSchema = z.object({
   slotId: z.string().min(1),
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const newExclusiveKey = (item.exclusiveKey ?? "").trim();
     let insertedBuckets: number[] = [];
-    if (newExclusiveKey) {
+    if (newExclusiveKey && usesExclusiveTimeBlocking(item.capacity)) {
       const conflict = await bookings.findOne(
         {
           status: "confirmed",

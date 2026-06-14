@@ -9,6 +9,7 @@ import type { BookingDb } from "@/lib/db";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
+import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
 
 class HttpError extends Error {
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     const effectiveCapacity = item.capacity;
 
     let insertedBuckets: number[] = [];
-    if (exclusiveKey) {
+    if (exclusiveKey && usesExclusiveTimeBlocking(effectiveCapacity)) {
       const conflict = await bookings.findOne(
         {
           status: "confirmed",

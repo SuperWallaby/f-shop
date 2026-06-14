@@ -10,6 +10,7 @@ import {
   acquireExclusiveLocks,
   releaseExclusiveLocksAfterBookingRemoved,
 } from "@/lib/exclusiveLocks";
+import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { sendAdminWhatsAppNotification } from "@/lib/twilioWhatsApp";
 
 const rescheduleSchema = z.object({
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const exclusiveKey = (item.exclusiveKey ?? "").trim();
     let insertedBuckets: number[] = [];
 
-    if (exclusiveKey) {
+    if (exclusiveKey && usesExclusiveTimeBlocking(item.capacity)) {
       const conflict = await bookings.findOne(
         {
           status: "confirmed",

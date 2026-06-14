@@ -7,6 +7,7 @@ import { sendBookingCreatedEmail } from "@/lib/email";
 import type { BookingDb } from "@/lib/db";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { getBookingRulesFromSettings, isSlotBookableByRules } from "@/lib/bookingRules";
+import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
 import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     const effectiveCapacity = itemRef.capacity;
 
     let insertedBuckets: number[] = [];
-    if (exclusiveKey) {
+    if (exclusiveKey && usesExclusiveTimeBlocking(effectiveCapacity)) {
       const conflict = await bookings.findOne(
         {
           status: "confirmed",

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:table_calendar/table_calendar.dart';
 
-/// Design tokens aligned with repo root [DESIGN.md](../../../DESIGN.md).
-/// Update both when the design system changes.
 abstract final class FaseaColors {
   static const Color primary = Color(0xFFA66A4A);
   static const Color onPrimary = Color(0xFFFFFFFF);
@@ -18,6 +17,38 @@ abstract final class FaseaColors {
   static const Color errorSurface = Color(0xFFFCE8E6);
 }
 
+/// Bundled font families — match web (`layout.tsx`: Inter + Playfair Display).
+/// Serif is for display moments only (logo, credits, booking code); UI chrome uses Inter.
+abstract final class FaseaFonts {
+  static const String sans = 'Inter';
+  static const String serif = 'Playfair Display';
+}
+
+/// Serif styles for brand / numerics — not for section labels or body UI.
+abstract final class FaseaTextStyles {
+  static const TextStyle display = TextStyle(
+    fontFamily: FaseaFonts.serif,
+    fontSize: 28,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+    color: FaseaColors.tertiary,
+  );
+  static const TextStyle credit = TextStyle(
+    fontFamily: FaseaFonts.serif,
+    fontSize: 28,
+    fontWeight: FontWeight.w700,
+    height: 1.15,
+    color: FaseaColors.tertiary,
+  );
+  static const TextStyle bookingCode = TextStyle(
+    fontFamily: FaseaFonts.serif,
+    fontSize: 32,
+    fontWeight: FontWeight.w700,
+    color: FaseaColors.primary,
+    letterSpacing: 2,
+  );
+}
+
 abstract final class FaseaRadii {
   static const double sm = 12;
   static const double md = 16;
@@ -29,8 +60,91 @@ abstract final class FaseaSpacing {
   static const double sm = 8;
   static const double md = 16;
   static const double lg = 24;
+  static const double xl = 32;
   static const double gutter = 18;
+  /// Extra bottom padding so scroll content clears the tab bar.
+  static const double bottomNavInset = 72;
+
+  /// Page headline → next block (chips, card, form).
+  static const double afterHeadline = md;
+  /// Headline → subtitle on the same screen.
+  static const double headlineToSubtitle = sm;
+  /// In-page section title → content below it.
+  static const double afterSectionTitle = sm;
+  /// Between major sections (e.g. credit card → plan group).
+  static const double betweenSections = lg;
+  /// Stacked form fields.
+  static const double betweenFields = md;
+  /// Card body → emphasized line (e.g. name block → credit count).
+  static const double inCardBeforeEmphasis = md;
+  /// Primary button → secondary link in the same card.
+  static const double afterPrimaryButton = sm;
+
+  static EdgeInsets screenPadding({
+    double extraBottom = 0,
+    bool embedded = false,
+  }) =>
+      EdgeInsets.fromLTRB(
+        md,
+        embedded ? 0 : md,
+        md,
+        md + bottomNavInset + extraBottom,
+      );
 }
+
+String spotsLeftLabel(int count) =>
+    count == 1 ? '1 spot left' : '$count spots left';
+
+CalendarStyle buildFaseaCalendarStyle() => CalendarStyle(
+  outsideDaysVisible: false,
+  weekendTextStyle: const TextStyle(color: FaseaColors.secondary),
+  defaultTextStyle: const TextStyle(color: FaseaColors.tertiary),
+  disabledTextStyle: TextStyle(
+    color: FaseaColors.secondary.withValues(alpha: 0.38),
+  ),
+  selectedDecoration: const BoxDecoration(
+    color: FaseaColors.secondary,
+    shape: BoxShape.circle,
+  ),
+  todayDecoration: BoxDecoration(
+    color: FaseaColors.tonalButton.withValues(alpha: 0.55),
+    shape: BoxShape.circle,
+    border: Border.all(color: FaseaColors.primary, width: 1.5),
+  ),
+  todayTextStyle: const TextStyle(
+    color: FaseaColors.primary,
+    fontWeight: FontWeight.w600,
+  ),
+  selectedTextStyle: const TextStyle(
+    color: FaseaColors.onPrimary,
+    fontWeight: FontWeight.w600,
+  ),
+);
+
+HeaderStyle buildFaseaCalendarHeaderStyle() => const HeaderStyle(
+  titleCentered: true,
+  formatButtonVisible: false,
+  titleTextStyle: TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    color: FaseaColors.tertiary,
+  ),
+  leftChevronIcon: Icon(Icons.chevron_left, color: FaseaColors.secondary),
+  rightChevronIcon: Icon(Icons.chevron_right, color: FaseaColors.secondary),
+);
+
+DaysOfWeekStyle buildFaseaDaysOfWeekStyle() => const DaysOfWeekStyle(
+  weekdayStyle: TextStyle(
+    color: FaseaColors.secondary,
+    fontWeight: FontWeight.w500,
+    fontSize: 12,
+  ),
+  weekendStyle: TextStyle(
+    color: FaseaColors.secondary,
+    fontWeight: FontWeight.w500,
+    fontSize: 12,
+  ),
+);
 
 ThemeData buildFaseaTheme() {
   final base = ColorScheme.fromSeed(
@@ -47,6 +161,7 @@ ThemeData buildFaseaTheme() {
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: FaseaFonts.sans,
     scaffoldBackgroundColor: FaseaColors.canvas,
     colorScheme: base.copyWith(
       surfaceContainerHighest: FaseaColors.surfaceMuted,
@@ -88,6 +203,8 @@ ThemeData buildFaseaTheme() {
       style: FilledButton.styleFrom(
         backgroundColor: FaseaColors.tonalButton,
         foregroundColor: FaseaColors.tertiary,
+        disabledBackgroundColor: Color(0x99DFD1C9),
+        disabledForegroundColor: Color(0x99716D64),
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: FaseaSpacing.lg, vertical: 14),
         shape: RoundedRectangleBorder(
@@ -98,6 +215,12 @@ ThemeData buildFaseaTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: FaseaColors.surface,
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+      labelStyle: const TextStyle(
+        color: FaseaColors.secondary,
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(FaseaRadii.md),
         borderSide: const BorderSide(color: FaseaColors.border),
@@ -163,14 +286,57 @@ ThemeData buildFaseaTheme() {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(foregroundColor: FaseaColors.primary),
     ),
+    chipTheme: ChipThemeData(
+      backgroundColor: FaseaColors.surface,
+      selectedColor: FaseaColors.tonalButton,
+      disabledColor: FaseaColors.surfaceMuted,
+      labelStyle: const TextStyle(
+        fontFamily: FaseaFonts.sans,
+        color: FaseaColors.tertiary,
+        fontSize: 14,
+      ),
+      secondaryLabelStyle: const TextStyle(color: FaseaColors.tertiary),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      side: const BorderSide(color: FaseaColors.border),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(FaseaRadii.lg * 2),
+      ),
+      showCheckmark: false,
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return FaseaColors.tonalButton;
+          }
+          return FaseaColors.surface;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return FaseaColors.tertiary;
+          }
+          return FaseaColors.secondary;
+        }),
+        side: WidgetStateProperty.all(
+          const BorderSide(color: FaseaColors.border),
+        ),
+        shape: WidgetStateProperty.all(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(FaseaRadii.md),
+          ),
+        ),
+      ),
+    ),
     textTheme: const TextTheme(
       headlineMedium: TextStyle(
+        fontFamily: FaseaFonts.sans,
         fontSize: 22,
         fontWeight: FontWeight.w600,
         height: 1.25,
         color: FaseaColors.tertiary,
       ),
       titleLarge: TextStyle(
+        fontFamily: FaseaFonts.sans,
         fontSize: 20,
         fontWeight: FontWeight.w600,
         height: 1.3,

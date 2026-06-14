@@ -1,16 +1,13 @@
-import 'dart:io' show Platform;
-
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kProfileMode;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kDebugMode, kIsWeb, kProfileMode, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'api_dio.dart';
 import 'fasea_design_system.dart';
 
 /// Optional compile-time URL: `--dart-define=API_BASE_URL=https://...`
@@ -19,18 +16,26 @@ const String _kApiBaseUrlFromDefine = String.fromEnvironment(
   defaultValue: '',
 );
 
-/// Local Next.js (`yarn dev`, default port 3000). Android emulator → host loopback.
+/// Local Next.js (`yarn dev`). Port from `--dart-define=FASEA_API_PORT=…` / `.env.local`.
+const String _kApiPortFromDefine = String.fromEnvironment(
+  'FASEA_API_PORT',
+  defaultValue: '4819',
+);
+
 String _localApiBaseUrl() {
-  if (Platform.isAndroid) return 'http://10.0.2.2:3000';
-  return 'http://localhost:3000';
+  final port = _kApiPortFromDefine;
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return 'http://10.0.2.2:$port';
+  }
+  return 'http://localhost:$port';
 }
 
 /// Base URL for API calls.
 /// - **`--dart-define=API_BASE_URL=...`**: always wins (LAN IP on physical devices, staging, prod…).
-/// - **Debug / profile** (`flutter run`, `flutter run --profile`): local Next (browser `localhost:3000`).
+/// - **Debug / profile** (`flutter run`, `flutter run --profile`): local Next (`localhost:4819` by default).
 /// - **Release** (store builds): production host unless `API_BASE_URL` is set on the build.
 ///
-/// Physical device debugging: use `--dart-define=API_BASE_URL=http://<host-LAN-IP>:3000`.
+/// Physical device debugging: use `--dart-define=API_BASE_URL=http://<host-LAN-IP>:4819`.
 String resolveApiBaseUrl() {
   final fromDefine = _kApiBaseUrlFromDefine.trim();
   if (fromDefine.isNotEmpty) {
@@ -40,6 +45,21 @@ String resolveApiBaseUrl() {
     return _localApiBaseUrl();
   }
   return 'https://fasea.studio';
+}
+
+String formatApiError(Object error) {
+  final raw = error.toString();
+  if (raw.contains('Connection refused') ||
+      raw.contains('connection error') ||
+      raw.contains('Failed host lookup')) {
+    return 'Cannot reach the API at ${resolveApiBaseUrl()}. '
+        'Start the server in another terminal: yarn dev';
+  }
+  if (error is DioException) {
+    final message = error.message;
+    if (message != null && message.isNotEmpty) return message;
+  }
+  return raw;
 }
 
 const studioPhone = '60145403560';
@@ -76,18 +96,15 @@ class _AppBootstrapState extends State<AppBootstrap> {
   }
 
   Future<void> _init() async {
-    final dir = await getApplicationSupportDirectory();
-    final jar = PersistCookieJar(
-      storage: FileStorage('${dir.path}/cookies'),
-      ignoreExpires: true,
-    );
     final base = resolveApiBaseUrl();
-    await const FlutterSecureStorage().write(
-      key: 'fasea_api_base_url',
-      value: base,
-    );
-    final dio = Dio(BaseOptions(baseUrl: base));
-    dio.interceptors.add(CookieManager(jar));
+    if (!kIsWeb) {
+      await const FlutterSecureStorage().write(
+        key: 'fasea_api_base_url',
+        value: base,
+      );
+    }
+    final dio = await createApiDio(base);
+    if (!mounted) return;
     setState(() => api = ApiClient(dio));
   }
 
@@ -127,6 +144,11 @@ class _AppSessionState extends State<AppSession> {
       setState(() {
         me = next;
         adminAuthed = admin;
+      });
+    } catch (_) {
+      setState(() {
+        me = null;
+        adminAuthed = false;
       });
     } finally {
       if (mounted) setState(() => loading = false);
@@ -214,7 +236,8 @@ class _FaseaShellState extends State<FaseaShell> {
     final safeIndex = index.clamp(0, pages.length - 1);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Faséa', style: TextStyle(fontFamily: 'serif')),
+        title: const Text('Faséa', style: TextStyle(fontFamily: FaseaFonts.serif)),
+        titleSpacing: FaseaSpacing.md,
       ),
       body: pages[safeIndex],
       bottomNavigationBar: NavigationBar(
@@ -355,6 +378,9 @@ class ApiClient {
       ),
     )['items'],
   ).map((e) => BookingLookup.fromJson(asMap(e))).toList();
+  Future<List<BookingLookup>> myBookings() async => asList(
+    asMap(_data(await dio.get('/api/public/client/bookings')))['items'],
+  ).map((e) => BookingLookup.fromJson(asMap(e))).toList();
   Future<void> cancelBooking({
     required String code,
     String? email,
@@ -490,10 +516,13 @@ class Slot {
       startMin = json['startMin'] as int? ?? 0,
       endMin = json['endMin'] as int? ?? 0,
       available = json['available'] as int? ?? 0,
+      bookable = json['bookable'] as bool? ?? true,
       isFull = json['isFull'] as bool? ?? true;
   final String id, dateKey;
   final int startMin, endMin, available;
-  final bool isFull;
+  final bool bookable, isFull;
+
+  bool get isSelectable => bookable && !isFull;
 }
 
 class BookingLookup {
@@ -506,6 +535,19 @@ class BookingLookup {
       className = '${json['className'] ?? ''}';
   final String code, status, dateKey, className;
   final int startMin, endMin;
+
+  String get timeRange =>
+      '${timeLabel(startMin)} – ${timeLabel(endMin)}';
+
+  String formattedDate() {
+    final parts = dateKey.split('-');
+    if (parts.length != 3) return dateKey;
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final d = int.tryParse(parts[2]);
+    if (y == null || m == null || d == null) return dateKey;
+    return DateFormat.yMMMd().format(DateTime(y, m, d));
+  }
 }
 
 class FaseaEvent {
@@ -561,7 +603,7 @@ class _AuthScreenState extends State<AuthScreen> {
       }
       await widget.onAuthed();
     } catch (e) {
-      setState(() => error = e.toString());
+      setState(() => error = formatApiError(e));
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -571,9 +613,13 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
       child: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(
+          FaseaSpacing.lg,
+          FaseaSpacing.md,
+          FaseaSpacing.lg,
+          FaseaSpacing.lg,
+        ),
         children: [
-          const SizedBox(height: 32),
           const Text(
             'Welcome to',
             style: TextStyle(letterSpacing: 4, color: FaseaColors.primary),
@@ -581,11 +627,14 @@ class _AuthScreenState extends State<AuthScreen> {
           const Text(
             'Faséa',
             style: TextStyle(
-              fontFamily: 'serif',
+              fontFamily: FaseaFonts.serif,
               fontSize: 42,
               fontWeight: FontWeight.w700,
+              color: FaseaColors.tertiary,
+              height: 1.1,
             ),
           ),
+          const SizedBox(height: FaseaSpacing.md),
           FaseaCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -594,12 +643,16 @@ class _AuthScreenState extends State<AuthScreen> {
                   recover ? 'Find your account' : 'Start with your email.',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: FaseaSpacing.headlineToSubtitle),
                 Text(
                   recover
                       ? 'Use the name and WhatsApp number saved on your account.'
                       : 'If you already have an account we will sign you in; if not, we will create one.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: FaseaColors.secondary,
+                  ),
                 ),
+                const SizedBox(height: FaseaSpacing.md),
                 if (!recover)
                   TextField(
                     controller: email,
@@ -614,18 +667,22 @@ class _AuthScreenState extends State<AuthScreen> {
                     controller: recoverName,
                     decoration: const InputDecoration(labelText: 'Name'),
                   ),
+                  const SizedBox(height: FaseaSpacing.betweenFields),
                   TextField(
                     controller: recoverWhatsapp,
                     decoration: const InputDecoration(labelText: 'WhatsApp'),
                   ),
                 ],
-                if (error != null)
+                if (error != null) ...[
+                  const SizedBox(height: FaseaSpacing.betweenFields),
                   Text(error!, style: const TextStyle(color: FaseaColors.error)),
-                const SizedBox(height: 12),
+                ],
+                const SizedBox(height: FaseaSpacing.md),
                 FilledButton(
                   onPressed: loading ? null : submit,
                   child: Text(loading ? 'Please wait…' : 'Continue'),
                 ),
+                const SizedBox(height: FaseaSpacing.afterPrimaryButton),
                 TextButton(
                   onPressed: () => setState(() => recover = !recover),
                   child: Text(recover ? 'Use email instead' : 'Find account'),
@@ -657,33 +714,54 @@ class _CompleteNameScreenState extends State<CompleteNameScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: FaseaCard(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Your name', style: Theme.of(context).textTheme.titleLarge),
-              const Text('We use this on bookings and messages.'),
-              TextField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'Full name'),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: loading
-                    ? null
-                    : () async {
-                        setState(() => loading = true);
-                        await widget.api.saveName(name.text);
-                        await widget.onSaved();
-                      },
-                child: const Text('Continue'),
-              ),
-            ],
-          ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          FaseaSpacing.lg,
+          FaseaSpacing.md,
+          FaseaSpacing.lg,
+          FaseaSpacing.lg,
         ),
+        children: [
+          const Text(
+            'Almost there',
+            style: TextStyle(letterSpacing: 2, color: FaseaColors.primary),
+          ),
+          Text(
+            'Your name',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: FaseaSpacing.afterHeadline),
+          FaseaCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'We use this on bookings and messages.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: FaseaColors.secondary,
+                  ),
+                ),
+                const SizedBox(height: FaseaSpacing.md),
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'Full name'),
+                ),
+                const SizedBox(height: FaseaSpacing.md),
+                FilledButton(
+                  onPressed: loading
+                      ? null
+                      : () async {
+                          setState(() => loading = true);
+                          await widget.api.saveName(name.text);
+                          await widget.onSaved();
+                        },
+                  child: const Text('Continue'),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     ),
   );
@@ -703,31 +781,105 @@ class BookScreen extends StatefulWidget {
   State<BookScreen> createState() => _BookScreenState();
 }
 
+enum _BookStep { pick, confirm, success }
+
 class _BookScreenState extends State<BookScreen> {
   List<ClassItem> items = [];
   List<Slot> slots = [];
+  List<BookingLookup> upcomingBookings = [];
   Set<String> availableDateKeys = {};
   ClassItem? selectedItem;
   DateTime focused = DateTime.now();
   DateTime? selectedDay;
   String? selectedSlotId;
-  String? message;
+  String? errorMessage;
+  String? successCode;
+  _BookStep step = _BookStep.pick;
   bool loading = true;
   bool booking = false;
+  late final PageController _pickPageController = PageController();
+  int _pickPage = 0;
+
   @override
   void initState() {
     super.initState();
-    if ((widget.me.balance?.balance ?? 0) >= 1) _loadItems();
+    _pickPageController.addListener(_syncPickPage);
+    if ((widget.me.balance?.balance ?? 0) >= 1) {
+      _loadItems();
+      _loadUpcoming();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pickPageController.removeListener(_syncPickPage);
+    _pickPageController.dispose();
+    super.dispose();
+  }
+
+  void _syncPickPage() {
+    final page = _pickPageController.page?.round() ?? 0;
+    if (page != _pickPage && mounted) setState(() => _pickPage = page);
+  }
+
+  Future<void> _goToPickSlide(int page) async {
+    if (!_pickPageController.hasClients) return;
+    await _pickPageController.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  Slot? get _selectedSlot {
+    final id = selectedSlotId;
+    if (id == null) return null;
+    for (final slot in slots) {
+      if (slot.id == id) return slot;
+    }
+    return null;
   }
 
   Future<void> _loadItems() async {
     setState(() => loading = true);
     items = await widget.api.items();
-    if (items.isNotEmpty) {
-      selectedItem = items.first;
-      await _loadDates();
-    }
     setState(() => loading = false);
+  }
+
+  Future<void> _selectClass(ClassItem item) async {
+    setState(() {
+      selectedItem = item;
+      selectedDay = null;
+      selectedSlotId = null;
+      slots = [];
+      availableDateKeys = {};
+      errorMessage = null;
+    });
+    await _loadDates();
+    if (mounted) await _goToPickSlide(1);
+  }
+
+  Future<void> _selectDay(DateTime day, DateTime focusedDay) async {
+    setState(() {
+      selectedDay = day;
+      focused = focusedDay;
+      selectedSlotId = null;
+      errorMessage = null;
+    });
+    await _loadSlots(day);
+    if (!mounted) return;
+    if (slots.isNotEmpty) {
+      await _goToPickSlide(2);
+    }
+  }
+
+  Future<void> _loadUpcoming() async {
+    try {
+      final rows = await widget.api.myBookings();
+      if (mounted) setState(() => upcomingBookings = rows);
+    } catch (_) {
+      if (mounted) setState(() => upcomingBookings = []);
+    }
   }
 
   Future<void> _loadDates() async {
@@ -748,8 +900,17 @@ class _BookScreenState extends State<BookScreen> {
     if (item == null) return;
     final list = await widget.api.slots(dateKey(day), item.id);
     setState(() {
-      slots = list.where((s) => !s.isFull).toList();
+      slots = list;
       selectedSlotId = null;
+      errorMessage = null;
+    });
+  }
+
+  void _goToConfirm() {
+    if (selectedSlotId == null || selectedDay == null) return;
+    setState(() {
+      step = _BookStep.confirm;
+      errorMessage = null;
     });
   }
 
@@ -757,7 +918,10 @@ class _BookScreenState extends State<BookScreen> {
     final client = widget.me.client;
     final slotId = selectedSlotId;
     if (client == null || slotId == null) return;
-    setState(() => booking = true);
+    setState(() {
+      booking = true;
+      errorMessage = null;
+    });
     try {
       final code = await widget.api.book(
         slotId: slotId,
@@ -766,95 +930,656 @@ class _BookScreenState extends State<BookScreen> {
         whatsapp: client.whatsapp.isNotEmpty ? client.whatsapp : '+60123456789',
       );
       await widget.onChanged();
-      setState(() => message = 'Booking complete. Code: $code');
+      await _loadUpcoming();
+      setState(() {
+        successCode = code;
+        step = _BookStep.success;
+      });
     } catch (e) {
-      setState(() => message = e.toString());
+      setState(() => errorMessage = formatApiError(e));
     } finally {
       if (mounted) setState(() => booking = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if ((widget.me.balance?.balance ?? 0) < 1) {
-      return MembershipScreen(
-        api: widget.api,
-        me: widget.me,
-        onChanged: widget.onChanged,
-      );
+  void _resetAfterSuccess() {
+    setState(() {
+      step = _BookStep.pick;
+      successCode = null;
+      selectedItem = null;
+      selectedDay = null;
+      selectedSlotId = null;
+      slots = [];
+      availableDateKeys = {};
+      errorMessage = null;
+      _pickPage = 0;
+    });
+    if (_pickPageController.hasClients) {
+      _pickPageController.jumpToPage(0);
     }
-    if (loading) return const Center(child: CircularProgressIndicator());
+    _loadUpcoming();
+  }
+
+  Widget _pickSlideIndicator(BuildContext context) {
+    const labels = ['Class', 'Date', 'Time'];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          if (i > 0) const SizedBox(width: FaseaSpacing.sm),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: i == _pickPage
+                      ? FaseaColors.primary
+                      : FaseaColors.border,
+                ),
+              ),
+              const SizedBox(width: FaseaSpacing.xs),
+              Text(
+                labels[i],
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: i == _pickPage
+                      ? FaseaColors.primary
+                      : FaseaColors.secondary,
+                  fontWeight:
+                      i == _pickPage ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _stepIndicator(BuildContext context) {
+    const labels = ['Choose', 'Confirm', 'Done'];
+    final index = step.index;
+    return Row(
+      children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          if (i > 0)
+            Expanded(
+              child: Container(
+                height: 1,
+                color: i <= index ? FaseaColors.primary : FaseaColors.border,
+              ),
+            ),
+          Column(
+            children: [
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: i <= index
+                    ? FaseaColors.primary
+                    : FaseaColors.border,
+                child: Text(
+                  '${i + 1}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: i <= index
+                        ? FaseaColors.onPrimary
+                        : FaseaColors.secondary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: FaseaSpacing.xs),
+              Text(
+                labels[i],
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: i == index
+                      ? FaseaColors.primary
+                      : FaseaColors.secondary,
+                  fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          if (i < labels.length - 1)
+            Expanded(
+              child: Container(
+                height: 1,
+                color: i < index ? FaseaColors.primary : FaseaColors.border,
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _upcomingSection(BuildContext context) {
+    if (upcomingBookings.isEmpty) return const SizedBox.shrink();
+    return FaseaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Your bookings', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: FaseaSpacing.afterSectionTitle),
+          for (var i = 0; i < upcomingBookings.length; i++) ...[
+            if (i > 0) ...[
+              const SizedBox(height: FaseaSpacing.md),
+              const Divider(height: 1),
+              const SizedBox(height: FaseaSpacing.md),
+            ],
+            Builder(
+              builder: (context) {
+                final b = upcomingBookings[i];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      b.className,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: FaseaSpacing.xs),
+                    Text(
+                      '${b.formattedDate()} · ${b.timeRange}',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: FaseaSpacing.xs),
+                    Text(
+                      'Code ${b.code}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: FaseaColors.secondary,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: FaseaSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: FaseaColors.secondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPickStep(BuildContext context) {
+    final slideHeight = MediaQuery.sizeOf(context).height * 0.52;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: FaseaSpacing.screenPadding(),
       children: [
         Text('Book a class', style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: items
-              .map(
-                (item) => ChoiceChip(
-                  label: Text(item.name),
-                  selected: selectedItem?.id == item.id,
-                  onSelected: (_) async {
-                    setState(() {
-                      selectedItem = item;
-                      selectedDay = null;
-                      slots = [];
-                    });
-                    await _loadDates();
-                  },
-                ),
-              )
-              .toList(),
-        ),
+        const SizedBox(height: FaseaSpacing.afterHeadline),
+        _upcomingSection(context),
+        if (upcomingBookings.isNotEmpty)
+          const SizedBox(height: FaseaSpacing.betweenSections),
         FaseaCard(
-          child: TableCalendar(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _stepIndicator(context),
+              const SizedBox(height: FaseaSpacing.sm),
+              _pickSlideIndicator(context),
+              const SizedBox(height: FaseaSpacing.md),
+              SizedBox(
+                height: slideHeight.clamp(360, 520),
+                child: PageView(
+                  controller: _pickPageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildClassSlide(context),
+                    _buildDateSlide(context),
+                    _buildTimeSlide(context),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildClassSlide(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        Text(
+          'Choose a class',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: FaseaSpacing.afterSectionTitle),
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: FaseaSpacing.md),
+            child: LinearProgressIndicator(),
+          )
+        else if (items.isEmpty)
+          Text(
+            'No classes available right now.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: FaseaSpacing.sm),
+              child: Material(
+                color: selectedItem?.id == item.id
+                    ? FaseaColors.tonalButton.withValues(alpha: 0.45)
+                    : FaseaColors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(FaseaRadii.md),
+                  side: const BorderSide(color: FaseaColors.border),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(FaseaRadii.md),
+                  onTap: () => _selectClass(item),
+                  child: Padding(
+                    padding: const EdgeInsets.all(FaseaSpacing.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.name,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        if (item.description.trim().isNotEmpty) ...[
+                          const SizedBox(height: FaseaSpacing.xs),
+                          Text(
+                            item.description,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDateSlide(BuildContext context) {
+    final item = selectedItem;
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        Text('Pick a date', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: FaseaSpacing.xs),
+        Text(
+          item?.name ?? '',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: FaseaColors.secondary,
+          ),
+        ),
+        const SizedBox(height: FaseaSpacing.sm),
+        if (item == null)
+          Text(
+            'Choose a class first.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          TableCalendar(
             firstDay: DateTime.now(),
             lastDay: DateTime.now().add(const Duration(days: 180)),
             focusedDay: focused,
+            calendarStyle: buildFaseaCalendarStyle(),
+            headerStyle: buildFaseaCalendarHeaderStyle(),
+            daysOfWeekStyle: buildFaseaDaysOfWeekStyle(),
             selectedDayPredicate: (d) =>
                 selectedDay != null && isSameDay(d, selectedDay),
-            enabledDayPredicate: (d) => availableDateKeys.contains(dateKey(d)),
+            enabledDayPredicate: (d) =>
+                availableDateKeys.contains(dateKey(d)),
             onPageChanged: (d) async {
               focused = d;
               await _loadDates();
             },
-            onDaySelected: (d, f) async {
-              setState(() {
-                selectedDay = d;
-                focused = f;
-              });
-              await _loadSlots(d);
-            },
+            onDaySelected: (d, f) => _selectDay(d, f),
           ),
-        ),
-        ...slots.map(
-          (slot) => ListTile(
-            selected: selectedSlotId == slot.id,
-            selectedTileColor: FaseaColors.border,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(FaseaRadii.md),
-            ),
-            onTap: () => setState(() => selectedSlotId = slot.id),
-            title: Text(
-              '${timeLabel(slot.startMin)} - ${timeLabel(slot.endMin)}',
-            ),
-            subtitle: Text('${slot.available} spots left'),
-            trailing: selectedSlotId == slot.id
-                ? const Icon(Icons.check_circle)
-                : null,
+        if (selectedDay != null && slots.isEmpty) ...[
+          const SizedBox(height: FaseaSpacing.sm),
+          Text(
+            'No sessions scheduled on this date.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-        ),
-        if (message != null)
-          Text(message!, style: const TextStyle(color: FaseaColors.primary)),
-        FilledButton(
-          onPressed: booking || selectedSlotId == null ? null : _submit,
-          child: Text(booking ? 'Submitting…' : 'Submit booking'),
+        ] else if (selectedDay != null &&
+            slots.isNotEmpty &&
+            slots.every((s) => !s.isSelectable)) ...[
+          const SizedBox(height: FaseaSpacing.sm),
+          Text(
+            'Sessions are scheduled but not open for booking yet, or they are full.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+        const SizedBox(height: FaseaSpacing.sm),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () => _goToPickSlide(0),
+            child: const Text('Change class'),
+          ),
         ),
       ],
     );
+  }
+
+  Widget _buildTimeSlide(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        Text(
+          'Available times',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: FaseaSpacing.xs),
+        Text(
+          selectedDay == null
+              ? ''
+              : '${selectedItem?.name ?? ''} · ${DateFormat.yMMMd().format(selectedDay!)}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: FaseaColors.secondary,
+          ),
+        ),
+        const SizedBox(height: FaseaSpacing.afterSectionTitle),
+        if (slots.isEmpty)
+          Text(
+            'No sessions scheduled on this date.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else if (slots.every((s) => !s.isSelectable))
+          Text(
+            'Sessions are scheduled but not open for booking yet, or they are full.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: FaseaColors.border),
+              borderRadius: BorderRadius.circular(FaseaRadii.md),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < slots.length; i++) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: FaseaSpacing.sm,
+                      vertical: FaseaSpacing.xs,
+                    ),
+                    child: ListTile(
+                      key: Key('book-slot-${slots[i].id}'),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: FaseaSpacing.md,
+                        vertical: FaseaSpacing.sm,
+                      ),
+                      selected: selectedSlotId == slots[i].id,
+                      selectedTileColor:
+                          FaseaColors.tonalButton.withValues(alpha: 0.45),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(FaseaRadii.md),
+                      ),
+                      enabled: slots[i].isSelectable,
+                      onTap: slots[i].isSelectable
+                          ? () => setState(() => selectedSlotId = slots[i].id)
+                          : null,
+                      title: Text(
+                        '${timeLabel(slots[i].startMin)} - ${timeLabel(slots[i].endMin)}',
+                      ),
+                      subtitle: Text(
+                        spotsLeftLabel(slots[i].available),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      trailing: selectedSlotId == slots[i].id
+                          ? const Icon(
+                              Icons.check_circle,
+                              color: FaseaColors.primary,
+                            )
+                          : null,
+                    ),
+                  ),
+                  if (i < slots.length - 1)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: FaseaSpacing.md),
+                      child: Divider(height: 1),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        if (selectedSlotId != null)
+          Padding(
+            padding: const EdgeInsets.only(top: FaseaSpacing.sm),
+            child: Text(
+              'Tap Review to check your selection before booking.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: FaseaColors.secondary,
+              ),
+            ),
+          ),
+        const SizedBox(height: FaseaSpacing.md),
+        FilledButton(
+          onPressed: selectedSlotId == null ? null : _goToConfirm,
+          child: const Text('Review booking'),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () => _goToPickSlide(1),
+            child: const Text('Change date'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConfirmStep(BuildContext context) {
+    final item = selectedItem;
+    final day = selectedDay;
+    final slot = _selectedSlot;
+    return ListView(
+      padding: FaseaSpacing.screenPadding(),
+      children: [
+        Text('Book a class', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: FaseaSpacing.afterHeadline),
+        FaseaCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _stepIndicator(context),
+              const SizedBox(height: FaseaSpacing.md),
+              Text(
+                'Review your booking',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: FaseaSpacing.afterSectionTitle),
+              _summaryRow(context, 'Class', item?.name ?? '—'),
+              _summaryRow(
+                context,
+                'Date',
+                day == null ? '—' : DateFormat.yMMMd().format(day),
+              ),
+              if (slot != null)
+                _summaryRow(
+                  context,
+                  'Time',
+                  '${timeLabel(slot.startMin)} – ${timeLabel(slot.endMin)}',
+                ),
+              _summaryRow(
+                context,
+                'Credits',
+                '1 credit · ${widget.me.balance?.balance ?? 0} remaining',
+              ),
+              const SizedBox(height: FaseaSpacing.sm),
+              Text(
+                'We will send booking updates to your WhatsApp and email.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: FaseaColors.secondary,
+                ),
+              ),
+              if (errorMessage != null) ...[
+                const SizedBox(height: FaseaSpacing.sm),
+                Text(
+                  errorMessage!,
+                  style: const TextStyle(color: FaseaColors.error),
+                ),
+              ],
+              const SizedBox(height: FaseaSpacing.md),
+              FilledButton(
+                onPressed: booking ? null : _submit,
+                style: FilledButton.styleFrom(
+                  backgroundColor: FaseaColors.primary,
+                  foregroundColor: FaseaColors.onPrimary,
+                ),
+                child: Text(booking ? 'Booking…' : 'Confirm booking'),
+              ),
+              const SizedBox(height: FaseaSpacing.sm),
+              TextButton(
+                onPressed: booking
+                    ? null
+                    : () {
+                        setState(() => step = _BookStep.pick);
+                        _goToPickSlide(2);
+                      },
+                child: const Text('Back'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSuccessStep(BuildContext context) {
+    return ListView(
+      padding: FaseaSpacing.screenPadding(),
+      children: [
+        Text('Book a class', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: FaseaSpacing.afterHeadline),
+        FaseaCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _stepIndicator(context),
+              const SizedBox(height: FaseaSpacing.md),
+              const Icon(
+                Icons.check_circle,
+                color: FaseaColors.primary,
+                size: 48,
+              ),
+              const SizedBox(height: FaseaSpacing.md),
+              Text(
+                "You're booked",
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: FaseaSpacing.sm),
+              Text(
+                'Save this code for check-in or changes.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: FaseaColors.secondary,
+                ),
+              ),
+              const SizedBox(height: FaseaSpacing.md),
+              Text(
+                successCode ?? '',
+                textAlign: TextAlign.center,
+                style: FaseaTextStyles.bookingCode,
+              ),
+              const SizedBox(height: FaseaSpacing.sm),
+              Text(
+                'Updates will go to your WhatsApp and email.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: FaseaColors.secondary,
+                ),
+              ),
+              const SizedBox(height: FaseaSpacing.md),
+              FilledButton(
+                onPressed: _resetAfterSuccess,
+                child: const Text('Book another class'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if ((widget.me.balance?.balance ?? 0) < 1) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FaseaSpacing.md,
+              FaseaSpacing.md,
+              FaseaSpacing.md,
+              FaseaSpacing.sm,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Book a class',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: FaseaSpacing.headlineToSubtitle),
+                Text(
+                  'You need credits before choosing a date and time.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: FaseaColors.secondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: MembershipScreen(
+              api: widget.api,
+              me: widget.me,
+              onChanged: widget.onChanged,
+              embeddedInBook: true,
+            ),
+          ),
+        ],
+      );
+    }
+    if (loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return switch (step) {
+      _BookStep.pick => _buildPickStep(context),
+      _BookStep.confirm => _buildConfirmStep(context),
+      _BookStep.success => _buildSuccessStep(context),
+    };
   }
 }
 
@@ -864,13 +1589,20 @@ class MembershipScreen extends StatelessWidget {
     required this.api,
     required this.me,
     required this.onChanged,
+    this.embeddedInBook = false,
   });
   final ApiClient api;
   final ClientMe me;
   final Future<void> Function() onChanged;
+  final bool embeddedInBook;
   @override
   Widget build(BuildContext context) =>
-      PlanPurchaseView(api: api, me: me, onChanged: onChanged);
+      PlanPurchaseView(
+        api: api,
+        me: me,
+        onChanged: onChanged,
+        embeddedInBook: embeddedInBook,
+      );
 }
 
 class PlanPurchaseView extends StatefulWidget {
@@ -879,62 +1611,105 @@ class PlanPurchaseView extends StatefulWidget {
     required this.api,
     required this.me,
     required this.onChanged,
+    this.embeddedInBook = false,
   });
   final ApiClient api;
   final ClientMe me;
   final Future<void> Function() onChanged;
+  final bool embeddedInBook;
   @override
   State<PlanPurchaseView> createState() => _PlanPurchaseViewState();
 }
 
 class _PlanPurchaseViewState extends State<PlanPurchaseView> {
-  late Future<List<Plan>> future = widget.api.plans();
+  late final Future<({List<Plan> plans, List<ClassItem> items})> _catalog =
+      _loadCatalog();
   String? message;
+
+  Future<({List<Plan> plans, List<ClassItem> items})> _loadCatalog() async {
+    final results = await Future.wait([
+      widget.api.plans(),
+      widget.api.items(),
+    ]);
+    return (
+      plans: results[0] as List<Plan>,
+      items: results[1] as List<ClassItem>,
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<Plan>>(
-    future: future,
-    builder: (context, snap) {
-      final groups = groupPlans(snap.data ?? []);
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('Membership', style: Theme.of(context).textTheme.headlineMedium),
-          AccountCreditCard(me: widget.me),
-          if (snap.connectionState != ConnectionState.done)
-            const LinearProgressIndicator(),
-          if (message != null)
-            Text(message!, style: const TextStyle(color: FaseaColors.primary)),
-          for (final entry in groups.entries) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: 20, bottom: 8),
-              child: Text(
-                planGroupTitle(entry.key),
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            ...entry.value.map(
-              (plan) => PlanTile(
-                plan: plan,
-                studentStatus: widget.me.client?.studentStatus,
-                onPay: () async {
-                  try {
-                    final url = await widget.api.createOrder(plan.id);
-                    await launchUrl(
-                      Uri.parse(url),
-                      mode: LaunchMode.externalApplication,
-                    );
-                    await widget.onChanged();
-                  } catch (e) {
-                    setState(() => message = e.toString());
-                  }
-                },
-              ),
-            ),
-          ],
-        ],
+  Widget build(BuildContext context) =>
+      FutureBuilder<({List<Plan> plans, List<ClassItem> items})>(
+        future: _catalog,
+        builder: (context, snap) {
+          final plans = snap.data?.plans ?? [];
+          final items = snap.data?.items ?? [];
+          final groups = groupPlans(plans);
+          return ListView(
+            padding: FaseaSpacing.screenPadding(embedded: widget.embeddedInBook),
+            children: [
+              if (!widget.embeddedInBook) ...[
+                Text(
+                  'Membership',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: FaseaSpacing.afterHeadline),
+              ],
+              AccountCreditCard(me: widget.me),
+              if (snap.connectionState != ConnectionState.done)
+                const LinearProgressIndicator(),
+              if (message != null)
+                Text(
+                  message!,
+                  style: const TextStyle(color: FaseaColors.primary),
+                ),
+              for (final entry in groups.entries) ...[
+                Padding(
+                  padding: const EdgeInsets.only(
+                    top: FaseaSpacing.betweenSections,
+                    bottom: FaseaSpacing.afterSectionTitle,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        planGroupTitle(entry.key),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: FaseaSpacing.xs),
+                      Text(
+                        'Valid for · ${formatUsableClassNames(items, entry.key)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: FaseaColors.secondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...entry.value.map(
+                  (plan) => PlanTile(
+                    plan: plan,
+                    usableClasses: planUsableClassNames(items, plan.category),
+                    studentStatus: widget.me.client?.studentStatus,
+                    onPay: () async {
+                      try {
+                        final url = await widget.api.createOrder(plan.id);
+                        await launchUrl(
+                          Uri.parse(url),
+                          mode: LaunchMode.externalApplication,
+                        );
+                        await widget.onChanged();
+                      } catch (e) {
+                        setState(() => message = e.toString());
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       );
-    },
-  );
 }
 
 class EventsScreen extends StatefulWidget {
@@ -952,13 +1727,21 @@ class _EventsScreenState extends State<EventsScreen> {
     builder: (context, snap) {
       final events = snap.data ?? [];
       return ListView(
-        padding: const EdgeInsets.all(16),
+        padding: FaseaSpacing.screenPadding(),
         children: [
           Text('Events', style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: FaseaSpacing.afterHeadline),
           if (snap.connectionState != ConnectionState.done)
             const LinearProgressIndicator(),
           if (events.isEmpty && snap.connectionState == ConnectionState.done)
-            const Text('No active events yet.'),
+            FaseaCard(
+              child: Text(
+                'No active events yet.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: FaseaColors.secondary,
+                ),
+              ),
+            ),
           ...events.map((event) => EventCard(event: event)),
         ],
       );
@@ -1002,9 +1785,10 @@ class _AccountScreenState extends State<AccountScreen> {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
+    padding: FaseaSpacing.screenPadding(),
     children: [
       Text('Account', style: Theme.of(context).textTheme.headlineMedium),
+      const SizedBox(height: FaseaSpacing.afterHeadline),
       AccountCreditCard(me: widget.me),
       FaseaCard(
         child: Column(
@@ -1014,22 +1798,27 @@ class _AccountScreenState extends State<AccountScreen> {
               'Booking check',
               style: Theme.of(context).textTheme.titleLarge,
             ),
+            const SizedBox(height: FaseaSpacing.md),
             TextField(
               controller: code,
               decoration: const InputDecoration(labelText: 'Booking code'),
             ),
+            const SizedBox(height: FaseaSpacing.betweenFields),
             TextField(
               controller: name,
               decoration: const InputDecoration(labelText: 'Name'),
             ),
+            const SizedBox(height: FaseaSpacing.betweenFields),
             TextField(
               controller: email,
               decoration: const InputDecoration(labelText: 'Email'),
             ),
+            const SizedBox(height: FaseaSpacing.betweenFields),
             TextField(
               controller: whatsapp,
               decoration: const InputDecoration(labelText: 'WhatsApp'),
             ),
+            const SizedBox(height: FaseaSpacing.betweenFields),
             FilledButton(
               onPressed: () async {
                 final rows = await widget.api.lookupBookings(
@@ -1042,11 +1831,21 @@ class _AccountScreenState extends State<AccountScreen> {
               },
               child: const Text('Search'),
             ),
+            if (lookup.isNotEmpty) ...[
+              const SizedBox(height: FaseaSpacing.md),
+              Text(
+                'Results',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: FaseaSpacing.xs),
+            ],
             ...lookup.map(
               (b) => ListTile(
+                contentPadding: EdgeInsets.zero,
                 title: Text('${b.className} · ${b.code}'),
                 subtitle: Text(
                   '${b.dateKey} ${timeLabel(b.startMin)} · ${b.status}',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 trailing: b.status == 'confirmed'
                     ? TextButton(
@@ -1071,18 +1870,20 @@ class _AccountScreenState extends State<AccountScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Staff access', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: FaseaSpacing.headlineToSubtitle),
             Text(
               widget.adminAuthed
                   ? 'Manage tab is enabled.'
                   : 'Enter admin password to manage plans/events.',
             ),
-            if (!widget.adminAuthed)
+            if (!widget.adminAuthed) ...[
+              const SizedBox(height: FaseaSpacing.md),
               TextField(
                 controller: adminPassword,
                 obscureText: true,
                 decoration: const InputDecoration(labelText: 'Admin password'),
               ),
-            if (!widget.adminAuthed)
+              const SizedBox(height: FaseaSpacing.betweenFields),
               FilledButton(
                 onPressed: () async {
                   await widget.api.adminLogin(adminPassword.text);
@@ -1090,6 +1891,8 @@ class _AccountScreenState extends State<AccountScreen> {
                 },
                 child: const Text('Unlock Manage'),
               ),
+            ],
+            const SizedBox(height: FaseaSpacing.afterPrimaryButton),
             TextButton(
               onPressed: () async {
                 await widget.api.logout();
@@ -1116,9 +1919,10 @@ class _ManageScreenState extends State<ManageScreen> {
   bool plansMode = true;
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
+    padding: FaseaSpacing.screenPadding(),
     children: [
       Text('Manage', style: Theme.of(context).textTheme.headlineMedium),
+      const SizedBox(height: FaseaSpacing.afterHeadline),
       SegmentedButton<bool>(
         segments: const [
           ButtonSegment(value: true, label: Text('Plans')),
@@ -1127,7 +1931,7 @@ class _ManageScreenState extends State<ManageScreen> {
         selected: {plansMode},
         onSelectionChanged: (s) => setState(() => plansMode = s.first),
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: FaseaSpacing.afterSectionTitle),
       plansMode ? ManagePlans(api: widget.api) : ManageEvents(api: widget.api),
     ],
   );
@@ -1227,18 +2031,31 @@ class _ManageEventsState extends State<ManageEvents> {
 }
 
 class FaseaCard extends StatelessWidget {
-  const FaseaCard({super.key, required this.child});
+  const FaseaCard({super.key, required this.child, this.onTap});
   final Widget child;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => Card(
     margin: const EdgeInsets.symmetric(vertical: FaseaSpacing.sm),
     elevation: 0,
+    clipBehavior: onTap != null ? Clip.antiAlias : Clip.none,
     color: FaseaColors.surface.withValues(alpha: .75),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(FaseaRadii.lg),
       side: const BorderSide(color: FaseaColors.border),
     ),
-    child: Padding(padding: const EdgeInsets.all(FaseaSpacing.gutter), child: child),
+    child: onTap == null
+        ? Padding(
+            padding: const EdgeInsets.all(FaseaSpacing.gutter),
+            child: child,
+          )
+        : InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(FaseaSpacing.gutter),
+              child: child,
+            ),
+          ),
   );
 }
 
@@ -1247,7 +2064,8 @@ class AccountCreditCard extends StatelessWidget {
   final ClientMe me;
   @override
   Widget build(BuildContext context) {
-    final nextExpiry = me.balance?.expiringCredits.isNotEmpty == true
+    final balance = me.balance?.balance ?? 0;
+    final nextExpiry = balance > 0 && me.balance?.expiringCredits.isNotEmpty == true
         ? me.balance!.expiringCredits.first.expiresAt
         : null;
     return FaseaCard(
@@ -1259,15 +2077,12 @@ class AccountCreditCard extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           Text(me.client?.email ?? ''),
-          const SizedBox(height: 12),
+          const SizedBox(height: FaseaSpacing.inCardBeforeEmphasis),
           Text(
             '${me.balance?.balance ?? 0} credits',
-            style: const TextStyle(
-              fontFamily: 'serif',
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-            ),
+            style: FaseaTextStyles.credit,
           ),
+          const SizedBox(height: FaseaSpacing.headlineToSubtitle),
           Text('Student: ${me.client?.studentStatus ?? 'none'}'),
           if (nextExpiry != null)
             Text('Next expiry: ${DateFormat.yMMMd().format(nextExpiry)}'),
@@ -1281,10 +2096,12 @@ class PlanTile extends StatelessWidget {
   const PlanTile({
     super.key,
     required this.plan,
+    required this.usableClasses,
     required this.studentStatus,
     required this.onPay,
   });
   final Plan plan;
+  final List<String> usableClasses;
   final String? studentStatus;
   final VoidCallback onPay;
   @override
@@ -1293,28 +2110,31 @@ class PlanTile extends StatelessWidget {
         ? plan.studentPriceRm!
         : plan.priceRm;
     return FaseaCard(
+      onTap: onPay,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(plan.displayTitle, style: Theme.of(context).textTheme.titleLarge),
-          Text('${plan.classCount} credits · ${plan.validityDays} days'),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'RM ${money(price)}',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              FilledButton(
-                onPressed: onPay,
-                style: FilledButton.styleFrom(
-                  backgroundColor: FaseaColors.primary,
-                  foregroundColor: FaseaColors.onPrimary,
-                ),
-                child: const Text('Pay via WhatsApp'),
-              ),
-            ],
+          const SizedBox(height: FaseaSpacing.xs),
+          Text(
+            usableClasses.join(' · '),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: FaseaColors.secondary,
+            ),
+          ),
+          const SizedBox(height: FaseaSpacing.xs),
+          Text(
+            '${plan.classCount} credits · ${plan.validityDays} days',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: FaseaSpacing.md),
+          Text(
+            'RM ${money(price)}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+              color: FaseaColors.tertiary,
+            ),
           ),
         ],
       ),
@@ -1328,9 +2148,9 @@ class EventCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FaseaCard(
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (event.imageUrl != null)
+        if (event.imageUrl != null) ...[
           ClipRRect(
             borderRadius: BorderRadius.circular(FaseaRadii.md),
             child: Image.network(
@@ -1340,12 +2160,28 @@ class EventCard extends StatelessWidget {
               fit: BoxFit.cover,
             ),
           ),
+          const SizedBox(height: FaseaSpacing.sm),
+        ],
         Text(event.title, style: Theme.of(context).textTheme.titleLarge),
-        Text(event.summary),
-        if (event.startsAt != null)
-          Text(DateFormat.yMMMd().add_jm().format(event.startsAt!)),
-        if (event.location != null) Text(event.location!),
-        if (event.priceLabel != null) Text(event.priceLabel!),
+        const SizedBox(height: FaseaSpacing.headlineToSubtitle),
+        Text(
+          event.summary,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: FaseaColors.secondary,
+          ),
+        ),
+        if (event.startsAt != null) ...[
+          const SizedBox(height: FaseaSpacing.sm),
+          Text(
+            DateFormat.yMMMd().add_jm().format(event.startsAt!),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+        if (event.location != null)
+          Text(event.location!, style: Theme.of(context).textTheme.bodySmall),
+        if (event.priceLabel != null)
+          Text(event.priceLabel!, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: FaseaSpacing.md),
         FilledButton(
           onPressed: () {
             final msg = event.whatsappText?.trim().isNotEmpty == true
@@ -1506,6 +2342,31 @@ String planGroupTitle(String category) => switch (category) {
   'reformer_group' => 'Reformer Group class',
   _ => category,
 };
+
+bool classItemMatchesPlanCategory(ClassItem item, String category) {
+  final name = item.name.toLowerCase();
+  return switch (category) {
+    'group_mat' => name.contains('mat') && !name.contains('reformer'),
+    'reformer_private' =>
+      name.contains('private') ||
+          (name.contains('reformer') && !name.contains('group')),
+    'duet' => name.contains('duet'),
+    'reformer_group' => name.contains('reformer') && name.contains('group'),
+    _ => false,
+  };
+}
+
+List<String> planUsableClassNames(List<ClassItem> items, String category) {
+  final names = items
+      .where((item) => classItemMatchesPlanCategory(item, category))
+      .map((item) => item.name)
+      .toList();
+  if (names.isNotEmpty) return names;
+  return [planGroupTitle(category)];
+}
+
+String formatUsableClassNames(List<ClassItem> items, String category) =>
+    planUsableClassNames(items, category).join(', ');
 String dateKey(DateTime date) =>
     DateFormat('yyyy-MM-dd').format(DateTime(date.year, date.month, date.day));
 String timeLabel(int minutes) =>
