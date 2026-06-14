@@ -4,6 +4,7 @@ import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "../../../_utils/http";
 import { requireAdmin } from "../../../_utils/adminAuth";
 import { dateKeySchema } from "@/lib/schemas";
+import { isSlotBlockedByExclusiveOverlap } from "@/lib/exclusiveBooking";
 
 export async function GET(req: NextRequest) {
   const auth = requireAdmin(req);
@@ -68,14 +69,14 @@ export async function GET(req: NextRequest) {
             b.status === "confirmed"
         ).length;
         const occupied = confirmedOnSlot;
-        const isBlockedByExclusive =
-          !!exclusiveKey &&
-          (exclusiveBookingsByKey.get(exclusiveKey) ?? []).some(
-            (b) =>
-              b.itemId !== itemId &&
-              b.startMin < s.endMin &&
-              b.endMin > s.startMin
-          );
+        const isBlockedByExclusive = isSlotBlockedByExclusiveOverlap({
+          itemCapacity: item.capacity,
+          itemId,
+          exclusiveKey,
+          slotStartMin: s.startMin,
+          slotEndMin: s.endMin,
+          otherBookings: exclusiveBookingsByKey.get(exclusiveKey) ?? [],
+        });
         const available = isBlockedByExclusive
           ? 0
           : Math.max(0, item.capacity - occupied);

@@ -37,10 +37,15 @@ type SlotDto = {
   capacity: number;
   bookedCount: number;
   available: number;
+  bookable: boolean;
   isFull: boolean;
   startUtc: string;
   endUtc: string;
 };
+
+function isSlotSelectable(slot: SlotDto): boolean {
+  return slot.bookable !== false && !slot.isFull;
+}
 
 function dateToDateKeyBusiness(date: Date): string {
   // IMPORTANT: Treat the DayPicker date as a "date-only" value, not an instant.
@@ -254,15 +259,14 @@ function BookingPageInner() {
 
   const disabledItemIdsForDate = useMemo(() => {
     if (!dateKey) return new Set<string>();
-    const hasAny = new Set<string>();
+    const hasSession = new Set<string>();
     for (const s of allSlots) {
       if (!s.itemId) continue;
-      if (s.isFull) continue;
-      hasAny.add(s.itemId);
+      hasSession.add(s.itemId);
     }
     const disabled = new Set<string>();
     for (const it of items) {
-      if (!hasAny.has(it.id)) disabled.add(it.id);
+      if (!hasSession.has(it.id)) disabled.add(it.id);
     }
     return disabled;
   }, [allSlots, dateKey, items]);
@@ -857,7 +861,12 @@ function BookingPageInner() {
                       </div>
                     ) : slots.length === 0 ? (
                       <div className="mt-5 text-sm text-[#716D64]">
-                        No sessions on this date.
+                        No sessions scheduled on this date.
+                      </div>
+                    ) : slots.every((s) => !isSlotSelectable(s)) ? (
+                      <div className="mt-5 text-sm text-[#716D64]">
+                        Sessions are scheduled but not open for booking yet, or
+                        they are full.
                       </div>
                     ) : (
                       <div className="mt-5 space-y-5">
@@ -894,7 +903,7 @@ function BookingPageInner() {
                             return (
                               <SlotButton
                                 key={s.id}
-                                disabled={s.isFull}
+                                disabled={!isSlotSelectable(s)}
                                 selected={selected}
                                 onClick={() => setSelectedSlotId(s.id)}
                                 color={s.itemColor}

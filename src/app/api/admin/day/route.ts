@@ -7,6 +7,7 @@ import { dateKeySchema } from "@/lib/schemas";
 import { minutesToUtcIso } from "@/lib/time";
 import type { DateKey } from "@/lib/time";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
+import { isSlotBlockedByExclusiveOverlap } from "@/lib/exclusiveBooking";
 
 export async function GET(req: NextRequest) {
   const auth = requireAdmin(req);
@@ -89,12 +90,14 @@ export async function GET(req: NextRequest) {
       const cap = item?.capacity ?? 0;
       const slotBookings = bookingsBySlotId.get(slotId) ?? [];
       const bookedCount = s.bookedCount;
-      const isBlockedByExclusive =
-        !!exKey &&
-        (exclusiveBookingsByKey.get(exKey) ?? []).some(
-          (b) =>
-            b.itemId !== itemId && b.startMin < s.endMin && b.endMin > s.startMin
-        );
+      const isBlockedByExclusive = isSlotBlockedByExclusiveOverlap({
+        itemCapacity: cap,
+        itemId,
+        exclusiveKey: exKey,
+        slotStartMin: s.startMin,
+        slotEndMin: s.endMin,
+        otherBookings: exclusiveBookingsByKey.get(exKey) ?? [],
+      });
       const available = isBlockedByExclusive ? 0 : Math.max(0, cap - bookedCount);
       return {
         id: slotId,

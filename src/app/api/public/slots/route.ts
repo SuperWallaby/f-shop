@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { DateKey } from "@/lib/time";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { getBookingRulesFromSettings, isSlotBookableByRules } from "@/lib/bookingRules";
+import { isSlotBlockedByExclusiveOverlap } from "@/lib/exclusiveBooking";
 import { ObjectId } from "mongodb";
 
 export async function GET(req: NextRequest) {
@@ -82,31 +83,29 @@ export async function GET(req: NextRequest) {
     const typedDateKey = dateKeyForIso as DateKey;
 
     const data = docs
-      .filter((s) =>
-        isSlotBookableByRules({
-          now,
-          dateKey: s.dateKey,
-          startMin: s.startMin,
-          rules,
-        })
-      )
       .map((s) => {
         const it = itemById.get(s.itemId.toHexString());
         if (!it) return null;
         const exKey = (it.exclusiveKey ?? "").trim();
         const cap = it.capacity;
         const bookedCount = s.bookedCount;
-        const isBlockedByExclusive =
-          !!exKey &&
-          (exclusiveBookingsByKey.get(exKey) ?? []).some(
-            (b) =>
-              b.itemId !== it._id?.toHexString?.() &&
-              b.startMin < s.endMin &&
-              b.endMin > s.startMin
-          );
+        const isBlockedByExclusive = isSlotBlockedByExclusiveOverlap({
+          itemCapacity: cap,
+          itemId: it._id.toHexString(),
+          exclusiveKey: exKey,
+          slotStartMin: s.startMin,
+          slotEndMin: s.endMin,
+          otherBookings: exclusiveBookingsByKey.get(exKey) ?? [],
+        });
         const available = isBlockedByExclusive
           ? 0
           : Math.max(0, cap - bookedCount);
+        const bookable = isSlotBookableByRules({
+          now,
+          dateKey: s.dateKey,
+          startMin: s.startMin,
+          rules,
+        });
         return {
           id: s._id.toHexString(),
           itemId: it._id.toHexString(),
@@ -118,6 +117,7 @@ export async function GET(req: NextRequest) {
           capacity: cap,
           bookedCount,
           available,
+          bookable,
           isFull: isBlockedByExclusive || available <= 0,
           startUtc: minutesToUtcIso(typedDateKey, s.startMin, tz),
           endUtc: minutesToUtcIso(typedDateKey, s.endMin, tz),

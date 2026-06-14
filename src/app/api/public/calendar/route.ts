@@ -3,6 +3,7 @@ import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "../../_utils/http";
 import { calendarRangeQuerySchema } from "@/lib/schemas";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
+import { isSlotBlockedByExclusiveOverlap } from "@/lib/exclusiveBooking";
 import { ObjectId } from "mongodb";
 
 export async function GET(req: NextRequest) {
@@ -103,12 +104,14 @@ export async function GET(req: NextRequest) {
       const item = itemsById.get(itemId);
       const bs = bookingsBySlot.get(slotId) ?? [];
       const exKey = (item?.exclusiveKey ?? "").trim();
-      const isBlockedByExclusive =
-        !!exKey &&
-        (exclusiveBookingsByGroup.get(`${exKey}|${s.dateKey}`) ?? []).some(
-          (b) =>
-            b.itemId !== itemId && b.startMin < s.endMin && b.endMin > s.startMin
-        );
+      const isBlockedByExclusive = isSlotBlockedByExclusiveOverlap({
+        itemCapacity: item?.capacity ?? 0,
+        itemId,
+        exclusiveKey: exKey,
+        slotStartMin: s.startMin,
+        slotEndMin: s.endMin,
+        otherBookings: exclusiveBookingsByGroup.get(`${exKey}|${s.dateKey}`) ?? [],
+      });
       if (isBlockedByExclusive) continue;
       ensured.slots.push({
         id: slotId,
