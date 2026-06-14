@@ -285,12 +285,19 @@ function BookingPageInner() {
   }, [availableDateKeys.size, loadingCalendar]);
 
   const disabledDays = useMemo(() => {
+    const todayKey = DateTime.now()
+      .setZone(BUSINESS_TIME_ZONE)
+      .toISODate()!;
     // Disable all dates not present in availableDateKeys.
     // If there are no available dates (or we're still loading), disable ALL day cells.
     const disableAll = loadingCalendar || availableDateKeys.size === 0;
 
     if (disableAll) return () => true;
-    return (date: Date) => !availableDateKeys.has(dateToDateKeyBusiness(date));
+    return (date: Date) => {
+      const key = dateToDateKeyBusiness(date);
+      if (key < todayKey) return true;
+      return !availableDateKeys.has(key);
+    };
   }, [availableDateKeys, loadingCalendar]);
 
   useEffect(() => {
@@ -320,12 +327,15 @@ function BookingPageInner() {
         if (!cancelled) {
           setAvailableDateKeys(keys);
 
-          // If no day selected yet, auto-select the first available date (or today if available).
+          // If no day selected yet, auto-select today or the first upcoming available date.
           if (!selectedDay) {
             const todayKey = DateTime.now()
               .setZone(BUSINESS_TIME_ZONE)
               .toISODate()!;
-            const pickKey = keys.has(todayKey) ? todayKey : [...keys][0];
+            const upcoming = [...keys]
+              .filter((k) => k >= todayKey)
+              .sort((a, b) => a.localeCompare(b));
+            const pickKey = keys.has(todayKey) ? todayKey : upcoming[0];
             if (pickKey) setSelectedDay(dateKeyToLocalDate(pickKey));
           }
         }
