@@ -8,6 +8,7 @@ import { planDocToPublicDto } from "@/lib/planDto";
 
 function serializeAdminPlan(plan: Parameters<typeof planDocToPublicDto>[0] & {
   active: boolean;
+  hidden?: boolean;
   sortOrder: number;
   createdAt?: Date;
   updatedAt?: Date;
@@ -16,6 +17,7 @@ function serializeAdminPlan(plan: Parameters<typeof planDocToPublicDto>[0] & {
   return {
     ...base,
     active: plan.active,
+    hidden: Boolean(plan.hidden),
     sortOrder: plan.sortOrder,
     createdAt: plan.createdAt?.toISOString() ?? null,
     updatedAt: plan.updatedAt?.toISOString() ?? null,
@@ -64,9 +66,11 @@ export async function PATCH(
     assign("classCount", data.classCount);
     assign("priceRm", data.priceRm);
     assign("studentPriceRm", data.studentPriceRm);
+    assign("firstTimerPriceRm", data.firstTimerPriceRm);
     assign("listPriceRm", data.listPriceRm);
     assign("validityDays", data.validityDays);
     assign("active", data.active);
+    assign("hidden", data.hidden);
     assign("sortOrder", data.sortOrder);
     assign("detailLines", data.detailLines);
     assign("priceNote", data.priceNote);

@@ -18,6 +18,7 @@ export const DEFAULT_PLANS: Array<
     classCount: 1,
     priceRm: 50,
     studentPriceRm: 44,
+    firstTimerPriceRm: 35,
     validityDays: 30,
     active: true,
     sortOrder: 10,
@@ -54,12 +55,31 @@ export const DEFAULT_PLANS: Array<
     detailLines: ["2 Month Validity", "Non-shareable", "Non-refundable"],
   },
   {
+    code: "mat-private-single",
+    title: "Mat Private - Single Class",
+    cardTitle: "Single Class",
+    category: "mat_private",
+    classCount: 1,
+    priceRm: 70,
+    firstTimerPriceRm: 59.5,
+    validityDays: 30,
+    active: true,
+    sortOrder: 35,
+    detailLines: [
+      "First timer 15% off (RM 59.50)",
+      "Single class only — no package",
+      "Non-shareable",
+      "Non-refundable",
+    ],
+  },
+  {
     code: "reformer-private-single",
     title: "Reformer Private - Single Class",
     cardTitle: "Single Class",
     category: "reformer_private",
     classCount: 1,
     priceRm: 170,
+    firstTimerPriceRm: 153,
     validityDays: 30,
     active: true,
     sortOrder: 40,
@@ -90,12 +110,31 @@ export const DEFAULT_PLANS: Array<
     detailLines: ["3 Month Validity", "Non-shareable", "Non-refundable"],
   },
   {
+    code: "pre-post-reformer-single",
+    title: "Pre and Post Reformer Pilates - Single Session",
+    cardTitle: "Single Session",
+    category: "pre_post_reformer",
+    classCount: 1,
+    priceRm: 150,
+    firstTimerPriceRm: 135,
+    validityDays: 30,
+    active: true,
+    sortOrder: 65,
+    detailLines: [
+      "First timer 10% off (RM 135)",
+      "Single session only — no package",
+      "Non-shareable",
+      "Non-refundable",
+    ],
+  },
+  {
     code: "duet-single",
     title: "Duet - Single Class",
     cardTitle: "Single Class",
     category: "duet",
     classCount: 1,
     priceRm: 120,
+    firstTimerPriceRm: 108,
     validityDays: 30,
     active: true,
     sortOrder: 70,
@@ -140,6 +179,7 @@ export const DEFAULT_PLANS: Array<
     classCount: 1,
     priceRm: 90,
     studentPriceRm: 79,
+    firstTimerPriceRm: 81,
     listPriceRm: 90,
     validityDays: 30,
     active: true,
@@ -192,6 +232,8 @@ export function publicClient(client: { _id?: ObjectId } & ClientDb) {
     email: client.email,
     whatsapp: client.whatsapp,
     studentStatus: client.studentStatus,
+    hasPassword: Boolean(client.passwordHash),
+    pushMarketingOptIn: client.pushMarketingOptIn ?? true,
     studentName: client.studentName ?? "",
     studentAge: client.studentAge ?? null,
     schoolName: client.schoolName ?? "",
@@ -204,8 +246,8 @@ export function publicClient(client: { _id?: ObjectId } & ClientDb) {
 export async function ensureDefaultPlans(plans: Collection<PlanDb>) {
   const now = new Date();
   await Promise.all(
-    DEFAULT_PLANS.map((plan) =>
-      plans.updateOne(
+    DEFAULT_PLANS.map(async (plan) => {
+      await plans.updateOne(
         { code: plan.code },
         {
           $setOnInsert: {
@@ -215,9 +257,70 @@ export async function ensureDefaultPlans(plans: Collection<PlanDb>) {
           },
         },
         { upsert: true },
-      ),
-    ),
+      );
+      // Backfill first-timer price on existing default plans when missing.
+      if (typeof plan.firstTimerPriceRm === "number") {
+        await plans.updateOne(
+          {
+            code: plan.code,
+            firstTimerPriceRm: { $exists: false },
+          },
+          {
+            $set: {
+              firstTimerPriceRm: plan.firstTimerPriceRm,
+              updatedAt: now,
+            },
+          },
+        );
+      }
+    }),
   );
+}
+
+/** Resolve first-timer RM from plan field or detail-line text. */
+export function resolveFirstTimerPriceRm(
+  plan: Pick<PlanDb, "priceRm" | "firstTimerPriceRm" | "detailLines">,
+): number | null {
+  if (
+    typeof plan.firstTimerPriceRm === "number" &&
+    Number.isFinite(plan.firstTimerPriceRm) &&
+    plan.firstTimerPriceRm >= 0
+  ) {
+    return plan.firstTimerPriceRm;
+  }
+  for (const line of plan.detailLines ?? []) {
+    const rm = line.match(/first\s*timer.*?RM\s*(\d+(?:\.\d+)?)/i);
+    if (rm) return Number(rm[1]);
+    const pct = line.match(/first\s*timer\s*(\d+)\s*%\s*off/i);
+    if (pct) {
+      const p = Math.min(100, Math.max(0, Number(pct[1])));
+      return Math.round(plan.priceRm * (100 - p) * 100) / 100;
+    }
+  }
+  return null;
+}
+
+export type PlanPriceMode = "regular" | "student" | "first_timer";
+
+export function resolvePlanListPriceRm(
+  plan: Pick<
+    PlanDb,
+    "priceRm" | "studentPriceRm" | "firstTimerPriceRm" | "detailLines"
+  >,
+  mode: PlanPriceMode,
+): number {
+  if (
+    mode === "student" &&
+    typeof plan.studentPriceRm === "number" &&
+    plan.studentPriceRm >= 0
+  ) {
+    return plan.studentPriceRm;
+  }
+  if (mode === "first_timer") {
+    const ft = resolveFirstTimerPriceRm(plan);
+    if (ft != null) return ft;
+  }
+  return plan.priceRm;
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

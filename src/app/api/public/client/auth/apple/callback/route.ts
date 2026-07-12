@@ -5,6 +5,12 @@ import { getCollections } from "@/lib/db";
 import { makeCustomerKey } from "@/lib/credits";
 import { setClientSessionCookie } from "@/lib/clientSession";
 import { createAppleClientSecret } from "@/lib/appleClientSecret";
+import {
+  clearOAuthReturnCookie,
+  oauthFailRedirect,
+  oauthSuccessRedirect,
+  readOAuthReturnTo,
+} from "@/lib/oauthReturn";
 
 const STATE_COOKIE = "apple_oauth_state";
 
@@ -44,8 +50,15 @@ function incomingParams(req: NextRequest, form: Record<string, string>) {
 
 async function handleAppleCallback(req: NextRequest, form: Record<string, string>) {
   const origin = new URL(req.url).origin;
-  const fail = (code: string) =>
-    NextResponse.redirect(new URL(`/booking?authErr=${encodeURIComponent(code)}`, origin));
+  const returnOrigin = readOAuthReturnTo(req);
+  const fail = (code: string) => {
+    const res = NextResponse.redirect(
+      oauthFailRedirect(origin, code, returnOrigin),
+    );
+    res.cookies.delete(STATE_COOKIE);
+    clearOAuthReturnCookie(res);
+    return res;
+  };
 
   const cookieState = req.cookies.get(STATE_COOKIE)?.value;
   const { code, state, userRaw, error } = incomingParams(req, form);
@@ -179,9 +192,12 @@ async function handleAppleCallback(req: NextRequest, form: Record<string, string
     },
   );
 
-  const res = NextResponse.redirect(new URL("/booking", origin));
+  const res = NextResponse.redirect(oauthSuccessRedirect(origin, returnOrigin));
   res.cookies.delete(STATE_COOKIE);
-  return setClientSessionCookie(res, client._id!);
+  clearOAuthReturnCookie(res);
+  return setClientSessionCookie(res, client._id!, req, {
+    crossOrigin: Boolean(returnOrigin),
+  });
 }
 
 export async function GET(req: NextRequest) {

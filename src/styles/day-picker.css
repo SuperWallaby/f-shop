@@ -1,0 +1,96 @@
+@import "react-day-picker/style.css";
+
+/* react-day-picker theme overrides (remove default blue) */
+.rdp-root,
+.rdp {
+  --rdp-accent-color: var(--fasea-secondary);
+  --rdp-accent-background-color: var(--fasea-tonal);
+  --rdp-today-color: var(--fasea-primary);
+
+  --rdp-selected-border: 2px solid rgba(223, 209, 201, 0.95);
+  --rdp-range_middle-background-color: rgba(223, 209, 201, 0.45);
+  --rdp-range_start-date-background-color: #716d64;
+  --rdp-range_end-date-background-color: #716d64;
+  --rdp-range_start-color: #faf8f6;
+  --rdp-range_end-color: #faf8f6;
+
+  --rdp-day-height: 40px;
+  --rdp-day-width: 40px;
+  --rdp-day_button-height: 38px;
+  --rdp-day_button-width: 38px;
+}
+
+.rdp-root .rdp-day_button:hover:not(:disabled) {
+  background-color: rgba(223, 209, 201, 0.35);
+}
+
+.rdp-root .rdp-day_button:focus-visible {
+  outline: 2px solid rgba(223, 209, 201, 0.85);
+  outline-offset: 2px;
+}
+
+/* Booking page — date circles fill calendar width on mobile */
+@media (max-width: 767px) {
+  .booking-calendar-panel {
+    container-type: inline-size;
+  }
+
+  .booking-day-picker.rdp-root {
+    width: 100%;
+    --rdp-nav_button-height: 2.75rem;
+    --rdp-nav_button-width: 2.75rem;
+    --rdp-nav-height: 3rem;
+    --rdp-day-height: calc((100cqw - 6px) / 7);
+    --rdp-day-width: calc((100cqw - 6px) / 7);
+    --rdp-day_button-height: calc((100cqw - 6px) / 7 - 4px);
+    --rdp-day_button-width: calc((100cqw - 6px) / 7 - 4px);
+  }
+
+  .booking-day-picker .rdp-month_grid {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .booking-day-picker .rdp-weekday {
+    font-size: 0.8125rem;
+    padding: 0.5rem 0;
+  }
+
+  .booking-day-picker .rdp-day {
+    width: auto !important;
+    height: var(--rdp-day-height) !important;
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  .booking-day-picker .rdp-day_button {
+    width: var(--rdp-day_button-width) !important;
+    height: var(--rdp-day_button-height) !important;
+    margin-inline: auto;
+    font-size: 1.0625rem;
+  }
+
+  .booking-day-picker .rdp-selected {
+    font-size: 1.0625rem;
+  }
+}
+
+/* Booking calendar skeleton — same shell as react-day-picker */
+.booking-calendar-skeleton .rdp-months {
+  max-width: none;
+  width: 100%;
+}
+
+.booking-calendar-skeleton-chevron {
+  display: block;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--fasea-border) 70%, transparent);
+}
+
+.booking-calendar-skeleton-day {
+  background: color-mix(in srgb, var(--fasea-border) 65%, transparent) !important;
+  cursor: default;
+}

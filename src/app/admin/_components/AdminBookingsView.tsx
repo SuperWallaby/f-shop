@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DateTime } from "luxon";
+import EllipsisHorizontalIcon from "@heroicons/react/20/solid/EllipsisHorizontalIcon";
 import { cn } from "@/lib/cn";
 import { Switch } from "@/components/Switch";
-import { Skeleton, SkeletonButton, SkeletonLine } from "./Skeleton";
+import { SkeletonLine } from "./Skeleton";
 import type { BookingListItem } from "../_lib/types";
 import { minutesToHhmm } from "../_lib/adminTime";
 import {
@@ -28,6 +29,8 @@ export function AdminBookingsView() {
   const [items, setItems] = useState<BookingListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const PAGE_SIZE = 30;
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -184,6 +187,24 @@ export function AdminBookingsView() {
   }, [sortMode]);
 
   useEffect(() => {
+    if (!openMenuId) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenuId(null);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [openMenuId]);
+
+  useEffect(() => {
     const el = loadMoreRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
@@ -305,65 +326,79 @@ export function AdminBookingsView() {
         <div>
           <h2 className="font-serif text-2xl font-semibold">Bookings</h2>
           <div className="text-xs text-[#716D64] mt-1">
-            Showing {visibleItems.length}
-            {hasMore ? "+" : ""}
-            {loadingMore ? " · loading more…" : hasMore ? " · scroll for more" : ""}
+            {visibleItems.length}
+            {hasMore ? "+" : ""} shown
+            {loadingMore ? " · loading…" : ""}
           </div>
         </div>
         <button
-
+          type="button"
           onClick={() => search()}
-          className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition"
+          className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
         >
           Refresh
         </button>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <label className="grid gap-1 sm:col-span-2">
+      <div className="mt-5 flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 min-w-[12rem] flex-1">
           <span className="text-xs text-[#716D64]">Search</span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                search({ q, dateKey, detachedOnly, starredOnly, todayOnly, sortMode });
+                search({
+                  q,
+                  dateKey,
+                  detachedOnly,
+                  starredOnly,
+                  todayOnly,
+                  sortMode,
+                });
               }
             }}
             placeholder="Name or email"
-            className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+            className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
           />
         </label>
         <label className="grid gap-1">
-          <span className="text-xs text-[#716D64]">Date (optional)</span>
+          <span className="text-xs text-[#716D64]">Date</span>
           <input
             type="date"
             value={dateKey}
             onChange={(e) => setDateKey(e.target.value)}
-            className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+            className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
           />
         </label>
-        <Switch checked={detachedOnly} onCheckedChange={setDetachedOnly} label="Unassigned only" />
-        <Switch checked={starredOnly} onCheckedChange={setStarredOnly} label="Starred only" />
-        <Switch checked={todayOnly} onCheckedChange={setTodayOnly} label="Today classes only" />
-        <label className="grid gap-1 sm:col-span-2">
+        <label className="grid gap-1">
           <span className="text-xs text-[#716D64]">Sort</span>
           <select
             value={sortMode}
             onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
-            className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+            className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
           >
             <option value="latest_booking">Latest booking</option>
-            <option value="closest_class">Closest class date</option>
+            <option value="closest_class">Closest class</option>
           </select>
         </label>
         <button
-          onClick={() => search({ q, dateKey, detachedOnly, starredOnly, todayOnly, sortMode })}
-          className="px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition"
+          type="button"
+          onClick={() =>
+            search({
+              q,
+              dateKey,
+              detachedOnly,
+              starredOnly,
+              todayOnly,
+              sortMode,
+            })
+          }
+          className="rounded-lg bg-[#DFD1C9] px-4 py-2 text-sm font-medium hover:brightness-95 cursor-pointer"
         >
           Search
         </button>
-        {!!hasActiveFilters && (
+        {hasActiveFilters ? (
           <button
             type="button"
             onClick={() => {
@@ -382,242 +417,305 @@ export function AdminBookingsView() {
                 sortMode: "latest_booking",
               });
             }}
-            className="px-6 py-3 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition"
+            className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm hover:bg-[#FAF8F6] cursor-pointer"
           >
             Reset
           </button>
-        )}
+        ) : null}
       </div>
 
-      {!!loading && (
-        <div className="mt-4 space-y-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="rounded-3xl border border-[#E8DDD4] bg-white/80 px-5 py-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <SkeletonLine className="w-64" />
-                  <SkeletonLine className="w-40" />
-                  <SkeletonLine className="w-56" />
-                  <Skeleton className="h-16 w-full rounded-2xl" />
-                </div>
-                <div className="shrink-0 space-y-2">
-                  <SkeletonButton className="w-24" />
-                  <SkeletonButton className="w-24" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="mt-3 flex flex-wrap gap-4 text-xs text-[#716D64]">
+        <Switch
+          checked={detachedOnly}
+          onCheckedChange={setDetachedOnly}
+          label="Unassigned"
+        />
+        <Switch
+          checked={starredOnly}
+          onCheckedChange={setStarredOnly}
+          label="Starred"
+        />
+        <Switch
+          checked={todayOnly}
+          onCheckedChange={setTodayOnly}
+          label="Today"
+        />
+      </div>
 
-      {!!error && <div className="mt-4 text-sm text-red-700">{error}</div>}
+      {error ? <div className="mt-4 text-sm text-red-700">{error}</div> : null}
 
-      {!loading && (
-        <div className="mt-6 space-y-3">
-          {visibleItems.length === 0 ? (
-            <div className="text-sm text-[#716D64]">No results.</div>
-          ) : (
-            visibleItems.map((b) => {
-              const isPast = b.dateKey < todayDateKey;
-              return (
-                <div
-                  key={b.id}
-                  className={cn(
-                    "relative rounded-3xl border border-[#E8DDD4] px-5 py-4 overflow-hidden",
-                    isPast ? "bg-white/80 opacity-80" : "bg-white/80"
-                  )}
-                >
-                {!!b.itemColor && (
-                  <div className="absolute left-0 top-0 bottom-0 w-2" style={{ backgroundColor: b.itemColor }} />
-                )}
-                <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-                  <div className="min-w-0">
-                    <div className="font-serif text-lg font-semibold">
-                      {b.dateKey} · {minutesToHhmm(b.startMin)}–{minutesToHhmm(b.endMin)}
-                    </div>
+      <div className="mt-5 overflow-x-auto rounded-2xl border border-[#E8DDD4] bg-white">
+        {loading ? (
+          <div className="px-4 py-8 space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonLine key={i} className="w-full" />
+            ))}
+          </div>
+        ) : visibleItems.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-[#716D64]">
+            No results.
+          </div>
+        ) : (
+          <table className="min-w-[1080px] w-full text-sm text-left">
+            <thead>
+              <tr className="border-b border-[#E8DDD4] bg-[#FAF8F6]/80 text-[11px] font-medium uppercase tracking-wide text-[#716D64]">
+                <th className="px-3 py-2.5 font-medium w-10" />
+                <th className="px-3 py-2.5 font-medium">When</th>
+                <th className="px-3 py-2.5 font-medium">Code</th>
+                <th className="px-3 py-2.5 font-medium">Client</th>
+                <th className="px-3 py-2.5 font-medium">Class</th>
+                <th className="px-3 py-2.5 font-medium">Status</th>
+                <th className="px-3 py-2.5 font-medium min-w-[200px]">Memo</th>
+                <th className="px-3 py-2.5 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleItems.map((b) => {
+                const isPast = b.dateKey < todayDateKey;
+                const now = DateTime.now().setZone(BUSINESS_TIME_ZONE);
+                const when = DateTime.fromISO(b.createdAt).setZone(
+                  BUSINESS_TIME_ZONE,
+                );
+                const rel = when.isValid ? when.toRelative({ base: now }) : null;
+                const statusLabel =
+                  b.status === "confirmed"
+                    ? "booked"
+                    : b.status === "no_show"
+                      ? "no-show"
+                      : "cancelled";
 
-                    <div className="mt-1 flex items-baseline gap-2 flex-wrap min-w-0">
+                return (
+                  <tr
+                    key={b.id}
+                    className={cn(
+                      "border-b border-[#E8DDD4]/60 last:border-0 align-top",
+                      isPast && "opacity-70",
+                      b.starred && "bg-[#FAF8F6]/80",
+                    )}
+                  >
+                    <td className="px-2 py-3">
                       <button
                         type="button"
                         onClick={() => {
                           setStarred(b.id, !b.starred).catch((err) =>
-                            setError(err instanceof Error ? err.message : "Failed to update star")
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Failed to update star",
+                            ),
                           );
                         }}
                         className={cn(
-                          "inline-flex items-center justify-center h-8 w-8 rounded-full border text-sm transition cursor-pointer",
+                          "inline-flex h-9 w-9 items-center justify-center rounded-full text-base cursor-pointer",
                           b.starred
-                            ? "bg-[#DFD1C9] border-[#DFD1C9]"
-                            : "bg-white/80 border-[#E8DDD4] hover:shadow-sm"
+                            ? "text-[#A66A4A]"
+                            : "text-[#C4BBB3] hover:text-[#716D64]",
                         )}
-                        aria-label={b.starred ? "Unstar booking" : "Star booking"}
-                        title={b.starred ? "Starred" : "Star"}
+                        aria-label={b.starred ? "Unstar" : "Star"}
                       >
                         ★
                       </button>
-                      {!!b.code && <div className="text-xs font-mono text-[#716D64]">#{b.code}</div>}
-                      <div className="text-sm font-semibold truncate">{b.name}</div>
-                    </div>
-
-                    <div className="mt-2 grid gap-1">
-                      <div className="text-xs text-[#716D64] flex items-center gap-2">
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <div className="font-medium text-[#444444]">
+                        {b.dateKey}
+                      </div>
+                      <div className="text-xs text-[#716D64]">
+                        {minutesToHhmm(b.startMin)}–{minutesToHhmm(b.endMin)}
+                      </div>
+                      {rel ? (
+                        <div className="text-[10px] text-[#716D64] mt-0.5">
+                          booked {rel}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <span className="font-mono text-xs tracking-wide text-[#444444]">
+                        {b.code ? `#${b.code}` : "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 min-w-[140px]">
+                      <div className="font-medium truncate">{b.name}</div>
+                      <div className="text-xs text-[#716D64] truncate mt-0.5">
+                        {b.email || "—"}
+                      </div>
+                      {b.whatsapp ? (
+                        <div className="text-xs text-[#716D64] truncate">
+                          {b.whatsapp}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-3 min-w-[120px]">
+                      <div className="flex items-center gap-1.5">
                         {!!b.itemColor && (
                           <span
-                            className="inline-block h-2.5 w-2.5 rounded-full border border-[#E8DDD4]"
+                            className="inline-block h-2 w-2 rounded-full shrink-0"
                             style={{ backgroundColor: b.itemColor }}
                           />
                         )}
                         <span className="truncate">{b.itemName}</span>
                       </div>
-                      <div className="text-xs text-[#716D64] truncate">{b.email}</div>
-                      <div className="text-xs text-[#716D64] truncate">{b.whatsapp}</div>
-                    </div>
-
-                    <div className="mt-3">
-                      <div className="text-xs text-[#716D64] mb-1">Memo</div>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <div className="flex flex-col gap-1 items-start">
+                        <span
+                          className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full border",
+                            b.status === "confirmed"
+                              ? "bg-[#E8F5EE] text-[#1F6B3C] border-[#B8DCC6]"
+                              : b.status === "no_show"
+                                ? "bg-[#FCE8E6] text-[#B42318] border-[#F1B3B0]"
+                                : "bg-[#F5F5F4] text-[#716D64] border-[#E8DDD4]",
+                          )}
+                        >
+                          {statusLabel}
+                        </span>
+                        {b.status === "confirmed" &&
+                        b.dateKey === todayDateKey ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#F2D3A2] bg-[#FFF7E6] text-[#8A5A00]">
+                            today
+                          </span>
+                        ) : null}
+                        {b.detached ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#F1B3B0] bg-[#FCE8E6] text-[#B42318]">
+                            unassigned
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 min-w-[200px] max-w-[280px]">
                       <textarea
                         defaultValue={b.adminNote ?? ""}
-                        rows={2}
-                        className="w-full rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
-                        placeholder="Internal memo…"
+                        key={`${b.id}-${b.adminNote ?? ""}`}
+                        rows={3}
+                        className="w-full min-h-[4.5rem] resize-y rounded-lg border border-[#E8DDD4] bg-white px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                        placeholder="Memo…"
                         onBlur={(e) => {
                           const next = e.target.value;
                           if (next === (b.adminNote ?? "")) return;
                           saveAdminNote(b.id, next).catch((err) =>
-                            setError(err instanceof Error ? err.message : "Failed to save note")
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Failed to save note",
+                            ),
                           );
                         }}
                       />
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 flex flex-col items-end gap-3">
-                    <div className="flex flex-col items-end gap-1">
-                      <span
-                        className={cn(
-                          "text-[10px] px-2 py-1 rounded-full",
-                          b.status === "confirmed"
-                            ? "bg-[#DFD1C9] text-[#444444]"
-                            : b.status === "no_show"
-                              ? "bg-[#FCE8E6] text-[#B42318] border border-[#F1B3B0]"
-                              : "bg-[#F3ECE6] text-[#716D64]"
-                        )}
-                      >
-                        {b.status === "confirmed"
-                          ? "booked"
-                          : b.status === "no_show"
-                            ? "no-show"
-                            : "cancelled"}
-                      </span>
-
-                      {b.status === "confirmed" && b.dateKey === todayDateKey ? (
-                        <span className="text-[10px] px-2 py-1 rounded-full bg-[#FFF7E6] text-[#8A5A00] border border-[#F2D3A2]">
-                          오늘수업
-                        </span>
-                      ) : null}
-
-                      {(() => {
-                        const now = DateTime.now().setZone(BUSINESS_TIME_ZONE);
-                        const when = DateTime.fromISO(b.createdAt).setZone(BUSINESS_TIME_ZONE);
-                        const rel = when.toRelative({ base: now });
-                        if (!rel) return null;
-                        const isUnderDay = when > now.minus({ hours: 24 });
-                        return (
-                          <span className="text-[10px] px-2 py-1 rounded-full bg-white/70 text-[#716D64] border border-[#E8DDD4]">
-                            booked{" "}
-                            <span
-                              className={cn(
-                                "transition-colors",
-                                isUnderDay ? "text-[#5B3F35] font-medium" : "text-[#716D64]"
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {(b.status === "confirmed" || b.status === "cancelled") ? (
+                        <div className="relative inline-flex justify-end" ref={openMenuId === b.id ? menuRef : undefined}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenMenuId((prev) =>
+                                prev === b.id ? null : b.id,
+                              )
+                            }
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#E8DDD4] bg-white text-[#716D64] hover:bg-[#FAF8F6] hover:text-[#444444] cursor-pointer"
+                            aria-label="Booking actions"
+                            aria-expanded={openMenuId === b.id}
+                          >
+                            <EllipsisHorizontalIcon className="h-5 w-5" aria-hidden />
+                          </button>
+                          {openMenuId === b.id ? (
+                            <div className="absolute right-0 top-full z-50 mt-1 min-w-[11.5rem] overflow-hidden rounded-2xl border border-[#E8DDD4] bg-white py-1 shadow-[0_8px_24px_rgba(78,56,48,0.12)]">
+                              {b.status === "confirmed" ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="block w-full px-3 py-2.5 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] cursor-pointer"
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      openRescheduleModal(b);
+                                    }}
+                                  >
+                                    Reschedule
+                                  </button>
+                                  {!b.detached ? (
+                                    <button
+                                      type="button"
+                                      className="block w-full px-3 py-2.5 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] cursor-pointer"
+                                      onClick={() => {
+                                        setOpenMenuId(null);
+                                        cancelBookingFromList(b.id)
+                                          .then(() => search())
+                                          .catch((err) =>
+                                            setError(
+                                              err instanceof Error
+                                                ? err.message
+                                                : "Failed to cancel",
+                                            ),
+                                          );
+                                      }}
+                                    >
+                                      Cancel booking
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    className="block w-full px-3 py-2.5 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] cursor-pointer"
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      markNoShowFromList(b.id)
+                                        .then(() => search())
+                                        .catch((err) =>
+                                          setError(
+                                            err instanceof Error
+                                              ? err.message
+                                              : "Failed to mark no-show",
+                                          ),
+                                        );
+                                    }}
+                                  >
+                                    Mark no-show
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="block w-full px-3 py-2.5 text-left text-sm text-[#B42318] hover:bg-[#FCE8E6] cursor-pointer"
+                                  onClick={() => {
+                                    setOpenMenuId(null);
+                                    deleteCancelledBookingFromList(b.id)
+                                      .then(() => search())
+                                      .catch((err) =>
+                                        setError(
+                                          err instanceof Error
+                                            ? err.message
+                                            : "Failed to delete",
+                                        ),
+                                      );
+                                  }}
+                                >
+                                  Delete booking
+                                </button>
                               )}
-                            >
-                              {rel}
-                            </span>
-                          </span>
-                        );
-                      })()}
-
-                      {!!b.detached && (
-                        <span className="text-[10px] px-2 py-1 rounded-full bg-[#FCE8E6] text-[#B42318] border border-[#F1B3B0]">
-                          unassigned
-                        </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[#716D64]">—</span>
                       )}
-                    </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-                    <div className="flex flex-col items-stretch gap-2 w-full">
-                      {b.status === "confirmed" && (
-                        <button
-                          type="button"
-                          onClick={() => openRescheduleModal(b)}
-                          className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition cursor-pointer"
-                        >
-                          Reschedule
-                        </button>
-                      )}
-
-                      {!b.detached && b.status === "confirmed" && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            cancelBookingFromList(b.id)
-                              .then(() => search())
-                              .catch((err) =>
-                                setError(err instanceof Error ? err.message : "Failed to cancel")
-                              );
-                          }}
-                          className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-[#F3ECE6] text-sm hover:brightness-95 transition cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      )}
-
-                      {b.status === "confirmed" && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            markNoShowFromList(b.id)
-                              .then(() => search())
-                              .catch((err) =>
-                                setError(err instanceof Error ? err.message : "Failed to mark no-show")
-                              );
-                          }}
-                          className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
-                        >
-                          No show
-                        </button>
-                      )}
-
-                      {b.status === "cancelled" && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            deleteCancelledBookingFromList(b.id)
-                              .then(() => search())
-                              .catch((err) =>
-                                setError(err instanceof Error ? err.message : "Failed to delete")
-                              );
-                          }}
-                          className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                </div>
-              );
-            })
-          )}
-          <div ref={loadMoreRef} className="h-1" aria-hidden />
-          {loadingMore ? (
-            <div className="py-4 text-center text-xs text-[#716D64]">Loading more…</div>
-          ) : null}
-          {!loading && !loadingMore && visibleItems.length > 0 && !hasMore ? (
-            <div className="py-2 text-center text-xs text-[#716D64]">End of list</div>
-          ) : null}
+      <div ref={loadMoreRef} className="h-1" aria-hidden />
+      {loadingMore ? (
+        <div className="py-3 text-center text-xs text-[#716D64]">
+          Loading more…
         </div>
-      )}
+      ) : null}
+      {!loading && !loadingMore && visibleItems.length > 0 && !hasMore ? (
+        <div className="py-2 text-center text-xs text-[#716D64]">End of list</div>
+      ) : null}
 
       <AdminRescheduleBookingModal
         target={rescheduleTarget}

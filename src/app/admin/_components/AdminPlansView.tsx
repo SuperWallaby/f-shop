@@ -12,9 +12,11 @@ type AdminPlanRow = {
   classCount: number;
   priceRm: number;
   studentPriceRm: number | null;
+  firstTimerPriceRm: number | null;
   listPriceRm: number | null;
   validityDays: number;
   active: boolean;
+  hidden: boolean;
   sortOrder: number;
   detailLines: string[];
   priceNote: string | null;
@@ -24,16 +26,17 @@ type AdminPlanRow = {
 };
 
 const emptyCreate = {
-  code: "",
   title: "",
   cardTitle: "",
   category: "group_mat" as const,
   classCount: 1,
   priceRm: 0,
   studentPriceRm: "" as string | number,
+  firstTimerPriceRm: "" as string | number,
   listPriceRm: "" as string | number,
   validityDays: 30,
   active: true,
+  hidden: false,
   sortOrder: 1000,
   detailLinesText: "",
   priceNote: "",
@@ -41,6 +44,10 @@ const emptyCreate = {
   promotionDiscount: "",
   promotionLabel: "",
 };
+
+const DETAIL_LINES_PLACEHOLDER = `1 Month Validity
+Non-shareable
+Non-refundable`;
 
 export function AdminPlansView() {
   const [plans, setPlans] = useState<AdminPlanRow[]>([]);
@@ -97,6 +104,11 @@ export function AdminPlansView() {
       createDraft.studentPriceRm === "" || createDraft.studentPriceRm === undefined
         ? undefined
         : Number(createDraft.studentPriceRm);
+    const firstTimer =
+      createDraft.firstTimerPriceRm === "" ||
+      createDraft.firstTimerPriceRm === undefined
+        ? undefined
+        : Number(createDraft.firstTimerPriceRm);
     const list =
       createDraft.listPriceRm === "" || createDraft.listPriceRm === undefined
         ? undefined
@@ -110,22 +122,27 @@ export function AdminPlansView() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          code: createDraft.code.trim(),
           title: createDraft.title.trim(),
           cardTitle: createDraft.cardTitle.trim() || null,
           category: createDraft.category,
           classCount: createDraft.classCount,
           priceRm: createDraft.priceRm,
           studentPriceRm: student ?? null,
+          firstTimerPriceRm: firstTimer ?? null,
           listPriceRm: list ?? null,
           validityDays: createDraft.validityDays,
           active: createDraft.active,
+          hidden: createDraft.hidden,
           sortOrder: createDraft.sortOrder,
           detailLines: detailLines.length ? detailLines : undefined,
           priceNote: createDraft.priceNote.trim() || null,
           promotionActive: createDraft.promotionActive,
-          promotionDiscount: createDraft.promotionDiscount.trim() || null,
-          promotionLabel: createDraft.promotionLabel.trim() || null,
+          promotionDiscount: createDraft.promotionActive
+            ? createDraft.promotionDiscount.trim() || null
+            : null,
+          promotionLabel: createDraft.promotionActive
+            ? createDraft.promotionLabel.trim() || null
+            : null,
         }),
       });
       const json = await res.json();
@@ -146,9 +163,11 @@ export function AdminPlansView() {
         <h2 className="font-serif text-2xl font-semibold">Plans</h2>
         <p className="text-xs text-[#716D64] mt-1">
           Packages shown on the website, booking, and WhatsApp checkout. Use{" "}
-          <span className="font-medium text-[#444444]">In-group title</span> for the short line under
-          each category (e.g. Single Class); full title is still used for WhatsApp messages and orders.
-          New codes are inserted once from defaults; edits here are kept.
+          <span className="font-medium text-[#444444]">Hidden</span> to keep a plan available in
+          admin/sales while hiding it from customers.{" "}
+          <span className="font-medium text-[#444444]">In-group title</span> is the short line under
+          each category (e.g. Single Class); full title is still used for WhatsApp messages and
+          orders. New codes are inserted once from defaults; edits here are kept.
         </p>
       </div>
 
@@ -162,6 +181,7 @@ export function AdminPlansView() {
             <thead className="bg-[#FAF8F6] text-left text-xs text-[#716D64] uppercase tracking-wide">
               <tr>
                 <th className="px-3 py-2">Active</th>
+                <th className="px-3 py-2">Hidden</th>
                 <th className="px-3 py-2">Sort</th>
                 <th className="px-3 py-2">Code</th>
                 <th className="px-3 py-2">Full title</th>
@@ -198,15 +218,6 @@ export function AdminPlansView() {
         {createOpen ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 max-w-3xl">
             <label className="grid gap-1 sm:col-span-2">
-              <span className="text-xs text-[#716D64]">Code (unique)</span>
-              <input
-                value={createDraft.code}
-                onChange={(e) => setCreateDraft((d) => ({ ...d, code: e.target.value }))}
-                className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
-                placeholder="e.g. custom-pack-5"
-              />
-            </label>
-            <label className="grid gap-1 sm:col-span-2">
               <span className="text-xs text-[#716D64]">
                 Full title (WhatsApp, orders — e.g. Group Mat - 4 Classes)
               </span>
@@ -215,6 +226,9 @@ export function AdminPlansView() {
                 onChange={(e) => setCreateDraft((d) => ({ ...d, title: e.target.value }))}
                 className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
               />
+              <span className="text-[11px] text-[#716D64]">
+                Code is generated automatically from the title.
+              </span>
             </label>
             <label className="grid gap-1">
               <span className="text-xs text-[#716D64]">
@@ -240,7 +254,9 @@ export function AdminPlansView() {
                 className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
               >
                 <option value="group_mat">group_mat</option>
+                <option value="mat_private">mat_private</option>
                 <option value="reformer_private">reformer_private</option>
+                <option value="pre_post_reformer">pre_post_reformer</option>
                 <option value="duet">duet</option>
                 <option value="reformer_group">reformer_group</option>
               </select>
@@ -283,6 +299,24 @@ export function AdminPlansView() {
               />
             </label>
             <label className="grid gap-1">
+              <span className="text-xs text-[#716D64]">
+                First-timer price RM (optional)
+              </span>
+              <input
+                type="number"
+                min={0}
+                value={createDraft.firstTimerPriceRm}
+                onChange={(e) =>
+                  setCreateDraft((d) => ({
+                    ...d,
+                    firstTimerPriceRm: e.target.value,
+                  }))
+                }
+                className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
+                placeholder="empty = none"
+              />
+            </label>
+            <label className="grid gap-1">
               <span className="text-xs text-[#716D64]">List price RM (strike, optional)</span>
               <input
                 type="number"
@@ -315,6 +349,9 @@ export function AdminPlansView() {
                 }
                 className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
               />
+              <span className="text-[11px] text-[#716D64]">
+                Lower numbers appear first within a category (e.g. 10, 20, 30).
+              </span>
             </label>
             <label className="grid gap-1 sm:col-span-2">
               <span className="text-xs text-[#716D64]">Detail lines (one per line)</span>
@@ -324,6 +361,7 @@ export function AdminPlansView() {
                   setCreateDraft((d) => ({ ...d, detailLinesText: e.target.value }))
                 }
                 rows={4}
+                placeholder={DETAIL_LINES_PLACEHOLDER}
                 className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm font-mono"
               />
             </label>
@@ -345,36 +383,49 @@ export function AdminPlansView() {
               />
               <span className="text-xs text-[#716D64]">Promotion badge</span>
             </div>
-            <label className="grid gap-1">
-              <span className="text-xs text-[#716D64]">Promo discount text</span>
-              <input
-                value={createDraft.promotionDiscount}
-                onChange={(e) =>
-                  setCreateDraft((d) => ({ ...d, promotionDiscount: e.target.value }))
-                }
-                className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-xs text-[#716D64]">Promo label</span>
-              <input
-                value={createDraft.promotionLabel}
-                onChange={(e) =>
-                  setCreateDraft((d) => ({ ...d, promotionLabel: e.target.value }))
-                }
-                className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
-              />
-            </label>
-            <div className="flex items-center gap-2 sm:col-span-2">
+            {createDraft.promotionActive ? (
+              <>
+                <label className="grid gap-1">
+                  <span className="text-xs text-[#716D64]">Promo discount text</span>
+                  <input
+                    value={createDraft.promotionDiscount}
+                    onChange={(e) =>
+                      setCreateDraft((d) => ({ ...d, promotionDiscount: e.target.value }))
+                    }
+                    className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
+                    placeholder="e.g. 20% off"
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-xs text-[#716D64]">Promo label</span>
+                  <input
+                    value={createDraft.promotionLabel}
+                    onChange={(e) =>
+                      setCreateDraft((d) => ({ ...d, promotionLabel: e.target.value }))
+                    }
+                    className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
+                    placeholder="e.g. Limited offer"
+                  />
+                </label>
+              </>
+            ) : null}
+            <div className="flex items-center gap-2">
               <Switch
                 checked={createDraft.active}
                 onCheckedChange={(v) => setCreateDraft((d) => ({ ...d, active: Boolean(v) }))}
               />
               <span className="text-xs text-[#716D64]">Active</span>
             </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={createDraft.hidden}
+                onCheckedChange={(v) => setCreateDraft((d) => ({ ...d, hidden: Boolean(v) }))}
+              />
+              <span className="text-xs text-[#716D64]">Hidden from customers</span>
+            </div>
             <button
               type="button"
-              disabled={createSaving || !createDraft.code.trim() || !createDraft.title.trim()}
+              disabled={createSaving || !createDraft.title.trim()}
               onClick={() => void submitCreate()}
               className="sm:col-span-2 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 disabled:opacity-50"
             >
@@ -405,6 +456,9 @@ function PlanEditRow({
   const [studentRm, setStudentRm] = useState(
     plan.studentPriceRm != null ? String(plan.studentPriceRm) : "",
   );
+  const [firstTimerRm, setFirstTimerRm] = useState(
+    plan.firstTimerPriceRm != null ? String(plan.firstTimerPriceRm) : "",
+  );
   const [listRm, setListRm] = useState(plan.listPriceRm != null ? String(plan.listPriceRm) : "");
   const [validityDays, setValidityDays] = useState(plan.validityDays);
   const [sortOrder, setSortOrder] = useState(plan.sortOrder);
@@ -421,6 +475,9 @@ function PlanEditRow({
     setClassCount(plan.classCount);
     setPriceRm(plan.priceRm);
     setStudentRm(plan.studentPriceRm != null ? String(plan.studentPriceRm) : "");
+    setFirstTimerRm(
+      plan.firstTimerPriceRm != null ? String(plan.firstTimerPriceRm) : "",
+    );
     setListRm(plan.listPriceRm != null ? String(plan.listPriceRm) : "");
     setValidityDays(plan.validityDays);
     setSortOrder(plan.sortOrder);
@@ -443,14 +500,15 @@ function PlanEditRow({
       classCount,
       priceRm,
       studentPriceRm: studentRm === "" ? null : Number(studentRm),
+      firstTimerPriceRm: firstTimerRm === "" ? null : Number(firstTimerRm),
       listPriceRm: listRm === "" ? null : Number(listRm),
       validityDays,
       sortOrder,
       detailLines,
       priceNote: priceNote.trim() || null,
       promotionActive: promoActive,
-      promotionDiscount: promoDiscount.trim() || null,
-      promotionLabel: promoLabel.trim() || null,
+      promotionDiscount: promoActive ? promoDiscount.trim() || null : null,
+      promotionLabel: promoActive ? promoLabel.trim() || null : null,
     });
   }
 
@@ -461,6 +519,13 @@ function PlanEditRow({
           <Switch
             checked={plan.active}
             onCheckedChange={(v) => onPatch({ active: Boolean(v) })}
+            disabled={saving}
+          />
+        </td>
+        <td className="px-3 py-2">
+          <Switch
+            checked={plan.hidden}
+            onCheckedChange={(v) => onPatch({ hidden: Boolean(v) })}
             disabled={saving}
           />
         </td>
@@ -492,7 +557,7 @@ function PlanEditRow({
       </tr>
       {open ? (
         <tr className="bg-[#FAF8F6]/80">
-          <td colSpan={10} className="px-4 py-4">
+          <td colSpan={11} className="px-4 py-4">
             <div className="grid gap-3 sm:grid-cols-2 max-w-3xl">
               <label className="grid gap-1 sm:col-span-2">
                 <span className="text-xs text-[#716D64]">
@@ -523,7 +588,9 @@ function PlanEditRow({
                   className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
                 >
                   <option value="group_mat">group_mat</option>
+                  <option value="mat_private">mat_private</option>
                   <option value="reformer_private">reformer_private</option>
+                  <option value="pre_post_reformer">pre_post_reformer</option>
                   <option value="duet">duet</option>
                   <option value="reformer_group">reformer_group</option>
                 </select>
@@ -559,6 +626,16 @@ function PlanEditRow({
                 />
               </label>
               <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">First-timer RM</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={firstTimerRm}
+                  onChange={(e) => setFirstTimerRm(e.target.value)}
+                  className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="grid gap-1">
                 <span className="text-xs text-[#716D64]">List RM (strike)</span>
                 <input
                   type="number"
@@ -587,13 +664,17 @@ function PlanEditRow({
                   onChange={(e) => setSortOrder(Number(e.target.value))}
                   className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
                 />
+                <span className="text-[11px] text-[#716D64]">
+                  Lower numbers appear first within a category (e.g. 10, 20, 30).
+                </span>
               </label>
               <label className="grid gap-1 sm:col-span-2">
-                <span className="text-xs text-[#716D64]">Detail lines</span>
+                <span className="text-xs text-[#716D64]">Detail lines (one per line)</span>
                 <textarea
                   value={detailText}
                   onChange={(e) => setDetailText(e.target.value)}
                   rows={4}
+                  placeholder={DETAIL_LINES_PLACEHOLDER}
                   className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm font-mono"
                 />
               </label>
@@ -603,28 +684,35 @@ function PlanEditRow({
                   value={priceNote}
                   onChange={(e) => setPriceNote(e.target.value)}
                   className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
+                  placeholder="/ per head"
                 />
               </label>
               <div className="flex items-center gap-2 pt-6">
                 <Switch checked={promoActive} onCheckedChange={(v) => setPromoActive(Boolean(v))} />
                 <span className="text-xs text-[#716D64]">Promo badge</span>
               </div>
-              <label className="grid gap-1">
-                <span className="text-xs text-[#716D64]">Promo discount</span>
-                <input
-                  value={promoDiscount}
-                  onChange={(e) => setPromoDiscount(e.target.value)}
-                  className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs text-[#716D64]">Promo label</span>
-                <input
-                  value={promoLabel}
-                  onChange={(e) => setPromoLabel(e.target.value)}
-                  className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
-                />
-              </label>
+              {promoActive ? (
+                <>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[#716D64]">Promo discount</span>
+                    <input
+                      value={promoDiscount}
+                      onChange={(e) => setPromoDiscount(e.target.value)}
+                      className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
+                      placeholder="e.g. 20% off"
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[#716D64]">Promo label</span>
+                    <input
+                      value={promoLabel}
+                      onChange={(e) => setPromoLabel(e.target.value)}
+                      className="rounded-xl border border-[#E8DDD4] px-3 py-2 text-sm"
+                      placeholder="e.g. Limited offer"
+                    />
+                  </label>
+                </>
+              ) : null}
               <button
                 type="button"
                 disabled={saving || !title.trim()}

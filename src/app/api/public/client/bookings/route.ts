@@ -9,24 +9,50 @@ import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { minutesToUtcIso } from "@/lib/time";
 import type { DateKey } from "@/lib/time";
 
+const MIN_CANCEL_NOTICE_HOURS = 6;
+
 export async function GET(req: NextRequest) {
   try {
     const clientId = getClientIdFromRequest(req);
     if (!clientId) return jsonError("Sign in required", 401);
 
-    const todayKey = DateTime.now()
-      .setZone(BUSINESS_TIME_ZONE)
-      .toFormat("yyyy-MM-dd");
+    const { searchParams } = new URL(req.url);
+    const scope = searchParams.get("scope") === "history" ? "history" : "upcoming";
 
-    const { bookings, items } = await getCollections();
+    const now = DateTime.now().setZone(BUSINESS_TIME_ZONE);
+    const todayKey = now.toFormat("yyyy-MM-dd");
+
+    const { bookings, items, clients } = await getCollections();
+    const client = await clients.findOne({ _id: clientId });
+    if (!client) return jsonError("Sign in required", 401);
+
+    const emailLower = (client.email ?? "").trim().toLowerCase();
+    const ownershipFilter = {
+      $or: [
+        { clientId },
+        ...(emailLower
+          ? [{ email: new RegExp(`^${emailLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }]
+          : []),
+      ],
+    };
+
+    const filter =
+      scope === "upcoming"
+        ? {
+            ...ownershipFilter,
+            status: "confirmed" as const,
+            dateKey: { $gte: todayKey },
+          }
+        : ownershipFilter;
+
     const docs = await bookings
-      .find({
-        clientId,
-        status: "confirmed",
-        dateKey: { $gte: todayKey },
-      })
-      .sort({ dateKey: 1, startMin: 1 })
-      .limit(20)
+      .find(filter)
+      .sort(
+        scope === "upcoming"
+          ? { dateKey: 1, startMin: 1 }
+          : { dateKey: -1, startMin: -1 },
+      )
+      .limit(scope === "upcoming" ? 20 : 50)
       .toArray();
 
     const itemIds = Array.from(
@@ -48,7 +74,15 @@ export async function GET(req: NextRequest) {
     const out = docs.map((b) => {
       const typedDateKey = toDateKey.parse(b.dateKey) as DateKey;
       const tz = b.businessTimeZone || BUSINESS_TIME_ZONE;
+      const start = DateTime.fromISO(b.dateKey, { zone: tz })
+        .startOf("day")
+        .plus({ minutes: b.startMin });
+      const hoursUntil = start.diff(now, "hours").hours;
+      const canCancel =
+        b.status === "confirmed" && hoursUntil >= MIN_CANCEL_NOTICE_HOURS;
+
       return {
+        id: b._id?.toHexString() ?? "",
         code: b.code ?? "",
         status: b.status,
         dateKey: b.dateKey,
@@ -57,10 +91,17 @@ export async function GET(req: NextRequest) {
         className: itemNameById.get(b.itemId.toHexString()) ?? "",
         startUtc: minutesToUtcIso(typedDateKey, b.startMin, tz),
         endUtc: minutesToUtcIso(typedDateKey, b.endMin, tz),
+        canCancel,
+        cancelBlockedReason:
+          b.status !== "confirmed"
+            ? null
+            : hoursUntil < MIN_CANCEL_NOTICE_HOURS
+              ? `Cancellation is allowed up to ${MIN_CANCEL_NOTICE_HOURS} hours before the session.`
+              : null,
       };
     });
 
-    return jsonOk({ items: out });
+    return jsonOk({ items: out, scope });
   } catch (e) {
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);
   }

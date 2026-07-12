@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import "react-day-picker/style.css";
+@source "../**/*.{js,ts,jsx,tsx,mdx}";
+@config "../../tailwind.config.js";
 
 :root {
   /* Legacy shell bg (booking / marketing) — DESIGN.md “tonal clay” */
@@ -28,8 +29,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --color-fasea-primary: var(--fasea-primary);
   --color-fasea-on-primary: var(--fasea-on-primary);
@@ -60,36 +61,6 @@ body {
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* react-day-picker theme overrides (remove default blue) */
-.rdp-root,
-.rdp {
-  --rdp-accent-color: var(--fasea-secondary); /* replaces default blue */
-  --rdp-accent-background-color: var(--fasea-tonal);
-  --rdp-today-color: var(--fasea-primary);
-
-  /* Make range/selected styling match the brand palette */
-  --rdp-selected-border: 2px solid rgba(223, 209, 201, 0.95);
-  --rdp-range_middle-background-color: rgba(223, 209, 201, 0.45);
-  --rdp-range_start-date-background-color: #716D64;
-  --rdp-range_end-date-background-color: #716D64;
-  --rdp-range_start-color: #FAF8F6;
-  --rdp-range_end-color: #FAF8F6;
-
-  /* Slightly smaller cells to match existing UI density */
-  --rdp-day-height: 40px;
-  --rdp-day-width: 40px;
-  --rdp-day_button-height: 38px;
-  --rdp-day_button-width: 38px;
-}
-
-.rdp-root .rdp-day_button:hover:not(:disabled) {
-  background-color: rgba(223, 209, 201, 0.35);
-}
-
-.rdp-root .rdp-day_button:focus-visible {
-  outline: 2px solid rgba(223, 209, 201, 0.85);
-  outline-offset: 2px;
-}
 
 
 /* globals.css */

@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:fresh": "rm -rf .next && next dev",
+    "clear": "rm -rf .next",
     "app": "node apps/mobile/tool/dev_watch.mjs",
     "dev:turbopack": "next dev",
     "build": "next build",
@@ -20,7 +22,9 @@
     "@heroicons/react": "^2.2.0",
     "@react-icons/all-files": "^4.1.0",
     "date-fns": "^4.1.0",
+    "firebase-admin": "^14.1.0",
     "gasp": "^0.0.2",
+    "html-to-image": "^1.11.13",
     "jose": "^5.9.6",
     "luxon": "^3.7.2",
     "mongodb": "^6.12.0",

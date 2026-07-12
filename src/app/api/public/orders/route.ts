@@ -8,6 +8,7 @@ import {
   ensureDefaultPlans,
   getOrderAmountForClient,
 } from "@/lib/credits";
+import { applyPromotionDiscount, findPromotionForPlanId } from "@/lib/sales";
 import { requireClient } from "@/app/api/_utils/clientAuth";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
 
@@ -23,17 +24,24 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return jsonError("Invalid body", 400, parsed.error.flatten());
     if (!ObjectId.isValid(parsed.data.planId)) return jsonError("Invalid planId", 400);
 
-    const { clients, plans, orders } = await getCollections();
+    const { clients, plans, orders, promotions } = await getCollections();
     await ensureDefaultPlans(plans);
-    const [client, plan] = await Promise.all([
+    const [client, plan, promoDocs] = await Promise.all([
       clients.findOne({ _id: clientId! }),
-      plans.findOne({ _id: new ObjectId(parsed.data.planId), active: true }),
+      plans.findOne({
+        _id: new ObjectId(parsed.data.planId),
+        active: true,
+        hidden: { $ne: true },
+      }),
+      promotions.find({ active: true }).sort({ sortOrder: 1 }).toArray(),
     ]);
     if (!client) return jsonError("Client not found", 404);
     if (!plan) return jsonError("Plan not found", 404);
 
     const now = new Date();
-    const amountRm = getOrderAmountForClient(plan, client);
+    const promo = findPromotionForPlanId(plan._id!.toHexString(), promoDocs);
+    const listAmount = getOrderAmountForClient(plan, client);
+    const amountRm = applyPromotionDiscount(listAmount, promo);
     const draft = {
       orderRef: createOrderRef(),
       clientId: client._id!,

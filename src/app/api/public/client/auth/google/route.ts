@@ -1,13 +1,30 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  attachOAuthReturnCookie,
+  resolveOAuthReturnTo,
+} from "@/lib/oauthReturn";
 
 const STATE_COOKIE = "google_oauth_state";
 
 export async function GET(req: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const origin = new URL(req.url).origin;
+  const returnOrigin = resolveOAuthReturnTo(
+    req.nextUrl.searchParams.get("returnTo"),
+  );
+  const fail = (code: string) =>
+    NextResponse.redirect(
+      new URL(
+        returnOrigin
+          ? `/?authErr=${encodeURIComponent(code)}`
+          : `/booking?authErr=${encodeURIComponent(code)}`,
+        returnOrigin ?? origin,
+      ),
+    );
+
   if (!clientId) {
-    return NextResponse.redirect(new URL("/booking?authErr=google_unconfigured", origin));
+    return fail("google_unconfigured");
   }
 
   const redirectUri = `${origin}/api/public/client/auth/google/callback`;
@@ -21,7 +38,9 @@ export async function GET(req: NextRequest) {
     access_type: "online",
     prompt: "select_account",
   });
-  const res = NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  const res = NextResponse.redirect(
+    `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+  );
   res.cookies.set(STATE_COOKIE, state, {
     httpOnly: true,
     sameSite: "lax",
@@ -29,5 +48,5 @@ export async function GET(req: NextRequest) {
     path: "/",
     maxAge: 600,
   });
-  return res;
+  return attachOAuthReturnCookie(res, returnOrigin);
 }

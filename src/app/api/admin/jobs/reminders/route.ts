@@ -10,6 +10,9 @@ import {
   sendAdminWhatsAppNotification,
   sendBookingReminderWhatsApp,
 } from "@/lib/twilioWhatsApp";
+import { listPushTokensForClient } from "@/lib/pushTokens";
+import { sendClassReminderPush } from "@/lib/pushNotifications";
+import { formatKlParts } from "@/lib/bookingMessages";
 
 function allowJob(req: NextRequest) {
   if (req.headers.get("x-vercel-cron") === "1") return null;
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
       req.nextUrl.searchParams.get("dateKey") ||
       DateTime.now().setZone(tz).plus({ days: 1 }).toISODate()!;
 
-    const { bookings } = await getCollections();
+    const { bookings, items } = await getCollections();
 
     const docs = await bookings
       .find(
@@ -53,6 +56,8 @@ export async function POST(req: NextRequest) {
             email: 1,
             whatsapp: 1,
             itemId: 1,
+            clientId: 1,
+            code: 1,
             dateKey: 1,
             startMin: 1,
             endMin: 1,
@@ -94,6 +99,31 @@ export async function POST(req: NextRequest) {
             businessTimeZone: bTz,
           });
           okAny = true;
+        }
+      } catch {
+        // ignore
+      }
+
+      try {
+        if (b.clientId) {
+          const tokens = await listPushTokensForClient(b.clientId);
+          if (tokens.length > 0) {
+            const item = await items.findOne({ _id: b.itemId });
+            const parts = formatKlParts({
+              dateKey: b.dateKey,
+              startMin: b.startMin,
+              endMin: b.endMin,
+              tz: bTz,
+            });
+            await sendClassReminderPush({
+              tokens,
+              className: item?.name ?? "Class",
+              dateLabel: parts.dateLabel,
+              timeLabel: parts.timeLabel,
+              bookingCode: b.code ?? "",
+            });
+            okAny = true;
+          }
         }
       } catch {
         // ignore

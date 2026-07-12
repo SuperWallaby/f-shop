@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { MongoServerError } from "mongodb";
-import { getCollections } from "@/lib/db";
-import { makeCustomerKey } from "@/lib/credits";
+import { upsertClientFromGoogle } from "@/lib/googleClientAuth";
 import { setClientSessionCookie } from "@/lib/clientSession";
+import {
+  clearOAuthReturnCookie,
+  oauthFailRedirect,
+  oauthSuccessRedirect,
+  readOAuthReturnTo,
+} from "@/lib/oauthReturn";
 
 const STATE_COOKIE = "google_oauth_state";
 
 type GoogleTokenResponse = {
   access_token?: string;
+  id_token?: string;
   error?: string;
 };
 
 type GoogleUserInfo = {
+  sub?: string;
   email?: string;
   name?: string;
   given_name?: string;
@@ -20,7 +26,15 @@ type GoogleUserInfo = {
 
 export async function GET(req: NextRequest) {
   const origin = new URL(req.url).origin;
-  const fail = (code: string) => NextResponse.redirect(new URL(`/booking?authErr=${encodeURIComponent(code)}`, origin));
+  const returnOrigin = readOAuthReturnTo(req);
+  const fail = (code: string) => {
+    const res = NextResponse.redirect(
+      oauthFailRedirect(origin, code, returnOrigin),
+    );
+    res.cookies.delete(STATE_COOKIE);
+    clearOAuthReturnCookie(res);
+    return res;
+  };
 
   const cookieState = req.cookies.get(STATE_COOKIE)?.value;
   const url = new URL(req.url);
@@ -62,58 +76,29 @@ export async function GET(req: NextRequest) {
   });
   const user = (await userRes.json()) as GoogleUserInfo;
   const email = (user.email ?? "").trim().toLowerCase();
-  if (!email || !userRes.ok) {
+  const sub = (user.sub ?? "").trim();
+  if (!email || !sub || !userRes.ok) {
     return fail("google_email");
   }
 
-  const displayName =
-    (user.name ?? "").trim() ||
-    [user.given_name, user.family_name].filter(Boolean).join(" ").trim() ||
-    email.split("@")[0] ||
-    "Member";
+  try {
+    const clientObjectId = await upsertClientFromGoogle({
+      sub,
+      email,
+      name: user.name,
+      given_name: user.given_name,
+      family_name: user.family_name,
+    });
 
-  const { clients } = await getCollections();
-  const now = new Date();
-  let client = await clients.findOne({ email });
-
-  if (!client) {
-    const customerKey = makeCustomerKey({ email });
-    try {
-      const ins = await clients.insertOne({
-        customerKey,
-        name: displayName,
-        email,
-        whatsapp: "",
-        studentStatus: "none" as const,
-        createdAt: now,
-        updatedAt: now,
-        lastLoginAt: now,
-      });
-      client = await clients.findOne({ _id: ins.insertedId });
-    } catch (e) {
-      if (e instanceof MongoServerError && e.code === 11000) {
-        client = await clients.findOne({ email });
-      } else {
-        throw e;
-      }
-    }
+    const res = NextResponse.redirect(
+      oauthSuccessRedirect(origin, returnOrigin),
+    );
+    res.cookies.delete(STATE_COOKIE);
+    clearOAuthReturnCookie(res);
+    return setClientSessionCookie(res, clientObjectId, req, {
+      crossOrigin: Boolean(returnOrigin),
+    });
+  } catch {
+    return fail("google_account");
   }
-
-  if (!client) return fail("google_account");
-
-  await clients.updateOne(
-   { _id: client._id },
-   {
-    $set: {
-     email,
-     lastLoginAt: now,
-     updatedAt: now,
-     ...(String(client.name ?? "").trim().length === 0 ? { name: displayName } : {}),
-    },
-   },
-  );
-
-  const res = NextResponse.redirect(new URL("/booking", origin));
-  res.cookies.delete(STATE_COOKIE);
-  return setClientSessionCookie(res, client._id!);
 }

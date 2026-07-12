@@ -1,5 +1,9 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  attachOAuthReturnCookie,
+  resolveOAuthReturnTo,
+} from "@/lib/oauthReturn";
 
 const STATE_COOKIE = "apple_oauth_state";
 
@@ -9,11 +13,21 @@ export async function GET(req: NextRequest) {
   const keyId = process.env.APPLE_KEY_ID;
   const privateKey = process.env.APPLE_PRIVATE_KEY;
   const origin = new URL(req.url).origin;
-  const missingCfg = () =>
-    NextResponse.redirect(new URL("/booking?authErr=apple_unconfigured", origin));
+  const returnOrigin = resolveOAuthReturnTo(
+    req.nextUrl.searchParams.get("returnTo"),
+  );
+  const fail = (code: string) =>
+    NextResponse.redirect(
+      new URL(
+        returnOrigin
+          ? `/?authErr=${encodeURIComponent(code)}`
+          : `/booking?authErr=${encodeURIComponent(code)}`,
+        returnOrigin ?? origin,
+      ),
+    );
 
   if (!clientId || !teamId || !keyId || !privateKey?.trim()) {
-    return missingCfg();
+    return fail("apple_unconfigured");
   }
 
   const redirectUri = `${origin}/api/public/client/auth/apple/callback`;
@@ -37,5 +51,5 @@ export async function GET(req: NextRequest) {
     path: "/",
     maxAge: 600,
   });
-  return res;
+  return attachOAuthReturnCookie(res, returnOrigin);
 }

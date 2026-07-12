@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       client: publicClient(fresh),
       balance,
     });
-    return setClientSessionCookie(res, fresh._id!);
+    return setClientSessionCookie(res, fresh._id!, req);
   } catch (e) {
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);
   }

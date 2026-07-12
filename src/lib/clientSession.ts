@@ -1,6 +1,8 @@
 import crypto from "crypto";
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { isAllowedFlutterWebOrigin } from "@/lib/devPorts";
 import { optionalEnv, requireEnv } from "./env";
 
 export const CLIENT_COOKIE_NAME = "client_session";
@@ -61,25 +63,62 @@ export function verifyClientSessionValue(value: string | undefined): ObjectId | 
   }
 }
 
-const CLIENT_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 400; // ~400 days; no server-side token expiry
+const CLIENT_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 730; // ~2 years; sliding refresh on /me
 
-export function setClientSessionCookie(res: NextResponse, clientId: ObjectId): NextResponse {
-  res.cookies.set(CLIENT_COOKIE_NAME, createClientSessionValue(clientId), {
+type SessionCookieOpts = {
+  /** OAuth callback returning to Flutter web (no Origin header on redirect). */
+  crossOrigin?: boolean;
+};
+
+export function usesCrossOriginClientSession(
+  req?: NextRequest,
+  opts?: SessionCookieOpts,
+): boolean {
+  if (opts?.crossOrigin) return true;
+  if (!req) return false;
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try {
+    const apiOrigin = new URL(req.url).origin;
+    if (origin === apiOrigin) return false;
+    return isAllowedFlutterWebOrigin(origin);
+  } catch {
+    return false;
+  }
+}
+
+function sessionCookieAttributes(req?: NextRequest, opts?: SessionCookieOpts) {
+  const crossOrigin = usesCrossOriginClientSession(req, opts);
+  return {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: CLIENT_SESSION_MAX_AGE_SEC,
+    sameSite: (crossOrigin ? "none" : "lax") as "lax" | "none",
+    secure: crossOrigin || process.env.NODE_ENV === "production",
+  };
+}
+
+export function setClientSessionCookie(
+  res: NextResponse,
+  clientId: ObjectId,
+  req?: NextRequest,
+  opts?: SessionCookieOpts,
+): NextResponse {
+  const maxAge = CLIENT_SESSION_MAX_AGE_SEC;
+  res.cookies.set(CLIENT_COOKIE_NAME, createClientSessionValue(clientId), {
+    ...sessionCookieAttributes(req, opts),
+    maxAge,
+    expires: new Date(Date.now() + maxAge * 1000),
   });
   return res;
 }
 
-export function clearClientSessionCookie(res: NextResponse): NextResponse {
+export function clearClientSessionCookie(
+  res: NextResponse,
+  req?: NextRequest,
+  opts?: SessionCookieOpts,
+): NextResponse {
   res.cookies.set(CLIENT_COOKIE_NAME, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
+    ...sessionCookieAttributes(req, opts),
     maxAge: 0,
   });
   return res;

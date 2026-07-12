@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const NAV_ITEMS = ["About", "Plan", "Contact", "Book"];
+const NAV_ITEMS = ["Plan", "Contact", "Book"];
 
 export const NavButtons = () => {
  const [navSolid, setNavSolid] = useState(false);
@@ -17,10 +17,6 @@ export const NavButtons = () => {
  }, []);
 
  const handleClick = (id: string) => {
-  if (id === "About") {
-   window.location.href = "/about";
-   return;
-  }
   if (id === "Book") {
    window.location.href = "/booking";
    return;

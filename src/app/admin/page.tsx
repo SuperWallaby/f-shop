@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import SiteHeader from "@/components/SiteHeader";
 import { DayPicker } from "react-day-picker";
+import "@/styles/day-picker.css";
 import { DateTime } from "luxon";
 import { BUSINESS_TIME_ZONE, DEFAULT_CAPACITY } from "@/lib/constants";
 import { cn } from "@/lib/cn";
-import { TabButton } from "./_components/TabButton";
 import { ItemSelectField } from "./_components/ItemSelectField";
 import { Skeleton, SkeletonButton, SkeletonLine } from "./_components/Skeleton";
 import { Switch } from "@/components/Switch";
@@ -14,6 +14,15 @@ import { normalizeHexColor, pickUnusedPastelRandom } from "@/lib/itemColor";
 import { AdminBookingsView } from "./_components/AdminBookingsView";
 import { AdminCalendarView } from "./_components/AdminCalendarView";
 import { AdminClientsView } from "./_components/AdminClientsView";
+import { AdminSalesView } from "./_components/AdminSalesView";
+import { AdminPromotionsView } from "./_components/AdminPromotionsView";
+import { AdminExpiryView } from "./_components/AdminExpiryView";
+import { AdminPlansView } from "./_components/AdminPlansView";
+import {
+  AdminNavMenu,
+  AdminSidebar,
+  adminNavLabel,
+} from "./_components/AdminNavMenu";
 import { Pill } from "./_components/Pill";
 import type { AdminDaySlot } from "./_lib/types";
 import {
@@ -83,8 +92,12 @@ export default function AdminPage() {
         "time",
         "config",
         "items",
+        "plans",
         "calendar",
         "clients",
+        "sales",
+        "promotions",
+        "expiry",
         "settings",
         "bookings",
       ] as const,
@@ -971,40 +984,40 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF8F6] text-[#444444] px-6 py-24">
-      <SiteHeader />
-      <main className="max-w-5xl mx-auto mt-16 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="font-serif text-3xl font-bold">Admin</h1>
-          <button
-            onClick={logout}
-            className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition"
-          >
-            Logout
-          </button>
-        </div>
+    <div className="min-h-screen bg-[#FAF8F6] text-[#444444]">
+      <div className="px-6 pt-24">
+        <SiteHeader />
+      </div>
 
-        <div className="flex gap-2 flex-wrap">
-          {(
-            [
-              { key: "time", label: "Time manage" },
-              { key: "config", label: "Pattern" },
-              { key: "items", label: "Class Types" },
-              { key: "calendar", label: "Calendar" },
-              { key: "clients", label: "Clients & credits" },
-              { key: "settings", label: "Settings" },
-              { key: "bookings", label: "Bookings" },
-            ] as const
-          ).map((t) => (
-            <TabButton
-              key={t.key}
-              active={tab === t.key}
-              onClick={() => setTabSafe(t.key)}
+      <div className="mt-10 md:mt-12 px-6 pb-24 flex flex-col md:flex-row md:items-start md:gap-8 max-w-[1400px] mx-auto">
+        <AdminSidebar
+          activeKey={tab}
+          onSelect={(key) => setTabSafe(key as TabKey)}
+        />
+
+        <main className="min-w-0 flex-1 space-y-6 w-full">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <AdminNavMenu
+                activeKey={tab}
+                onSelect={(key) => setTabSafe(key as TabKey)}
+              />
+              <div className="min-w-0">
+                <h1 className="font-serif text-3xl font-bold leading-tight">
+                  Admin
+                </h1>
+                <p className="text-sm text-[#716D64] truncate md:hidden">
+                  {adminNavLabel(tab)}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={logout}
+              className="shrink-0 px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition"
             >
-              {t.label}
-            </TabButton>
-          ))}
-        </div>
+              Logout
+            </button>
+          </div>
 
         {tab === "time" ? (
           <div className="grid gap-8 md:grid-cols-[360px_1fr] items-start">
@@ -2508,10 +2521,21 @@ export default function AdminPage() {
               ) : null}
             </div>
           </section>
+        ) : tab === "sales" ? (
+          <AdminSalesView />
+        ) : tab === "promotions" ? (
+          <AdminPromotionsView />
+        ) : tab === "plans" ? (
+          <AdminPlansView />
+        ) : tab === "expiry" ? (
+          <AdminExpiryView />
+        ) : tab === "bookings" ? (
+          <AdminBookingsView />
         ) : (
           <AdminBookingsView />
         )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

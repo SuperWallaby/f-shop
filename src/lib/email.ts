@@ -283,3 +283,30 @@ export async function sendNoShowEmail(args: {
   });
 }
 
+export async function sendDataDeletionRequestNotify(args: {
+  email: string;
+  name?: string;
+  whatsapp?: string;
+  message?: string;
+  matchedClient: boolean;
+}) {
+  const resend = getResend();
+  const from = getFrom();
+  const lines = [
+    "New personal data deletion request (fasea.studio/delete-my-data)",
+    "",
+    `Email: ${args.email}`,
+    args.name ? `Name: ${args.name}` : null,
+    args.whatsapp ? `WhatsApp: ${args.whatsapp}` : null,
+    `Matched member account: ${args.matchedClient ? "yes" : "no"}`,
+    args.message ? `\nMessage:\n${args.message}` : null,
+  ].filter(Boolean);
+
+  await resend.emails.send({
+    from,
+    to: STUDIO_NOTIFY_EMAIL,
+    subject: `[Faséa] Data deletion request — ${args.email}`,
+    text: lines.join("\n"),
+  });
+}
+

@@ -56,14 +56,26 @@ export const calendarRangeQuerySchema = z.object({
   toDateKey: dateKeySchema,
 });
 
-export const createBookingSchema = z.object({
-  slotId: z.string().min(1),
-  name: z.string().min(1).max(200),
-  email: z.string().email().max(320),
-  whatsapp: normalizedWhatsappSchema,
-  consentWhatsapp: z.boolean().optional(),
-  marketingOptIn: z.boolean().optional(),
-});
+export const createBookingSchema = z
+  .object({
+    slotId: z.string().min(1),
+    name: z.string().min(1).max(200),
+    email: z.string().email().max(320),
+    whatsapp: normalizedWhatsappSchema,
+    consentWhatsapp: z.boolean().optional(),
+    marketingOptIn: z.boolean().optional(),
+    signUp: z.boolean().optional(),
+    password: z.string().regex(/^\d{4}$/).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.signUp && !v.password) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter a 4-digit password to create an account.",
+        path: ["password"],
+      });
+    }
+  });
 
 export const publicBookingLookupQuerySchema = z
   .object({
@@ -81,15 +93,11 @@ export const publicBookingLookupQuerySchema = z
     { message: "Provide code, or name + (email or whatsapp)" }
   );
 
-export const publicCancelBookingSchema = z
-  .object({
-    code: z.string().trim().regex(/^\d{6}$/),
-    email: z.string().trim().email().max(320).optional(),
-    whatsapp: normalizedWhatsappSchema.optional(),
-  })
-  .refine((v) => Boolean(v.email || v.whatsapp), {
-    message: "Provide email or whatsapp",
-  });
+export const publicCancelBookingSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/),
+  email: z.string().trim().email().max(320).optional(),
+  whatsapp: normalizedWhatsappSchema.optional(),
+});
 
 export const adminGenerateSlotsSchema = z.object({
   fromDateKey: dateKeySchema,
@@ -127,6 +135,19 @@ export const adminUpdateSlotSchema = z.object({
   cancelled: z.boolean().optional(),
 });
 
+export const googleMobileAuthSchema = z.object({
+  idToken: z.string().min(10),
+});
+
+export const pushTokenRegisterSchema = z.object({
+  token: z.string().min(20),
+  platform: z.enum(["ios", "android", "web"]),
+});
+
+export const pushPreferencesSchema = z.object({
+  pushMarketingOptIn: z.boolean(),
+});
+
 /** Public bookings: authenticated client session + optional WhatsApp override (otherwise profile WhatsApp). */
 export const publicMemberBookingSchema = z.object({
   slotId: z.string().min(1),
@@ -137,7 +158,9 @@ export const publicMemberBookingSchema = z.object({
 
 export const planCategorySchema = z.enum([
   "group_mat",
+  "mat_private",
   "reformer_private",
+  "pre_post_reformer",
   "duet",
   "reformer_group",
 ]);
@@ -145,6 +168,19 @@ export const planCategorySchema = z.enum([
 export const clientAuthEmailSchema = z.object({
   email: z.string().trim().email().max(320),
   name: z.string().trim().max(200).optional(),
+  password: z.string().regex(/^\d{4}$/).optional(),
+});
+
+export const clientAuthPasswordLoginSchema = z.object({
+  email: z.string().trim().email().max(320),
+  password: z.string().regex(/^\d{4}$/),
+});
+
+export const clientAuthSignupSchema = z.object({
+  email: z.string().trim().email().max(320),
+  password: z.string().regex(/^\d{4}$/),
+  name: z.string().trim().max(200).optional(),
+  whatsapp: z.string().trim().max(120).optional(),
 });
 
 export const clientAuthRecoverSchema = z.object({
@@ -184,16 +220,20 @@ export const adminExpiryApprovalSchema = z.object({
 });
 
 export const adminPlanCreateSchema = z.object({
-  code: z.string().trim().min(1).max(80),
+  /** Auto-generated from title when omitted. */
+  code: z.string().trim().min(1).max(80).optional(),
   title: z.string().trim().min(1).max(200),
   cardTitle: z.string().trim().max(120).nullable().optional(),
   category: planCategorySchema,
   classCount: z.number().int().min(1).max(500),
   priceRm: z.number().nonnegative(),
   studentPriceRm: z.number().nonnegative().nullable().optional(),
+  firstTimerPriceRm: z.number().nonnegative().nullable().optional(),
   listPriceRm: z.number().nonnegative().nullable().optional(),
   validityDays: z.number().int().min(1).max(3650),
   active: z.boolean().optional(),
+  /** Usable in admin/sales but omitted from customer-facing plan lists. */
+  hidden: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
   detailLines: z.array(z.string().trim().max(500)).optional().default([]),
   priceNote: z.string().trim().max(200).nullable().optional(),
@@ -233,3 +273,94 @@ export const adminUpdateClientSchema = z.object({
   universityEndYear: z.number().int().nullable().optional(),
 }).strict();
 
+export const dataDeletionRequestSchema = z.object({
+  email: z.string().trim().email().max(320),
+  name: z.string().trim().max(200).optional(),
+  whatsapp: z.string().trim().max(120).optional(),
+  message: z.string().trim().max(2000).optional(),
+  confirm: z.boolean(),
+}).refine((v) => v.confirm === true, {
+  message: "Please confirm your deletion request.",
+  path: ["confirm"],
+});
+
+export const adminPromotionCreateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).optional(),
+  discountType: z.enum(["fixed", "percent", "other"]),
+  discountValue: z.number().nonnegative().optional(),
+  discountLabel: z.string().trim().max(200).optional(),
+  badgeLabel: z.string().trim().max(80).optional(),
+  planIds: z.array(z.string().min(1)).max(50).optional(),
+  imageUrl: z
+    .union([
+      z.string().url().max(2048),
+      z.string().regex(/^data:image\/(png|jpeg|jpg|webp|gif);base64,/).max(1_200_000),
+      z.literal(""),
+    ])
+    .optional(),
+  showAsModal: z.boolean().optional(),
+  modalLink: z.union([z.string().url().max(2048), z.literal("")]).optional(),
+  active: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export const adminPromotionPatchSchema = adminPromotionCreateSchema.partial();
+
+export const adminSaleCreateSchema = z.object({
+  soldAt: z.string().min(1),
+  clientId: z.string().min(1).optional(),
+  clientName: z.string().trim().min(1).max(200),
+  clientEmail: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().email().max(320).optional(),
+  ),
+  clientWhatsapp: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(120).optional(),
+  ),
+  itemId: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().min(1).optional(),
+  ),
+  planId: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().min(1).optional(),
+  ),
+  classCount: z.number().int().min(0).max(500),
+  validityDays: z.number().int().min(1).max(3650),
+  promotionId: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().min(1).optional(),
+  ),
+  listPriceRm: z.number().nonnegative(),
+  computedAmountRm: z.number().nonnegative(),
+  amountRm: z.number().nonnegative(),
+  amountOverridden: z.boolean().optional(),
+  note: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(2000).optional(),
+  ),
+  useStudentPrice: z.boolean().optional(),
+  priceMode: z.enum(["regular", "student", "first_timer"]).optional(),
+});
+
+export const adminSaleRefundSchema = z.object({
+  refundAmountRm: z.number().nonnegative().optional(),
+  refundNote: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(2000).optional(),
+  ),
+  recallCredits: z.boolean().optional(),
+});
+
+export const adminSalesListQuerySchema = z.object({
+  from: dateKeySchema.optional(),
+  to: dateKeySchema.optional(),
+  status: z.enum(["paid", "refunded", "all"]).optional(),
+});
+
+export const adminSalesStatsQuerySchema = z.object({
+  from: dateKeySchema,
+  to: dateKeySchema,
+});

@@ -4,10 +4,11 @@ import { ensureDefaultPlans } from "@/lib/credits";
 import { requireAdmin } from "../../_utils/adminAuth";
 import { jsonError, jsonOk } from "../../_utils/http";
 import { adminPlanCreateSchema } from "@/lib/schemas";
-import { planDocToPublicDto } from "@/lib/planDto";
+import { planDocToPublicDto, slugifyPlanCode } from "@/lib/planDto";
 
 function serializeAdminPlan(plan: Parameters<typeof planDocToPublicDto>[0] & {
   active: boolean;
+  hidden?: boolean;
   sortOrder: number;
   createdAt?: Date;
   updatedAt?: Date;
@@ -16,10 +17,26 @@ function serializeAdminPlan(plan: Parameters<typeof planDocToPublicDto>[0] & {
   return {
     ...base,
     active: plan.active,
+    hidden: Boolean(plan.hidden),
     sortOrder: plan.sortOrder,
     createdAt: plan.createdAt?.toISOString() ?? null,
     updatedAt: plan.updatedAt?.toISOString() ?? null,
   };
+}
+
+async function allocateUniquePlanCode(
+  plans: Awaited<ReturnType<typeof getCollections>>["plans"],
+  title: string,
+  preferred?: string,
+): Promise<string> {
+  const base = (preferred?.trim() || slugifyPlanCode(title)).slice(0, 72) || "plan";
+  let code = base;
+  let n = 2;
+  while (await plans.findOne({ code }, { projection: { _id: 1 } })) {
+    const suffix = `-${n++}`;
+    code = `${base.slice(0, 80 - suffix.length)}${suffix}`;
+  }
+  return code;
 }
 
 export async function GET(req: NextRequest) {
@@ -47,17 +64,20 @@ export async function POST(req: NextRequest) {
     const { plans } = await getCollections();
     const now = new Date();
     const d = parsed.data;
+    const code = await allocateUniquePlanCode(plans, d.title, d.code);
     const doc = {
-      code: d.code,
+      code,
       title: d.title,
       cardTitle: d.cardTitle ?? undefined,
       category: d.category,
       classCount: d.classCount,
       priceRm: d.priceRm,
       studentPriceRm: d.studentPriceRm ?? undefined,
+      firstTimerPriceRm: d.firstTimerPriceRm ?? undefined,
       listPriceRm: d.listPriceRm ?? undefined,
       validityDays: d.validityDays,
       active: d.active ?? true,
+      hidden: d.hidden ?? false,
       sortOrder: d.sortOrder ?? 1000,
       detailLines: d.detailLines,
       priceNote: d.priceNote ?? undefined,
@@ -72,7 +92,10 @@ export async function POST(req: NextRequest) {
     if (!created) return jsonError("Insert failed", 500);
     return jsonOk({ plan: serializeAdminPlan(created) });
   } catch (e: unknown) {
-    const code = typeof e === "object" && e !== null && "code" in e ? (e as { code: number }).code : 0;
+    const code =
+      typeof e === "object" && e !== null && "code" in e
+        ? (e as { code: number }).code
+        : 0;
     if (code === 11000) return jsonError("A plan with this code already exists.", 409);
     return jsonError("Server error", 500, e instanceof Error ? e.message : String(e));
   }

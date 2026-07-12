@@ -87,6 +87,34 @@ const PriceSection = () => {
     },
   ];
 
+  const matPrivatePlans: Plan[] = [
+    {
+      strong: true,
+      price: "RM 70",
+      title: "Single Class",
+      details: [
+        "First timer 15% off (RM 59.50)",
+        "Single class only — no package",
+        "Non-shareable",
+        "Non-refundable",
+      ],
+    },
+  ];
+
+  const prePostReformerPlans: Plan[] = [
+    {
+      strong: true,
+      price: "RM 150",
+      title: "Single Session",
+      details: [
+        "First timer 10% off (RM 135)",
+        "Single session only — no package",
+        "Non-shareable",
+        "Non-refundable",
+      ],
+    },
+  ];
+
   const duetPlans: Plan[] = [
     {
       strong: true,
@@ -418,6 +446,65 @@ const PriceSection = () => {
             </div>
           );
         })}
+      </div>
+
+      <div className="text-3xl mb-12 mt-24 text-center flex-col justify-center items-center gap-4 mx-auto flex sm:text-4xl font-bold">
+        <h3 className="font-serif">Other Plans</h3>
+        <p className="text-[#716D64] text-sm font-normal max-w-xl">
+          Specialty one-to-one sessions — mat private coaching and pre/postnatal
+          Reformer support.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        {matPrivatePlans.map((plan, index) => (
+          <div
+            key={`mat-private-${index}`}
+            className="reveal price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 bg-white/50 border-[#DFD1C9]"
+          >
+            <div className="text-xs font-medium text-[#716D64] tracking-wide mb-2">
+              Mat Private Class
+            </div>
+            <h4 className="font-serif text-2xl font-bold mb-2">{plan.title}</h4>
+            <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
+              {plan.price}
+            </p>
+            <ul className="text-sm text-[#716D64] space-y-1">
+              {plan.details.map((line, i) => (
+                <li
+                  className={line.includes("15%") ? "font-semibold" : ""}
+                  key={i}
+                >
+                  • {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        {prePostReformerPlans.map((plan, index) => (
+          <div
+            key={`pre-post-${index}`}
+            className="reveal price-card relative border rounded-xl px-6 py-8 text-left shadow-sm hover:shadow-md transition duration-300 bg-white/50 border-[#DFD1C9]"
+          >
+            <div className="text-xs font-medium text-[#716D64] tracking-wide mb-2">
+              Pre &amp; Post Reformer Pilates
+            </div>
+            <h4 className="font-serif text-2xl font-bold mb-2">{plan.title}</h4>
+            <p className="text-xl font-sans font-bold mb-4 text-[#9B9B7B]">
+              {plan.price}
+            </p>
+            <ul className="text-sm text-[#716D64] space-y-1">
+              {plan.details.map((line, i) => (
+                <li
+                  className={line.includes("10%") ? "font-semibold" : ""}
+                  key={i}
+                >
+                  • {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </section>
   );

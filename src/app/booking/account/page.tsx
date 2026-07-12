@@ -7,6 +7,9 @@ import SiteHeader from "@/components/SiteHeader";
 import { PlanPurchaseSection, PlanPurchaseWhatsAppLead } from "@/components/PlanPurchaseSection";
 import { CreditExpiryBannerStack } from "@/components/CreditExpiryBannerStack";
 import { usePlanPurchase } from "@/hooks/usePlanPurchase";
+import { CompleteNameGate } from "../_components/CompleteNameGate";
+import { AccountBookingHistory } from "../_components/AccountBookingHistory";
+import { clientNeedsName } from "@/lib/clientNeedsName";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
 import MagnifyingGlassIcon from "@heroicons/react/24/outline/MagnifyingGlassIcon";
 
@@ -22,6 +25,7 @@ type ExpiryAlertDto = {
 
 type ClientMe = {
   authed: boolean;
+  needsName?: boolean;
   client?: {
     id: string;
     name: string;
@@ -38,29 +42,49 @@ type ClientMe = {
 
 export default function BookingAccountPage() {
   const [loading, setLoading] = useState(true);
+  const [logoutLoading, setLogoutLoading] = useState(false);
   const [clientMe, setClientMe] = useState<ClientMe>({ authed: false });
-  const planPurchase = usePlanPurchase({ enabled: clientMe.authed });
+  const planPurchase = usePlanPurchase({
+    enabled: clientMe.authed && !clientNeedsName(clientMe),
+  });
+
+  const refreshClient = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/public/client/me", { cache: "no-store" });
+      const json = await res.json();
+      if (res.ok && json?.ok) {
+        setClientMe(json.data as ClientMe);
+      }
+    } catch {
+      // keep session on network errors
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/public/client/me", { cache: "no-store" });
-        const json = await res.json();
-        if (!cancelled && res.ok && json?.ok) {
-          setClientMe(json.data as ClientMe);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void refreshClient();
   }, []);
 
   const profileWhatsapp = (clientMe.client?.whatsapp ?? "").trim();
+
+  async function signOut() {
+    if (
+      !window.confirm(
+        "Sign out of this device? You can sign in again with the same email anytime.",
+      )
+    ) {
+      return;
+    }
+    setLogoutLoading(true);
+    try {
+      await fetch("/api/public/client/logout", { method: "POST" });
+      setClientMe({ authed: false });
+    } finally {
+      setLogoutLoading(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -85,16 +109,27 @@ export default function BookingAccountPage() {
           </Link>
           <div className="rounded-3xl border border-fasea-border bg-white/70 p-8 shadow-sm">
             <h1 className="font-serif text-2xl font-bold">My account</h1>
-            <p className="mt-2 text-sm text-fasea-secondary">Sign in on the booking page to manage plans.</p>
+            <p className="mt-2 text-sm text-fasea-secondary">
+              Sign in on the booking page to manage plans.
+            </p>
             <Link
               href="/booking"
               className="mt-6 inline-flex rounded-full bg-fasea-tonal px-6 py-3 text-sm font-medium text-fasea-tertiary hover:brightness-95"
             >
-              Go to booking / sign in
+              Go to booking
             </Link>
           </div>
         </main>
       </div>
+    );
+  }
+
+  if (clientNeedsName(clientMe)) {
+    return (
+      <CompleteNameGate
+        email={clientMe.client?.email}
+        onSaved={refreshClient}
+      />
     );
   }
 
@@ -160,6 +195,8 @@ export default function BookingAccountPage() {
           </div>
         </div>
 
+        <AccountBookingHistory />
+
         <PlanPurchaseSection
           studentStatus={clientMe.client?.studentStatus}
           plans={planPurchase.plans}
@@ -170,6 +207,17 @@ export default function BookingAccountPage() {
           title="Choose a plan"
           description={<PlanPurchaseWhatsAppLead beforeSend="Pick a package and" />}
         />
+
+        <div className="pt-2">
+          <button
+            type="button"
+            disabled={logoutLoading}
+            onClick={() => void signOut()}
+            className="text-sm text-fasea-secondary underline disabled:opacity-50"
+          >
+            {logoutLoading ? "Signing out…" : "Sign out"}
+          </button>
+        </div>
       </main>
     </div>
   );

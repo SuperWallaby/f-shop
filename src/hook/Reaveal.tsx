@@ -32,7 +32,7 @@ const RevealTrigger = ({ rootSelector }: RevealTriggerProps) => {
 
    const animate = (el: HTMLElement) => {
     const index = elements.indexOf(el);
-    el.style.animationDelay = `${Math.max(0, index) * 0.25}s`;
+    el.style.animationDelay = `${Math.max(0, index) * 0.15}s`;
     el.classList.add("fade-in-up");
    };
 
