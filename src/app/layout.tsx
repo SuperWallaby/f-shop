@@ -1,10 +1,9 @@
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Inter } from "next/font/google";
 import { Playfair_Display } from "next/font/google";
 import Script from "next/script";
-import HydrationProbe from "@/components/HydrationProbe";
-import SalesPopup from "@/components/SalesPopup";
+import PromotionModal from "@/components/PromotionModal";
+import KBeautyFloatingBadge from "@/components/KBeautyFloatingBadge";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,16 +18,6 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -40,13 +29,10 @@ export default function RootLayout({
       className={`${inter.variable} ${playfair.variable}`}
       suppressHydrationWarning
     >
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        suppressHydrationWarning
-      >
+      <body className="antialiased" suppressHydrationWarning>
         {children}
-        <SalesPopup />
-        <HydrationProbe />
+        <PromotionModal />
+        <KBeautyFloatingBadge />
       </body>
       <Script
         async

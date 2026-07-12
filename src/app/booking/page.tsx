@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DayPicker } from "react-day-picker";
+import "@/styles/day-picker.css";
 import { DateTime } from "luxon";
 import SiteHeader from "@/components/SiteHeader";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
@@ -12,19 +13,39 @@ import type { PublicItem } from "./_components/ItemSelectField";
 import { SlotButton } from "./_components/SlotButton";
 import { WithLoading } from "./_components/WithLoading";
 import { WithError } from "./_components/WithError";
-import { Skeleton } from "./_components/Skeleton";
-import { Checkbox } from "@/components/Checkbox";
+import { Skeleton, SkeletonLine } from "./_components/Skeleton";
+import { BookingCalendarSkeleton } from "./_components/BookingCalendarSkeleton";
+import { ClassTypeGridSkeleton } from "./_components/ClassTypeGridSkeleton";
 import Link from "next/link";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
+import CalendarDaysIcon from "@heroicons/react/24/outline/CalendarDaysIcon";
 import MagnifyingGlassIcon from "@heroicons/react/24/outline/MagnifyingGlassIcon";
-import DocumentDuplicateIcon from "@heroicons/react/24/outline/DocumentDuplicateIcon";
 import ChevronDownIcon from "@heroicons/react/24/outline/ChevronDownIcon";
+import InformationCircleIcon from "@heroicons/react/24/outline/InformationCircleIcon";
 import { FaWhatsapp } from "react-icons/fa";
 import {
   buildCustomerBookingConfirmationMessage,
   formatKlParts,
 } from "@/lib/bookingMessages";
 import { normalizeHexColor } from "@/lib/itemColor";
+import { BookingGuestPanel } from "./_components/BookingGuestPanel";
+import type { BookingGuestAuthedClient } from "./_components/BookingGuestPanel";
+import type { PublicPlanDto } from "@/lib/planDto";
+import {
+  matchPlanCategoryForClassName,
+  PLAN_CATEGORY_DISPLAY_ORDER,
+  planPurchaseGroupHeading,
+} from "@/lib/planCategoryDisplay";
+import {
+  buildBookingDraft,
+  clearBookingDraft,
+  readBookingDraft,
+  writeBookingDraft,
+} from "./_lib/bookingDraft";
+import {
+  readLastClassTypeId,
+  writeLastClassTypeId,
+} from "./_lib/lastClassType";
 
 type SlotDto = {
   id: string;
@@ -69,6 +90,12 @@ function dateKeyToLocalDate(dateKey: string): Date {
   return new Date(dt.year, dt.month - 1, dt.day);
 }
 
+function formatBookingDateLabel(dateKey: string): string {
+  return DateTime.fromISO(dateKey, { zone: BUSINESS_TIME_ZONE }).toFormat(
+    "LLL dd, ccc",
+  );
+}
+
 function formatLocalTimeRange(startUtc: string, endUtc: string): string {
   const start = DateTime.fromISO(startUtc, { zone: "utc" }).toLocal();
   const end = DateTime.fromISO(endUtc, { zone: "utc" }).toLocal();
@@ -97,33 +124,128 @@ function BookingPageInner() {
   const [items, setItems] = useState<PublicItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [itemsError, setItemsError] = useState<string | null>(null);
-  const [selectedItemId, setSelectedItemId] = useState<string>("");
-  const [hasLoadedItemsOnce, setHasLoadedItemsOnce] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState("");
 
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(undefined);
   const [month, setMonth] = useState<Date>(() => new Date());
+  const setCalendarMonth = useCallback((next: Date) => {
+    setLoadingCalendar(true);
+    setMonth(next);
+  }, []);
   const [availableDateKeys, setAvailableDateKeys] = useState<Set<string>>(
     () => new Set(),
   );
-  const [loadingCalendar, setLoadingCalendar] = useState(false);
+  const [loadingCalendar, setLoadingCalendar] = useState(true);
   const [allSlots, setAllSlots] = useState<SlotDto[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
 
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
-  const [name, setName] = useState("");
+  const pendingSlotIdRef = useRef<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [consentWhatsapp, setConsentWhatsapp] = useState(false);
-  const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [signUp, setSignUp] = useState(false);
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successBookingCode, setSuccessBookingCode] = useState<string | null>(
     null,
   );
+  const [signedUpOnBook, setSignedUpOnBook] = useState(false);
+  const [needsPlanHint, setNeedsPlanHint] = useState(false);
+  const [planOptions, setPlanOptions] = useState<PublicPlanDto[]>([]);
+  const [selectedPlanInterest, setSelectedPlanInterest] = useState("");
   const [copied, setCopied] = useState(false);
   const [openPrepareInfo, setOpenPrepareInfo] = useState(false);
   const [openNeedToKnow, setOpenNeedToKnow] = useState(false);
+  const [authedClient, setAuthedClient] =
+    useState<BookingGuestAuthedClient | null>(null);
+
+  useEffect(() => {
+    const draft = readBookingDraft();
+    if (draft?.itemId) setSelectedItemId(draft.itemId);
+    if (draft?.dateKey) {
+      setSelectedDay(dateKeyToLocalDate(draft.dateKey));
+      if (draft.monthKey) {
+        const [y, m] = draft.monthKey.split("-").map(Number);
+        if (y && m) setCalendarMonth(new Date(y, m - 1, 1));
+      } else {
+        setCalendarMonth(dateKeyToLocalDate(draft.dateKey));
+      }
+    }
+    if (draft?.slotId) pendingSlotIdRef.current = draft.slotId;
+    if (draft?.email) setEmail(draft.email);
+    if (draft?.whatsapp) setWhatsapp(draft.whatsapp);
+    else if (draft?.whatsappOverride) setWhatsapp(draft.whatsappOverride);
+    setDraftRestored(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMe() {
+      try {
+        const res = await fetch("/api/public/client/me", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const json = await res.json();
+        if (cancelled || !res.ok || !json?.ok || !json.data?.authed) {
+          if (!cancelled) setAuthedClient(null);
+          return;
+        }
+        const c = json.data.client as {
+          name?: string;
+          email?: string;
+          whatsapp?: string;
+        };
+        const next: BookingGuestAuthedClient = {
+          name: (c?.name ?? "").trim(),
+          email: (c?.email ?? "").trim(),
+          whatsapp: (c?.whatsapp ?? "").trim(),
+        };
+        if (!cancelled) {
+          setAuthedClient(next);
+          if (next.email) setEmail(next.email);
+          if (next.whatsapp) setWhatsapp(next.whatsapp);
+          setSignUp(false);
+          setPassword("");
+        }
+      } catch {
+        if (!cancelled) setAuthedClient(null);
+      }
+    }
+    void loadMe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!successBookingCode || !needsPlanHint) return;
+    let cancelled = false;
+    async function loadPlans() {
+      try {
+        const res = await fetch("/api/public/plans", { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok || !json?.ok) return;
+        if (!cancelled) {
+          const list = ((json.data.plans ?? []) as PublicPlanDto[]).slice();
+          list.sort(
+            (a, b) =>
+              a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
+          );
+          setPlanOptions(list);
+        }
+      } catch {
+        if (!cancelled) setPlanOptions([]);
+      }
+    }
+    void loadPlans();
+    return () => {
+      cancelled = true;
+    };
+  }, [successBookingCode, needsPlanHint]);
 
   // When booking is completed, scroll to top so the success screen starts at the top.
   useEffect(() => {
@@ -134,46 +256,6 @@ function BookingPageInner() {
       // ignore
     }
   }, [successBookingCode]);
-
-  // Persist user details for returning visitors (localStorage)
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem("booking_details_v1");
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as {
-        name?: string;
-        email?: string;
-        whatsapp?: string;
-        consentWhatsapp?: boolean;
-      };
-      if (typeof parsed.name === "string" && parsed.name.length > 0)
-        setName(parsed.name);
-      if (typeof parsed.email === "string" && parsed.email.length > 0)
-        setEmail(parsed.email);
-      if (typeof parsed.whatsapp === "string" && parsed.whatsapp.length > 0)
-        setWhatsapp(parsed.whatsapp);
-      if (parsed.consentWhatsapp === true) setConsentWhatsapp(true);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        "booking_details_v1",
-        JSON.stringify({
-          name,
-          email,
-          whatsapp,
-          consentWhatsapp: consentWhatsapp || undefined,
-          updatedAt: Date.now(),
-        }),
-      );
-    } catch {
-      // ignore
-    }
-  }, [name, email, whatsapp, consentWhatsapp]);
 
   // Load items (public)
   useEffect(() => {
@@ -204,7 +286,6 @@ function BookingPageInner() {
       } finally {
         if (!cancelled) {
           setItemsLoading(false);
-          setHasLoadedItemsOnce(true);
         }
       }
     }
@@ -223,10 +304,44 @@ function BookingPageInner() {
     setSelectedItemId(fromQuery);
   }, [items, queryItemId]);
 
+  useEffect(() => {
+    if (!selectedItemId) return;
+    writeLastClassTypeId(selectedItemId);
+  }, [selectedItemId]);
+
   const dateKey = useMemo(() => {
     if (!selectedDay) return null;
     return dateToDateKeyBusiness(selectedDay);
   }, [selectedDay]);
+
+  const persistBookingDraft = useCallback(() => {
+    writeBookingDraft(
+      buildBookingDraft({
+        itemId: selectedItemId,
+        dateKey,
+        slotId: selectedSlotId,
+        month,
+        email,
+        whatsapp,
+      }),
+    );
+  }, [
+    dateKey,
+    email,
+    month,
+    selectedItemId,
+    selectedSlotId,
+    whatsapp,
+  ]);
+
+  useEffect(() => {
+    if (!draftRestored) return;
+    if (successBookingCode) {
+      clearBookingDraft();
+      return;
+    }
+    persistBookingDraft();
+  }, [draftRestored, persistBookingDraft, successBookingCode]);
 
   // Keep URL in sync with selected item (only after a date is selected)
   useEffect(() => {
@@ -241,16 +356,6 @@ function BookingPageInner() {
       scroll: false,
     });
   }, [dateKey, queryItemId, router, selectedItemId]);
-
-  const selectedClass = useMemo(() => {
-    const bySelectedItem =
-      !!selectedItemId && items.find((it) => it.id === selectedItemId);
-    if (bySelectedItem) return bySelectedItem;
-    const bySelectedSlotItemId =
-      !!selectedSlotId && allSlots.find((s) => s.id === selectedSlotId)?.itemId;
-    if (!bySelectedSlotItemId) return null;
-    return items.find((it) => it.id === bySelectedSlotItemId) ?? null;
-  }, [allSlots, items, selectedItemId, selectedSlotId]);
 
   const slots = useMemo(() => {
     if (!selectedItemId) return [];
@@ -272,17 +377,56 @@ function BookingPageInner() {
   }, [allSlots, dateKey, items]);
 
   useEffect(() => {
-    if (!dateKey) return;
+    if (!dateKey || loadingSlots) return;
     if (!selectedItemId) return;
     if (!disabledItemIdsForDate.has(selectedItemId)) return;
     setSelectedItemId("");
-  }, [dateKey, disabledItemIdsForDate, selectedItemId]);
+  }, [dateKey, disabledItemIdsForDate, loadingSlots, selectedItemId]);
 
-  const availabilityHint = useMemo(() => {
-    if (loadingCalendar) return "Loading available dates…";
-    if (availableDateKeys.size === 0) return "No available dates this month.";
-    return "Pick a date to see available times.";
-  }, [availableDateKeys.size, loadingCalendar]);
+  const classTypesLoading =
+    itemsLoading || (Boolean(dateKey) && loadingSlots);
+
+  const showClassTypeHints = !loadingCalendar && !classTypesLoading;
+  const showTimesHints =
+    !loadingCalendar && !loadingSlots && !itemsLoading;
+
+  // Auto-select saved class type once loading finishes and it is selectable
+  useEffect(() => {
+    if (classTypesLoading || loadingCalendar || itemsLoading) return;
+    if (items.length === 0) return;
+    if (queryItemId && items.some((it) => it.id === queryItemId)) return;
+
+    const last = readLastClassTypeId();
+    if (!last || !items.some((it) => it.id === last)) return;
+
+    const currentSelectable =
+      !!selectedItemId &&
+      (!dateKey || !disabledItemIdsForDate.has(selectedItemId));
+    if (currentSelectable) return;
+
+    if (!dateKey) {
+      setSelectedItemId(last);
+      return;
+    }
+
+    if (!disabledItemIdsForDate.has(last)) {
+      setSelectedItemId(last);
+      return;
+    }
+
+    if (selectedItemId) {
+      setSelectedItemId("");
+    }
+  }, [
+    classTypesLoading,
+    dateKey,
+    disabledItemIdsForDate,
+    items,
+    itemsLoading,
+    loadingCalendar,
+    queryItemId,
+    selectedItemId,
+  ]);
 
   const disabledDays = useMemo(() => {
     const todayKey = DateTime.now()
@@ -328,7 +472,8 @@ function BookingPageInner() {
           setAvailableDateKeys(keys);
 
           // If no day selected yet, auto-select today or the first upcoming available date.
-          if (!selectedDay) {
+          setSelectedDay((current) => {
+            if (current) return current;
             const todayKey = DateTime.now()
               .setZone(BUSINESS_TIME_ZONE)
               .toISODate()!;
@@ -336,8 +481,8 @@ function BookingPageInner() {
               .filter((k) => k >= todayKey)
               .sort((a, b) => a.localeCompare(b));
             const pickKey = keys.has(todayKey) ? todayKey : upcoming[0];
-            if (pickKey) setSelectedDay(dateKeyToLocalDate(pickKey));
-          }
+            return pickKey ? dateKeyToLocalDate(pickKey) : current;
+          });
         }
       } catch {
         if (!cancelled) {
@@ -372,8 +517,16 @@ function BookingPageInner() {
           throw new Error(json?.error?.message ?? "Failed to load slots");
         }
         if (!cancelled) {
-          setAllSlots(json.data.slots ?? []);
-          // loaded
+          const slots = (json.data.slots ?? []) as SlotDto[];
+          setAllSlots(slots);
+          const pending = pendingSlotIdRef.current;
+          if (pending) {
+            const found = slots.find((s) => s.id === pending);
+            if (found && isSlotSelectable(found)) {
+              setSelectedSlotId(pending);
+            }
+            pendingSlotIdRef.current = null;
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -397,54 +550,86 @@ function BookingPageInner() {
 
   async function submitBooking() {
     if (!selectedSlotId) return;
-    const trimmedName = name.trim();
-    const trimmedEmail = email.trim();
-    const trimmedWhatsapp = whatsapp.trim();
 
+    const trimmedEmail = (authedClient?.email || email).trim();
+    const trimmedWhatsapp = (authedClient?.whatsapp || whatsapp).trim();
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
-    const whatsappOk =
-      trimmedWhatsapp.length >= 6 &&
-      trimmedWhatsapp.length <= 32 &&
-      /^[+0-9][0-9\s()-]*$/.test(trimmedWhatsapp);
+    const loggedIn = Boolean(authedClient);
 
-    if (!trimmedName) {
-      setSubmitError("Please enter your name.");
-      return;
-    }
     if (!emailOk) {
       setSubmitError("Please enter a valid email.");
       return;
     }
-    if (!whatsappOk) {
-      setSubmitError("Please enter a valid WhatsApp number.");
-      return;
-    }
-    if (!consentWhatsapp) {
+    if (!trimmedWhatsapp) {
       setSubmitError(
-        "Please agree to receive booking-related updates via WhatsApp.",
+        loggedIn
+          ? "Your account is missing a WhatsApp number. Update it in My account."
+          : "Please enter your WhatsApp number.",
       );
       return;
     }
+    if (!loggedIn && signUp && !/^\d{4}$/.test(password)) {
+      setSubmitError("Enter a 4-digit password to create an account.");
+      return;
+    }
+
+    const guestName =
+      (authedClient?.name || "").trim() ||
+      trimmedEmail.split("@")[0]?.trim().replace(/[._+-]+/g, " ") ||
+      "Guest";
 
     setSubmitting(true);
     setSubmitError(null);
     try {
       const res = await fetch("/api/public/bookings", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slotId: selectedSlotId,
-          name: trimmedName,
+          name: guestName,
           email: trimmedEmail,
           whatsapp: trimmedWhatsapp,
           consentWhatsapp: true,
-          marketingOptIn: Boolean(marketingOptIn),
+          marketingOptIn: false,
+          ...(!loggedIn && signUp ? { signUp: true, password } : {}),
         }),
       });
       const json = await res.json();
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error?.message ?? "Booking failed");
       }
+      const didSignUp = Boolean(json.data?.signedUp);
+      setSignedUpOnBook(didSignUp);
+      setPassword("");
+
+      let planHint = didSignUp || !loggedIn;
+      try {
+        const meRes = await fetch("/api/public/client/me", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const meJson = await meRes.json().catch(() => null);
+        if (meRes.ok && meJson?.ok && meJson.data?.authed) {
+          const credits = Number(meJson.data.balance?.balance ?? 0);
+          const c = meJson.data.client as {
+            name?: string;
+            email?: string;
+            whatsapp?: string;
+          };
+          setAuthedClient({
+            name: (c?.name ?? "").trim(),
+            email: (c?.email ?? "").trim(),
+            whatsapp: (c?.whatsapp ?? "").trim(),
+          });
+          planHint = didSignUp || !(credits > 0);
+        } else {
+          planHint = true;
+        }
+      } catch {
+        planHint = didSignUp || !loggedIn;
+      }
+      setNeedsPlanHint(planHint);
       setSuccessBookingCode(json.data.bookingCode);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Booking failed");
@@ -453,15 +638,8 @@ function BookingPageInner() {
     }
   }
 
-  function getSubmitBookingLabel(): string {
-    if (submitting) return "Submitting…";
-    if (!selectedSlotId) return "Select a time";
-    if (!name) return "Enter your name";
-    if (!email) return "Enter your email";
-    if (!whatsapp) return "Enter your WhatsApp";
-    if (!consentWhatsapp) return "Agree to WhatsApp updates";
-    return "Submit booking";
-  }
+  const guestName =
+    email.trim().split("@")[0]?.trim().replace(/[._+-]+/g, " ") || "Guest";
 
   if (successBookingCode) {
     const bookedSlot = selectedSlotId
@@ -483,7 +661,7 @@ function BookingPageInner() {
     const confirmationText =
       bookedSlot && bookedClassName
         ? buildCustomerBookingConfirmationMessage({
-            name: name.trim() || "Pilates Girls",
+            name: guestName || "Pilates Girls",
             classTypeName: bookedClassName,
             bookingCode: successBookingCode,
             dateKey: bookedSlot.dateKey,
@@ -493,6 +671,39 @@ function BookingPageInner() {
           })
         : "";
 
+    const preferredPlanCategory = matchPlanCategoryForClassName(bookedClassName);
+    const sortedPlanOptions = (() => {
+      const list = planOptions.slice();
+      const catRank = (category: PublicPlanDto["category"]) => {
+        if (preferredPlanCategory && category === preferredPlanCategory) return -1;
+        const idx = PLAN_CATEGORY_DISPLAY_ORDER.indexOf(category);
+        return idx >= 0 ? idx : 999;
+      };
+      list.sort(
+        (a, b) =>
+          catRank(a.category) - catRank(b.category) ||
+          a.sortOrder - b.sortOrder ||
+          a.title.localeCompare(b.title),
+      );
+      return list;
+    })();
+
+    const planInterestLabel = (() => {
+      if (!needsPlanHint || !selectedPlanInterest) return null;
+      if (selectedPlanInterest === "__consult__") {
+        return "I'll decide after a consultation";
+      }
+      if (selectedPlanInterest === "__event_promo__") {
+        return "Event / promotion";
+      }
+      const plan = planOptions.find((p) => p.id === selectedPlanInterest);
+      if (!plan) return null;
+      const group = planPurchaseGroupHeading(plan.category);
+      return `${group} · ${plan.title} (RM ${plan.priceRm})`;
+    })();
+
+    // Replace wasap.my with official WhatsApp deep link (wa.me)
+    const phone = "60145403560"; // country code + number, NO "+" and NO spaces
     const wasapMessage =
       bookedParts && bookedClassName
         ? [
@@ -501,11 +712,24 @@ function BookingPageInner() {
             `Date: ${bookedParts.dateLabel}`,
             `Time: ${bookedParts.timeLabel}`,
             `Booking Code: ${successBookingCode}`,
+            ...(needsPlanHint
+              ? ["", "현재 크레딧이 없는 상태에요."]
+              : []),
+            ...(planInterestLabel
+              ? [`Plan interest: ${planInterestLabel}`]
+              : []),
           ].join("\n")
-        : ["Booking Done", `Booking Code: ${successBookingCode}`].join("\n");
+        : [
+            "Booking Done",
+            `Booking Code: ${successBookingCode}`,
+            ...(needsPlanHint
+              ? ["", "현재 크레딧이 없는 상태에요."]
+              : []),
+            ...(planInterestLabel
+              ? [`Plan interest: ${planInterestLabel}`]
+              : []),
+          ].join("\n");
 
-    // Replace wasap.my with official WhatsApp deep link (wa.me)
-    const phone = "60145403560"; // country code + number, NO "+" and NO spaces
     const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(wasapMessage)}`;
 
     // Optional: keep a clean visible href (no prefilled text)
@@ -515,13 +739,29 @@ function BookingPageInner() {
       <div className="min-h-screen bg-[#FAF8F6] text-[#444444] px-6 py-24">
         <SiteHeader />
         <main className="max-w-2xl mx-auto mt-16">
-          <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-8 shadow-sm">
+          <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-8 shadow-sm overflow-hidden">
             <h1 className="font-serif text-3xl font-bold mb-3">
               Booking is ready
             </h1>
             <p className="text-[#5C574F] mb-6">
               Please click the button below and complete your booking.
             </p>
+            {signedUpOnBook ? (
+              <div className="mb-6 rounded-2xl border border-[#E8DDD4] bg-white px-5 py-4 text-sm text-[#444444]">
+                <div className="font-semibold">You&apos;re signed in</div>
+                <p className="mt-1 text-[#716D64]">
+                  Your account was created with your 4-digit password. Stay signed
+                  in on this browser — you won&apos;t need to log in again for a
+                  long time.
+                </p>
+                <Link
+                  href="/booking/account"
+                  className="inline-flex mt-3 text-sm font-medium text-[#A66A4A] underline underline-offset-4 hover:text-[#444444]"
+                >
+                  Open my account
+                </Link>
+              </div>
+            ) : null}
             {!!bookedParts && (
               <div className="rounded-2xl border border-[#E8DDD4] bg-white px-5 py-4 text-sm text-[#444444]">
                 {!!bookedClassName && (
@@ -534,40 +774,79 @@ function BookingPageInner() {
                 </div>
               </div>
             )}
-            <div className="mt-2">
+            <div className="mt-4">
               <div className="text-xs text-[#716D64] mb-1">Booking code</div>
-              <div className="flex items-center gap-3">
-                <div className="font-mono text-2xl tracking-widest">
-                  {successBookingCode}
+              <button
+                type="button"
+                title={copied ? "Copied" : "Tap to copy"}
+                aria-label={
+                  copied
+                    ? "Booking code copied"
+                    : `Copy booking code ${successBookingCode}`
+                }
+                className={cn(
+                  "font-mono text-2xl tracking-widest text-left rounded-xl px-2 py-1 -mx-2",
+                  "hover:bg-[#F3ECE6] active:bg-[#E8DDD4] transition cursor-pointer",
+                  copied && "text-[#A66A4A]",
+                )}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(successBookingCode);
+                    setCopied(true);
+                    window.setTimeout(() => setCopied(false), 1200);
+                  } catch {
+                    // ignore
+                  }
+                }}
+              >
+                {successBookingCode}
+                <span className="sr-only">
+                  {copied ? "Copied" : "Tap to copy"}
+                </span>
+              </button>
+              {copied ? (
+                <div className="mt-1 text-xs font-medium text-[#A66A4A]">
+                  Copied
                 </div>
-                <button
-                  type="button"
-                  className="px-3 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-xs hover:shadow-sm transition cursor-pointer"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(successBookingCode);
-                      setCopied(true);
-                      window.setTimeout(() => setCopied(false), 1200);
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <DocumentDuplicateIcon className="h-4 w-4" />
-                    {copied ? "Copied" : "Copy"}
-                  </span>
-                </button>
-              </div>
+              ) : null}
             </div>
+
+            {needsPlanHint ? (
+              <div className="mt-6 min-w-0">
+                <label className="grid gap-2 min-w-0">
+                  <span className="text-sm font-semibold text-[#444444]">
+                    Select your pilates plan.
+                  </span>
+                  <select
+                    value={selectedPlanInterest}
+                    onChange={(e) => setSelectedPlanInterest(e.target.value)}
+                    className="w-full max-w-full min-w-0 box-border rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                  >
+                    <option value="">Choose a plan…</option>
+                    {sortedPlanOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {planPurchaseGroupHeading(p.category)} · {p.title} — RM{" "}
+                        {p.priceRm}
+                      </option>
+                    ))}
+                    <option value="__consult__">
+                      {"I'll decide after a consultation"}
+                    </option>
+                    <option value="__event_promo__">Event / promotion</option>
+                  </select>
+                </label>
+              </div>
+            ) : null}
 
             <a
               href={waPrettyHref}
               target="_blank"
               rel="noreferrer"
+              aria-disabled={needsPlanHint && !selectedPlanInterest}
               onClick={(e) => {
-                // Keep the visible/hover URL clean, but open the full prefilled message.
                 e.preventDefault();
+                if (needsPlanHint && !selectedPlanInterest) return;
+                // Keep the visible/hover URL clean, but open the full prefilled message.
                 window.open(waUrl, "_blank", "noopener,noreferrer");
               }}
               className={cn(
@@ -576,6 +855,9 @@ function BookingPageInner() {
                 "inline-flex items-center justify-center gap-3",
                 "text-base sm:text-lg font-semibold",
                 "shadow-sm transition hover:brightness-95",
+                needsPlanHint &&
+                  !selectedPlanInterest &&
+                  "opacity-50 pointer-events-none cursor-not-allowed",
               )}
             >
               <FaWhatsapp className="h-6 w-6" aria-hidden />
@@ -595,11 +877,13 @@ function BookingPageInner() {
                 className="mt-8 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition cursor-pointer"
                 onClick={() => {
                   setSuccessBookingCode(null);
+                  setNeedsPlanHint(false);
+                  setSelectedPlanInterest("");
+                  setPlanOptions([]);
+                  setSignedUpOnBook(false);
                   setCopied(false);
-                  setName("");
                   setEmail("");
                   setWhatsapp("");
-                  setMarketingOptIn(false);
                   setSelectedSlotId(null);
                 }}
               >
@@ -642,100 +926,124 @@ function BookingPageInner() {
         </div>
 
         <div className="grid gap-10 md:grid-cols-[360px_1fr]">
-          <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
-            <h1 className="font-serif text-2xl font-bold mb-4">Book a time</h1>
-
-            <DayPicker
-              mode="single"
-              selected={selectedDay}
-              onSelect={setSelectedDay}
-              month={month}
-              onMonthChange={setMonth}
-              weekStartsOn={0}
-              disabled={disabledDays}
-              className="w-full"
-              classNames={{
-                months: "w-full",
-                month: "w-full",
-                table: "w-full",
-                head_row: "w-full",
-                row: "w-full",
-              }}
-              styles={{
-                table: { width: "100%" },
-              }}
-            />
-            <div className="text-xs text-[#716D64] mt-4">
-              {availabilityHint}
+          <section className="booking-calendar-panel bg-white/70 border border-[#E8DDD4] rounded-3xl p-4 sm:p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h1 className="font-serif text-2xl font-bold">Book a time</h1>
+              <Link
+                href="/booking/schedule"
+                className="inline-flex items-center gap-1.5 shrink-0 pt-0.5 text-xs font-medium text-[#716D64] hover:text-[#444444] transition cursor-pointer"
+              >
+                <CalendarDaysIcon className="h-4 w-4" aria-hidden />
+                View schedule
+              </Link>
             </div>
 
-            <div className="mt-6 space-y-3">
-              <div className="rounded-2xl border border-[#E8DDD4] bg-white/50">
+            <div className="-mx-1 sm:mx-0">
+              {loadingCalendar ? (
+                <BookingCalendarSkeleton month={month} />
+              ) : (
+                <DayPicker
+                  mode="single"
+                  selected={selectedDay}
+                  onSelect={setSelectedDay}
+                  month={month}
+                  onMonthChange={setCalendarMonth}
+                  weekStartsOn={0}
+                  disabled={disabledDays}
+                  className="w-full booking-day-picker"
+                  classNames={{
+                    months: "w-full",
+                    month: "w-full",
+                    month_grid: "w-full",
+                    weekdays: "w-full",
+                    week: "w-full",
+                  }}
+                />
+              )}
+            </div>
+            <div
+              className="mt-4 min-h-4"
+              aria-live="polite"
+              aria-busy={loadingCalendar}
+            >
+              {loadingCalendar ? (
+                <SkeletonLine className="w-44 max-w-full" aria-hidden />
+              ) : availableDateKeys.size === 0 ? (
+                <p className="text-xs text-[#716D64]">
+                  No available dates this month.
+                </p>
+              ) : (
+                <p className="text-xs text-[#716D64]">
+                  Pick a date to see available times.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-10 border-t border-[#E8DDD4] pt-5">
+              <div className="flex items-center gap-2 mb-3">
+                <InformationCircleIcon
+                  className="h-5 w-5 shrink-0 text-[#A66A4A]"
+                  aria-hidden
+                />
+                <h2 className="font-serif text-base font-semibold text-[#444444]">
+                  Good to know
+                </h2>
+              </div>
+              <div className="space-y-3">
+              <div>
                 <button
                   type="button"
                   onClick={() => setOpenPrepareInfo((v) => !v)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[#716D64] hover:text-[#444444] transition cursor-pointer"
                   aria-expanded={openPrepareInfo}
                 >
-                  <div className="text-xs font-medium text-[#716D64]">
-                    Booking prepare
-                  </div>
                   <ChevronDownIcon
                     className={cn(
-                      "h-4 w-4 text-[#716D64] transition-transform",
+                      "h-3.5 w-3.5 transition-transform",
                       openPrepareInfo ? "rotate-180" : "",
                     )}
                   />
+                  Booking prepare
                 </button>
                 {openPrepareInfo ? (
-                  <div className="px-4 pb-4 text-sm text-[#444444]">
-                    <div className="text-xs text-[#716D64]">
-                      Things need to bring
-                    </div>
-                    <div className="mt-2 space-y-1.5">
-                      <div>
-                        🧦Grip socks (if dont have can purchase in studio)
-                      </div>
-                      <div>🏷️ Mat Towel to cover mattress (optional)</div>
-                      <div>👚Attire : Sport Attire that comfortable</div>
-                    </div>
+                  <div className="mt-2 pl-5 text-xs text-[#716D64] leading-relaxed space-y-1">
+                    <div>🧦 Grip socks (if dont have can purchase in studio)</div>
+                    <div>🏷️ Mat Towel to cover mattress (optional)</div>
+                    <div>👚 Attire: Sport Attire that comfortable</div>
                   </div>
                 ) : null}
               </div>
 
-              <div className="rounded-2xl border border-[#E8DDD4] bg-white/50">
+              <div>
                 <button
                   type="button"
                   onClick={() => setOpenNeedToKnow((v) => !v)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[#716D64] hover:text-[#444444] transition cursor-pointer"
                   aria-expanded={openNeedToKnow}
                 >
-                  <div className="text-xs font-medium text-[#716D64]">
-                    Something you need to know
-                  </div>
                   <ChevronDownIcon
                     className={cn(
-                      "h-4 w-4 text-[#716D64] transition-transform",
+                      "h-3.5 w-3.5 transition-transform",
                       openNeedToKnow ? "rotate-180" : "",
                     )}
                   />
+                  Something you need to know
                 </button>
                 {openNeedToKnow ? (
-                  <div className="px-4 pb-4 text-sm text-[#444444]">
-                    <div className="space-y-1.5">
-                      <div>
-                        ⏳Cancellation and Refundable can be made 12 hours
-                        before the class
-                      </div>
-                      <div>⏰ Please come 15 minutes early</div>
-                      <div>‼️No Show/Late Cancellation Fee</div>
-                      <div className="pl-4">
-                        <div>- Group Class RM 10</div>
-                        <div>- Private Session RM 20</div>
-                      </div>
+                  <div className="mt-2 pl-5 text-xs text-[#716D64] leading-relaxed space-y-1">
+                    <div>
+                      ⏳ Cancellation and Refundable can be made 12 hours before
+                      the class
+                    </div>
+                    <div>⏰ Please come 15 minutes early</div>
+                    <div>‼️ No Show/Late Cancellation Fee</div>
+                    <div className="pl-3">
+                      <div>- Group Class RM 10</div>
+                      <div>- Private Session RM 20</div>
                     </div>
                   </div>
                 ) : null}
+              </div>
               </div>
             </div>
           </section>
@@ -744,14 +1052,35 @@ function BookingPageInner() {
             <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
               <div className="flex items-baseline justify-between gap-4">
                 <h2 className="font-serif text-xl font-semibold">Class Type</h2>
-                <div className="text-xs text-[#716D64]">{dateKey ?? ""}</div>
+                <div className="text-xs text-[#716D64] min-h-4 shrink-0">
+                  {loadingCalendar ? (
+                    <SkeletonLine
+                      className="w-24 max-w-full ml-auto"
+                      aria-hidden
+                    />
+                  ) : dateKey ? (
+                    formatBookingDateLabel(dateKey)
+                  ) : null}
+                </div>
               </div>
-              <div className="mt-1 text-sm text-[#716D64]">
-                Choose a class type first to see available times.
+              <div className="mt-1 min-h-[1.25rem]">
+                {showClassTypeHints ? (
+                  <p className="text-sm leading-5 text-[#716D64]">
+                    Choose a class type first to see available times.
+                  </p>
+                ) : (
+                  <SkeletonLine
+                    className="h-5 w-56 max-w-full"
+                    aria-hidden
+                  />
+                )}
               </div>
 
               <div className="mt-4">
-                <SkipUpdate block={itemsLoading && hasLoadedItemsOnce}>
+                <WithLoading
+                  loading={classTypesLoading}
+                  fallback={<ClassTypeGridSkeleton />}
+                >
                   <div className={cn(!dateKey ? "opacity-60" : "")}>
                     {itemsError ? (
                       <div className="text-sm text-red-700">{itemsError}</div>
@@ -793,21 +1122,23 @@ function BookingPageInner() {
                                   ✓
                                 </span>
                               ) : null}
-                              <div className="h-full flex flex-col">
-                                <div className="flex items-center justify-between gap-3">
+                              <div className="h-full flex flex-col items-start text-left">
+                                <div className="flex w-full items-start justify-between gap-3">
                                   <div className="font-serif text-lg font-semibold text-[#444444]">
                                     {it.name}
                                   </div>
                                   {!!it.color && (
                                     <span
-                                      className="shrink-0 inline-block h-3 w-3 rounded-full border border-black/10"
+                                      className="shrink-0 inline-block h-3 w-3 rounded-full border border-black/10 mt-1.5"
                                       style={{ backgroundColor: it.color }}
                                     />
                                   )}
                                 </div>
-                                <div className="mt-1 text-sm text-[#5C574F] line-clamp-2 flex-1">
-                                  {desc || " "}
-                                </div>
+                                {desc ? (
+                                  <p className="mt-1.5 text-[11px] leading-snug text-[#716D64]/70 line-clamp-2">
+                                    {desc}
+                                  </p>
+                                ) : null}
                               </div>
                             </button>
                           );
@@ -815,15 +1146,16 @@ function BookingPageInner() {
                       </div>
                     )}
                   </div>
-                </SkipUpdate>
-                {!dateKey ? (
+                </WithLoading>
+                {showClassTypeHints && !dateKey ? (
                   <div className="mt-2 text-xs text-[#716D64]">
                     Pick a date first.
                   </div>
-                ) : selectedItemId &&
+                ) : showClassTypeHints &&
+                  selectedItemId &&
                   disabledItemIdsForDate.has(selectedItemId) ? (
                   <div className="mt-2 text-xs text-[#A66A4A]">
-                    No sessions for this class on the selected date.
+                    No sessions scheduled for this class on the selected date.
                   </div>
                 ) : null}
               </div>
@@ -834,17 +1166,23 @@ function BookingPageInner() {
                 <h2 className="font-serif text-xl font-semibold cursor-pointer">
                   Available times
                 </h2>
-                <div className="text-xs text-[#716D64]">
-                  {selectedItemId
-                    ? (items.find((it) => it.id === selectedItemId)?.name ?? "")
-                    : ""}
+                <div className="text-xs text-[#716D64] min-h-4">
+                  {!showTimesHints ? (
+                    <SkeletonLine className="w-28 max-w-full" aria-hidden />
+                  ) : selectedItemId ? (
+                    items.find((it) => it.id === selectedItemId)?.name ?? ""
+                  ) : null}
                 </div>
               </div>
-              {selectedItemId && !selectedSlotId ? (
-                <div className="mt-1 text-xs text-[#A66A4A]">
-                  Select a time below to continue.
-                </div>
-              ) : null}
+              <div className="mt-1 min-h-4">
+                {!showTimesHints ? (
+                  <SkeletonLine className="w-40 max-w-full" aria-hidden />
+                ) : selectedItemId && !selectedSlotId ? (
+                  <p className="text-xs text-[#A66A4A]">
+                    Select a time below to continue.
+                  </p>
+                ) : null}
+              </div>
 
               <SkipUpdate
                 block={loadingSlots || loadingCalendar || itemsLoading}
@@ -923,35 +1261,6 @@ function BookingPageInner() {
                             );
                           })}
                         </div>
-
-                        {(itemsLoading || !!selectedClass) && (
-                          <div>
-                            <div className="text-xs text-[#716D64] mb-1">
-                              Class Description
-                            </div>
-                            {itemsLoading ? (
-                              <div className="space-y-2">
-                                <Skeleton
-                                  className="h-4 w-48"
-                                  rounded="rounded-full"
-                                />
-                                <Skeleton
-                                  className="h-20 w-full"
-                                  rounded="rounded-2xl"
-                                />
-                              </div>
-                            ) : (
-                              <div className="whitespace-pre-wrap rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm text-[#444444]">
-                                <div className="font-semibold">
-                                  {selectedClass?.name ?? "—"}
-                                </div>
-                                <div className="mt-1 text-sm text-[#5C574F]">
-                                  {selectedClass?.description?.trim() || "—"}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
                     )}
                   </WithError>
@@ -959,88 +1268,24 @@ function BookingPageInner() {
               </SkipUpdate>
             </div>
 
-            <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
-              <h2 className="font-serif text-xl font-semibold mb-4">
-                Your details
-              </h2>
-              <div className="grid gap-3">
-                <label className="grid gap-1">
-                  <span className="text-xs text-[#716D64]">Name</span>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className={cn(
-                      "rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm",
-                      "outline-none focus:ring-2 focus:ring-[#DFD1C9]",
-                    )}
-                    placeholder="Your name"
-                  />
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-xs text-[#716D64]">Email</span>
-                  <input
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className={cn(
-                      "rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm",
-                      "outline-none focus:ring-2 focus:ring-[#DFD1C9]",
-                    )}
-                    placeholder="you@example.com"
-                    inputMode="email"
-                  />
-                </label>
-                <label className="grid gap-1">
-                  <span className="text-xs text-[#716D64]">WhatsApp</span>
-                  <input
-                    value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
-                    className={cn(
-                      "rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm",
-                      "outline-none focus:ring-2 focus:ring-[#DFD1C9]",
-                    )}
-                    placeholder="+60 12-345 6789"
-                    inputMode="tel"
-                  />
-                </label>
-
-                <div className="mt-2 rounded-2xl border border-[#E8DDD4] bg-white/70 px-4 py-4 space-y-3">
-                  <div className="text-xs text-[#716D64] font-medium">
-                    Agreements
-                  </div>
-                  <Checkbox
-                    checked={consentWhatsapp}
-                    onCheckedChange={setConsentWhatsapp}
-                    label="Receive booking updates via WhatsApp"
-                  />
-                  <Checkbox
-                    checked={marketingOptIn}
-                    onCheckedChange={setMarketingOptIn}
-                    label="Receive event / promotion updates"
-                  />
-                </div>
-                {!!submitError && (
-                  <div className="text-sm text-red-700">{submitError}</div>
-                )}
-                <button
-                  disabled={
-                    !selectedSlotId ||
-                    !name ||
-                    !email ||
-                    !whatsapp ||
-                    !consentWhatsapp ||
-                    submitting
-                  }
-                  onClick={submitBooking}
-                  className="mt-2 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {getSubmitBookingLabel()}
-                </button>
-                <div className="text-xs text-[#716D64]">
-                  After submit, you’ll see confirmation. If anything changes,
-                  we’ll email you.
-                </div>
-              </div>
-            </div>
+            <BookingGuestPanel
+              authedClient={authedClient}
+              email={email}
+              onEmailChange={setEmail}
+              whatsapp={whatsapp}
+              onWhatsappChange={setWhatsapp}
+              signUp={signUp}
+              onSignUpChange={(v) => {
+                setSignUp(v);
+                if (!v) setPassword("");
+              }}
+              password={password}
+              onPasswordChange={setPassword}
+              selectedSlotId={selectedSlotId}
+              submitting={submitting}
+              submitError={submitError}
+              onSubmit={() => void submitBooking()}
+            />
           </section>
         </div>
 

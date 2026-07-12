@@ -10,6 +10,7 @@ import {
   sendAdminWhatsAppNotification,
   sendBookingCancelledByClientWhatsApp,
 } from "@/lib/twilioWhatsApp";
+import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
 
 const MIN_CANCEL_NOTICE_HOURS = 6;
 
@@ -20,17 +21,52 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return jsonError("Invalid body", 400, parsed.error.flatten());
 
     const { code, email, whatsapp } = parsed.data;
-    const { bookings, timeSlots, exclusiveLocks, items } = await getCollections();
+    const sessionClientId = getClientIdFromRequest(req);
+    const { bookings, timeSlots, exclusiveLocks, items, creditLedger, clients } =
+      await getCollections();
     const now = new Date();
 
-    const booking = await bookings.findOne({
-      code,
-      ...(email ? { email: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") } : {}),
-      ...(whatsapp ? { whatsapp } : {}),
-    });
-
+    const booking = await bookings.findOne({ code });
     if (!booking) return jsonError("Booking not found", 404);
     if (booking.status === "cancelled") return jsonOk({ cancelled: true });
+
+    let authorized = false;
+    if (sessionClientId) {
+      if (booking.clientId?.equals(sessionClientId)) {
+        authorized = true;
+      } else {
+        const sessionClient = await clients.findOne({ _id: sessionClientId });
+        const sessionEmail = (sessionClient?.email ?? "").trim().toLowerCase();
+        if (
+          sessionEmail &&
+          sessionEmail === (booking.email ?? "").trim().toLowerCase()
+        ) {
+          authorized = true;
+        }
+      }
+    }
+    if (!authorized && email) {
+      const re = new RegExp(
+        `^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        "i",
+      );
+      if (re.test(booking.email ?? "")) authorized = true;
+    }
+    if (!authorized && whatsapp) {
+      const normalize = (v: string) => v.replace(/\D/g, "");
+      if (
+        normalize(whatsapp) &&
+        normalize(whatsapp) === normalize(booking.whatsapp ?? "")
+      ) {
+        authorized = true;
+      }
+    }
+    if (!authorized) {
+      return jsonError(
+        "Provide the email or WhatsApp used for this booking, or sign in to cancel.",
+        403,
+      );
+    }
 
     const item = await items.findOne({ _id: booking.itemId });
     const classTypeName = item?.name ?? "Pilates";
@@ -44,20 +80,20 @@ export async function POST(req: NextRequest) {
     if (!(hoursUntil >= MIN_CANCEL_NOTICE_HOURS)) {
       return jsonError(
         `Cancellation is allowed up to ${MIN_CANCEL_NOTICE_HOURS} hours before the session.`,
-        409
+        409,
       );
     }
 
     const updated = await bookings.updateOne(
       { _id: booking._id, status: "confirmed" },
-      { $set: { status: "cancelled", cancelledAt: new Date() } }
+      { $set: { status: "cancelled", cancelledAt: new Date() } },
     );
 
     if (updated.modifiedCount) {
       if (booking.slotId) {
         await timeSlots.updateOne(
           { _id: booking.slotId, bookedCount: { $gt: 0 } },
-          { $inc: { bookedCount: -1 }, $set: { updatedAt: new Date() } }
+          { $inc: { bookedCount: -1 }, $set: { updatedAt: new Date() } },
         );
       }
 
@@ -90,7 +126,6 @@ export async function POST(req: NextRequest) {
         // ignore
       }
 
-      // WhatsApp (best-effort)
       await Promise.all([
         sendBookingCancelledByClientWhatsApp({
           to: booking.whatsapp,
@@ -114,6 +149,35 @@ export async function POST(req: NextRequest) {
           businessTimeZone: tz,
         }).catch(() => {}),
       ]);
+
+      const clientOid = booking.clientId;
+      if (clientOid && booking._id) {
+        try {
+          const already = await creditLedger.findOne({
+            bookingId: booking._id,
+            type: "booking_cancel_refund",
+          });
+          if (!already) {
+            const consumed = await creditLedger.findOne({
+              bookingId: booking._id,
+              type: "booking_consume",
+              amount: { $lt: 0 },
+            });
+            if (consumed && consumed.amount < 0) {
+              await creditLedger.insertOne({
+                clientId: clientOid,
+                type: "booking_cancel_refund",
+                amount: -consumed.amount,
+                bookingId: booking._id,
+                note: "Credit restored after client cancellation",
+                createdAt: now,
+              });
+            }
+          }
+        } catch {
+          // best-effort; booking is already cancelled
+        }
+      }
     }
 
     return jsonOk({ cancelled: true });
@@ -121,4 +185,3 @@ export async function POST(req: NextRequest) {
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);
   }
 }
-

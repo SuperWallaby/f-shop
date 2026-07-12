@@ -49,19 +49,19 @@ export function SlotButton(props: {
       className={cn(
         "text-left rounded-2xl border px-4 py-3 transition cursor-pointer relative",
         props.disabled
-          ? "bg-[#FAF8F6] border-[#E8DDD4] opacity-60 cursor-not-allowed"
-          : "bg-white/80 border-[#E8DDD4] hover:bg-white hover:shadow-sm",
+          ? "bg-fasea-canvas border-fasea-border opacity-60 cursor-not-allowed"
+          : "bg-white/80 border-fasea-border hover:bg-white hover:shadow-sm",
         props.selected
-          ? "ring-2 ring-[#A66A4A] ring-offset-2 ring-offset-[#FAF8F6] shadow-sm"
+          ? "ring-2 ring-fasea-primary ring-offset-2 ring-offset-fasea-canvas shadow-sm"
           : ""
       )}
     >
       {props.selected ? (
-        <span className="absolute top-3 right-3 h-6 w-6 rounded-full border border-[#A66A4A] bg-white/80 text-[#A66A4A] flex items-center justify-center text-sm leading-none">
+        <span className="absolute top-3 right-3 h-6 w-6 rounded-full border border-fasea-primary bg-white/80 text-fasea-primary flex items-center justify-center text-sm leading-none">
           ✓
         </span>
       ) : null}
-      <div className="text-sm font-semibold text-[#444444] inline-flex items-center gap-2">
+      <div className="text-sm font-semibold text-fasea-tertiary inline-flex items-center gap-2">
         {!!props.color && !props.disabled ? (
           <span
             className="inline-block h-2.5 w-2.5 rounded-full border border-black/10"
@@ -71,7 +71,7 @@ export function SlotButton(props: {
         ) : null}
         {props.title}
       </div>
-      <div className="text-sm text-[#716D64] mt-1">{props.subtitle}</div>
+      <div className="text-sm text-fasea-secondary mt-1">{props.subtitle}</div>
     </button>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { ObjectId } from "mongodb";
+import { MongoServerError, ObjectId } from "mongodb";
 import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "../../_utils/http";
 import { createBookingSchema } from "@/lib/schemas";
@@ -7,10 +7,14 @@ import { sendBookingCreatedEmail } from "@/lib/email";
 import type { BookingDb } from "@/lib/db";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { getBookingRulesFromSettings, isSlotBookableByRules } from "@/lib/bookingRules";
+import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
-import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
+import { makeCustomerKey } from "@/lib/credits";
+import { hashPassword } from "@/lib/password";
+import { setClientSessionCookie } from "@/lib/clientSession";
+import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
 
 class HttpError extends Error {
   status: number;
@@ -30,8 +34,16 @@ export async function POST(req: NextRequest) {
       return jsonError("Invalid body", 400, parsed.error.flatten());
     }
 
-    const { slotId, name, email, whatsapp, consentWhatsapp, marketingOptIn } =
-      parsed.data;
+    const {
+      slotId,
+      name,
+      email,
+      whatsapp,
+      consentWhatsapp,
+      marketingOptIn,
+      signUp,
+      password,
+    } = parsed.data;
     if (consentWhatsapp !== true) {
       return jsonError("Consent required", 400, {
         field: "consentWhatsapp",
@@ -39,12 +51,78 @@ export async function POST(req: NextRequest) {
           "Please agree to receive booking-related updates via WhatsApp.",
       });
     }
+    if (signUp && !password) {
+      return jsonError("Enter a 4-digit password to create an account.", 400);
+    }
+
     const slotObjectId = ObjectId.isValid(slotId) ? new ObjectId(slotId) : null;
     if (!slotObjectId) return jsonError("Invalid slotId", 400);
 
-    const { settings, timeSlots, bookings, items, exclusiveLocks } =
+    const { settings, timeSlots, bookings, items, exclusiveLocks, clients } =
       await getCollections();
     const now = new Date();
+
+    const sessionClientId = getClientIdFromRequest(req);
+    let linkedClientId: ObjectId | undefined = sessionClientId ?? undefined;
+
+    let signupClientId: ObjectId | undefined;
+    if (signUp && password) {
+      const emailLower = email.trim().toLowerCase();
+      const nameTrim = name.trim();
+      const existing = await clients.findOne({ email: emailLower });
+      if (existing?.passwordHash) {
+        return jsonError(
+          "An account with this email already exists. Sign in instead, or book as a guest.",
+          409,
+        );
+      }
+      const passwordHash = await hashPassword(password);
+      if (existing) {
+        await clients.updateOne(
+          { _id: existing._id },
+          {
+            $set: {
+              passwordHash,
+              name: nameTrim || existing.name,
+              whatsapp,
+              updatedAt: now,
+              lastLoginAt: now,
+            },
+          },
+        );
+        signupClientId = existing._id!;
+      } else {
+        try {
+          const ins = await clients.insertOne({
+            customerKey: makeCustomerKey({ email: emailLower }),
+            name: nameTrim,
+            email: emailLower,
+            whatsapp,
+            passwordHash,
+            studentStatus: "none" as const,
+            createdAt: now,
+            updatedAt: now,
+            lastLoginAt: now,
+          });
+          signupClientId = ins.insertedId;
+        } catch (e) {
+          if (e instanceof MongoServerError && e.code === 11000) {
+            return jsonError(
+              "An account with this email already exists. Sign in instead, or book as a guest.",
+              409,
+            );
+          }
+          throw e;
+        }
+      }
+      linkedClientId = signupClientId;
+    } else if (sessionClientId) {
+      const sessionClient = await clients.findOne({ _id: sessionClientId });
+      if (!sessionClient) {
+        linkedClientId = undefined;
+      }
+    }
+
     const settingsDoc = await settings.findOne({ _id: "singleton" });
     const rules = getBookingRulesFromSettings(settingsDoc);
 
@@ -54,8 +132,9 @@ export async function POST(req: NextRequest) {
 
     const item = await items.findOne({ _id: existingSlot.itemId });
     if (!item || !item.active) return jsonError("Item not found or inactive", 409);
-    const exclusiveKey = (item.exclusiveKey ?? "").trim();
-    const effectiveCapacity = item.capacity;
+    const itemRef = item;
+    const exclusiveKey = (itemRef.exclusiveKey ?? "").trim();
+    const effectiveCapacity = itemRef.capacity;
 
     let insertedBuckets: number[] = [];
     if (exclusiveKey && usesExclusiveTimeBlocking(effectiveCapacity)) {
@@ -65,11 +144,11 @@ export async function POST(req: NextRequest) {
           status: "confirmed",
           exclusiveKey,
           dateKey: existingSlot.dateKey,
-          itemId: { $ne: item._id },
+          itemId: { $ne: itemRef._id },
           startMin: { $lt: existingSlot.endMin },
           endMin: { $gt: existingSlot.startMin },
         },
-        { projection: { _id: 1 } }
+        { projection: { _id: 1 } },
       );
       if (conflict) return jsonError("This time is already booked", 409);
 
@@ -77,7 +156,7 @@ export async function POST(req: NextRequest) {
         exclusiveLocks,
         exclusiveKey,
         dateKey: existingSlot.dateKey,
-        itemId: item._id!,
+        itemId: itemRef._id!,
         startMin: existingSlot.startMin,
         endMin: existingSlot.endMin,
         now,
@@ -88,16 +167,15 @@ export async function POST(req: NextRequest) {
       insertedBuckets = lockRes.insertedBuckets;
     }
 
-    // Capacity-safe increment
     const updatedSlot = await timeSlots.findOneAndUpdate(
       {
         _id: slotObjectId,
         cancelled: false,
-        itemId: item._id,
+        itemId: itemRef._id,
         $expr: { $lt: ["$bookedCount", effectiveCapacity] },
       },
       { $inc: { bookedCount: 1 }, $set: { updatedAt: now } },
-      { returnDocument: "after" }
+      { returnDocument: "after" },
     );
 
     if (!updatedSlot) {
@@ -105,69 +183,76 @@ export async function POST(req: NextRequest) {
         await exclusiveLocks.deleteMany({
           exclusiveKey,
           dateKey: existingSlot.dateKey,
-          itemId: item._id!,
+          itemId: itemRef._id!,
           bucket: { $in: insertedBuckets },
         });
       }
       return jsonError("Slot is full or unavailable", 409);
     }
 
-    try {
-      // Enforce booking rules (min notice / max days ahead) for public users
-      if (
-        !isSlotBookableByRules({
-          now,
-          dateKey: updatedSlot.dateKey,
-          startMin: updatedSlot.startMin,
-          rules,
-        })
-      ) {
-        // rollback the count increment we just did
-        await timeSlots.updateOne(
-          { _id: updatedSlot._id, bookedCount: { $gt: 0 } },
-          { $inc: { bookedCount: -1 }, $set: { updatedAt: new Date() } }
-        );
-        if (exclusiveKey && insertedBuckets.length > 0) {
-          await exclusiveLocks.deleteMany({
-            exclusiveKey,
-            dateKey: updatedSlot.dateKey,
-            itemId: item._id!,
-            bucket: { $in: insertedBuckets },
-          });
-        }
-        return jsonError("This slot is not bookable anymore", 409);
+    const slotRef = updatedSlot;
+
+    async function rollbackSlotLocks() {
+      await timeSlots.updateOne(
+        { _id: slotRef._id, bookedCount: { $gt: 0 } },
+        { $inc: { bookedCount: -1 }, $set: { updatedAt: new Date() } },
+      );
+      if (exclusiveKey && insertedBuckets.length > 0) {
+        await exclusiveLocks.deleteMany({
+          exclusiveKey,
+          dateKey: slotRef.dateKey,
+          itemId: itemRef._id!,
+          bucket: { $in: insertedBuckets },
+        });
       }
+    }
 
-      const bookingDoc: BookingDb = {
-        code: generateBookingCode6(),
-        slotId: updatedSlot._id,
-        detached: false,
-        itemId: item._id,
-        exclusiveKey: exclusiveKey || undefined,
-        name,
-        email,
-        whatsapp,
-        consentWhatsapp: true,
-        ...(marketingOptIn
-          ? { marketingOptIn: true, marketingOptInAt: now }
-          : {}),
-        status: "confirmed" as const,
-        createdAt: now,
-        dateKey: updatedSlot.dateKey,
-        startMin: updatedSlot.startMin,
-        endMin: updatedSlot.endMin,
-        businessTimeZone: BUSINESS_TIME_ZONE,
-        capacityAtBooking: effectiveCapacity,
-      };
+    if (
+      !isSlotBookableByRules({
+        now,
+        dateKey: slotRef.dateKey,
+        startMin: slotRef.startMin,
+        rules,
+      })
+    ) {
+      await rollbackSlotLocks();
+      return jsonError("This slot is not bookable anymore", 409);
+    }
 
-      let result: { insertedId: ObjectId } | null = null;
+    const nameTrim = name.trim();
+    const emailTrim = email.trim().toLowerCase();
+
+    const bookingDoc: BookingDb = {
+      code: generateBookingCode6(),
+      slotId: slotRef._id,
+      detached: false,
+      itemId: itemRef._id,
+      exclusiveKey: exclusiveKey || undefined,
+      ...(linkedClientId ? { clientId: linkedClientId } : {}),
+      name: nameTrim,
+      email: emailTrim,
+      whatsapp,
+      consentWhatsapp: true,
+      ...(marketingOptIn
+        ? { marketingOptIn: true, marketingOptInAt: now }
+        : {}),
+      status: "confirmed" as const,
+      createdAt: now,
+      dateKey: slotRef.dateKey,
+      startMin: slotRef.startMin,
+      endMin: slotRef.endMin,
+      businessTimeZone: BUSINESS_TIME_ZONE,
+      capacityAtBooking: effectiveCapacity,
+    };
+
+    let result: { insertedId: ObjectId } | null = null;
+    try {
       for (let attempt = 0; attempt < 6; attempt++) {
         try {
           if (attempt > 0) bookingDoc.code = generateBookingCode6();
           result = await bookings.insertOne(bookingDoc);
           break;
         } catch (e) {
-          // retry on duplicate booking code
           if (
             e &&
             typeof e === "object" &&
@@ -181,79 +266,72 @@ export async function POST(req: NextRequest) {
           throw e;
         }
       }
-      if (!result) throw new Error("Failed to allocate booking code");
+    } catch (insertErr) {
+      await rollbackSlotLocks();
+      throw insertErr;
+    }
+    if (!result) {
+      await rollbackSlotLocks();
+      throw new Error("Failed to allocate booking code");
+    }
 
-      // Email best-effort (booking is still confirmed even if email fails)
-      try {
-        await sendBookingCreatedEmail({
-          to: email,
-          name,
-          classTypeName: item.name,
+    try {
+      await sendBookingCreatedEmail({
+        to: emailTrim,
+        name: nameTrim,
+        classTypeName: itemRef.name,
+        whatsapp,
+        bookingCode: bookingDoc.code,
+        dateKey: slotRef.dateKey,
+        startMin: slotRef.startMin,
+        endMin: slotRef.endMin,
+        businessTimeZone: BUSINESS_TIME_ZONE,
+      });
+    } catch {
+      // ignore
+    }
+
+    try {
+      await Promise.all([
+        sendBookingConfirmedWhatsApp({
+          to: whatsapp,
+          name: nameTrim,
+          classTypeName: itemRef.name,
+          bookingCode: bookingDoc.code,
+          dateKey: slotRef.dateKey,
+          startMin: slotRef.startMin,
+          endMin: slotRef.endMin,
+          businessTimeZone: BUSINESS_TIME_ZONE,
+        }).catch(() => {}),
+        sendAdminWhatsAppNotification({
+          kind: "booking_confirmed",
+          name: nameTrim,
+          email: emailTrim,
           whatsapp,
           bookingCode: bookingDoc.code,
-          dateKey: updatedSlot.dateKey,
-          startMin: updatedSlot.startMin,
-          endMin: updatedSlot.endMin,
+          classTypeName: itemRef.name,
+          dateKey: slotRef.dateKey,
+          startMin: slotRef.startMin,
+          endMin: slotRef.endMin,
           businessTimeZone: BUSINESS_TIME_ZONE,
-        });
-      } catch {
-        // ignore
-      }
-
-      // WhatsApp best-effort
-      try {
-        await Promise.all([
-          sendBookingConfirmedWhatsApp({
-            to: whatsapp,
-            name,
-            classTypeName: item.name,
-            bookingCode: bookingDoc.code,
-            dateKey: updatedSlot.dateKey,
-            startMin: updatedSlot.startMin,
-            endMin: updatedSlot.endMin,
-            businessTimeZone: BUSINESS_TIME_ZONE,
-          }).catch(() => {}),
-          sendAdminWhatsAppNotification({
-            kind: "booking_confirmed",
-            name,
-            email,
-            whatsapp,
-            bookingCode: bookingDoc.code,
-            classTypeName: item.name,
-            dateKey: updatedSlot.dateKey,
-            startMin: updatedSlot.startMin,
-            endMin: updatedSlot.endMin,
-            businessTimeZone: BUSINESS_TIME_ZONE,
-          }).catch(() => {}),
-        ]);
-      } catch {
-        // ignore
-      }
-
-      return jsonOk({
-        bookingId: result.insertedId.toHexString(),
-        bookingCode: bookingDoc.code,
-        slotId: updatedSlot._id.toHexString(),
-      });
-    } catch (e) {
-      // rollback bookedCount
-      await timeSlots.updateOne(
-        { _id: updatedSlot._id, bookedCount: { $gt: 0 } },
-        { $inc: { bookedCount: -1 }, $set: { updatedAt: new Date() } }
-      );
-      if (exclusiveKey && insertedBuckets.length > 0) {
-        await exclusiveLocks.deleteMany({
-          exclusiveKey,
-          dateKey: updatedSlot.dateKey,
-          itemId: item._id!,
-          bucket: { $in: insertedBuckets },
-        });
-      }
-      throw e;
+        }).catch(() => {}),
+      ]);
+    } catch {
+      // ignore
     }
+
+    const payload = jsonOk({
+      bookingId: result.insertedId.toHexString(),
+      bookingCode: bookingDoc.code,
+      slotId: slotRef._id.toHexString(),
+      signedUp: Boolean(signupClientId),
+    });
+    if (signupClientId) {
+      return setClientSessionCookie(payload, signupClientId, req);
+    }
+    return payload;
   } catch (e) {
     if (e instanceof HttpError) return jsonError(e.message, e.status, e.details);
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);
   }
 }
-

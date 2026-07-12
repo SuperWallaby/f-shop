@@ -14,11 +14,18 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:4819](http://localhost:4819) with your browser (see `PORT` / `FASEA_API_PORT` in `.env.local`).
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Design system
+
+Brand tokens and component guidance live in **[`DESIGN.md`](./DESIGN.md)** at the repo root.
+
+- **Web:** CSS variables `--fasea-*` and Tailwind `fasea-*` colors/radii are defined in **`src/app/globals.css`** (`@theme inline`).
+- **Flutter app:** `apps/mobile/lib/fasea_design_system.dart`; see **`apps/mobile/README.md`**.
 
 ## Environment variables (booking/admin)
 

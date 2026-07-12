@@ -1,16 +1,54 @@
 @import "tailwindcss";
-@import "react-day-picker/style.css";
+@source "../**/*.{js,ts,jsx,tsx,mdx}";
+@config "../../tailwind.config.js";
 
 :root {
-  --background: #DFD1C9;
-  --background: #DFD1C9;
+  /* Legacy shell bg (booking / marketing) — DESIGN.md “tonal clay” */
+  --background: #dfd1c9;
+  --foreground: #444444;
+
+  /* DESIGN.md tokens — also available as Tailwind `fasea-*` colors */
+  --fasea-primary: #a66a4a;
+  --fasea-on-primary: #ffffff;
+  --fasea-secondary: #716d64;
+  --fasea-tertiary: #444444;
+  --fasea-canvas: #faf8f6;
+  --fasea-surface: #ffffff;
+  --fasea-surface-muted: #fffcfa;
+  --fasea-border: #e8ddd4;
+  --fasea-border-strong: #d4c4ba;
+  --fasea-tonal: #dfd1c9;
+  --fasea-focus-ring: #dfd1c9;
+  --fasea-error: #b42318;
+  --fasea-error-surface: #fce8e6;
+  --fasea-radius-sm: 12px;
+  --fasea-radius-md: 16px;
+  --fasea-radius-lg: 24px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-fasea-primary: var(--fasea-primary);
+  --color-fasea-on-primary: var(--fasea-on-primary);
+  --color-fasea-secondary: var(--fasea-secondary);
+  --color-fasea-tertiary: var(--fasea-tertiary);
+  --color-fasea-canvas: var(--fasea-canvas);
+  --color-fasea-surface: var(--fasea-surface);
+  --color-fasea-surface-muted: var(--fasea-surface-muted);
+  --color-fasea-border: var(--fasea-border);
+  --color-fasea-border-strong: var(--fasea-border-strong);
+  --color-fasea-tonal: var(--fasea-tonal);
+  --color-fasea-focus: var(--fasea-focus-ring);
+  --color-fasea-error: var(--fasea-error);
+  --color-fasea-error-surface: var(--fasea-error-surface);
+
+  --radius-fasea-sm: var(--fasea-radius-sm);
+  --radius-fasea-md: var(--fasea-radius-md);
+  --radius-fasea-lg: var(--fasea-radius-lg);
 }
 
 .reveal {
@@ -20,39 +58,9 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* react-day-picker theme overrides (remove default blue) */
-.rdp-root,
-.rdp {
-  --rdp-accent-color: #716D64; /* replaces default blue */
-  --rdp-accent-background-color: #DFD1C9;
-  --rdp-today-color: #A66A4A;
-
-  /* Make range/selected styling match the brand palette */
-  --rdp-selected-border: 2px solid rgba(223, 209, 201, 0.95);
-  --rdp-range_middle-background-color: rgba(223, 209, 201, 0.45);
-  --rdp-range_start-date-background-color: #716D64;
-  --rdp-range_end-date-background-color: #716D64;
-  --rdp-range_start-color: #FAF8F6;
-  --rdp-range_end-color: #FAF8F6;
-
-  /* Slightly smaller cells to match existing UI density */
-  --rdp-day-height: 40px;
-  --rdp-day-width: 40px;
-  --rdp-day_button-height: 38px;
-  --rdp-day_button-width: 38px;
-}
-
-.rdp-root .rdp-day_button:hover:not(:disabled) {
-  background-color: rgba(223, 209, 201, 0.35);
-}
-
-.rdp-root .rdp-day_button:focus-visible {
-  outline: 2px solid rgba(223, 209, 201, 0.85);
-  outline-offset: 2px;
-}
 
 
 /* globals.css */
@@ -86,6 +94,28 @@ body {
 
 .fade-in-up {
   animation: fade-in-up 0.7s ease-out forwards;
+}
+
+@keyframes fasea-shop-toast-in {
+  0% {
+    opacity: 0;
+    transform: translateY(120%) scale(0.9);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(-10px) scale(1.03);
+  }
+  85% {
+    transform: translateY(4px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.fasea-shop-toast-enter {
+  animation: fasea-shop-toast-in 0.75s cubic-bezier(0.34, 1.3, 0.64, 1) forwards;
 }
 
 .bg-hero-animated {

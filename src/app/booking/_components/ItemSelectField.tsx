@@ -26,7 +26,7 @@ export function ItemSelectField(props: {
     return <div className="text-sm text-red-700">{props.error}</div>;
   }
   if (props.items.length === 0) {
-    return <div className="text-sm text-[#716D64]">No classes configured.</div>;
+    return <div className="text-sm text-fasea-secondary">No classes configured.</div>;
   }
 
   return (
@@ -34,8 +34,8 @@ export function ItemSelectField(props: {
       value={props.value}
       onChange={(e) => props.onChange(e.target.value)}
       className={cn(
-        "w-full rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm",
-        "outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+        "w-full rounded-2xl border border-fasea-border bg-white px-4 py-3 text-sm",
+        "outline-none focus:ring-2 focus:ring-fasea-focus"
       )}
     >
       <option value="">All Class</option>

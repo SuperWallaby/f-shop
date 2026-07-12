@@ -123,34 +123,34 @@ export default function BookingCheckPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF8F6] text-[#444444] px-6 py-24">
+    <div className="min-h-screen bg-fasea-canvas text-fasea-tertiary px-6 py-24">
       <SiteHeader />
       <main className="max-w-3xl mx-auto mt-16 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/booking"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-fasea-border bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
           >
             <ArrowLeftIcon className="h-4 w-4" />
             Back
           </Link>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-fasea-border bg-white/80 text-sm hover:shadow-sm transition cursor-pointer"
           >
             <ArrowLeftIcon className="h-4 w-4" />
             Home
           </Link>
         </div>
 
-        <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+        <div className="bg-white/70 border border-fasea-border rounded-3xl p-6 shadow-sm">
           <h1 className="font-serif text-2xl font-bold mb-2">Booking check</h1>
-          <div className="text-sm text-[#716D64]">
+          <div className="text-sm text-fasea-secondary">
             Look up by booking code, or by name + (email / WhatsApp).
           </div>
         </div>
 
-        <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+        <section className="bg-white/70 border border-fasea-border rounded-3xl p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="font-serif text-lg font-semibold inline-flex items-center gap-2">
               <MagnifyingGlassIcon className="h-4 w-4" />
@@ -163,8 +163,8 @@ export default function BookingCheckPage() {
                 className={cn(
                   "px-4 py-2 rounded-full text-sm border transition cursor-pointer",
                   tab === "code"
-                    ? "bg-[#DFD1C9] border-[#DFD1C9]"
-                    : "bg-white/80 border-[#E8DDD4] hover:shadow-sm"
+                    ? "bg-fasea-tonal border-fasea-tonal"
+                    : "bg-white/80 border-fasea-border hover:shadow-sm"
                 )}
               >
                 By code
@@ -175,8 +175,8 @@ export default function BookingCheckPage() {
                 className={cn(
                   "px-4 py-2 rounded-full text-sm border transition cursor-pointer",
                   tab === "details"
-                    ? "bg-[#DFD1C9] border-[#DFD1C9]"
-                    : "bg-white/80 border-[#E8DDD4] hover:shadow-sm"
+                    ? "bg-fasea-tonal border-fasea-tonal"
+                    : "bg-white/80 border-fasea-border hover:shadow-sm"
                 )}
               >
                 By details
@@ -187,7 +187,7 @@ export default function BookingCheckPage() {
           {tab === "code" ? (
             <div className="mt-5">
               <label className="grid gap-1">
-                <span className="text-xs text-[#716D64]">
+                <span className="text-xs text-fasea-secondary">
                   Booking code (6 digits)
                 </span>
                 <input
@@ -196,8 +196,8 @@ export default function BookingCheckPage() {
                   inputMode="numeric"
                   placeholder="123456"
                   className={cn(
-                    "rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm",
-                    "outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                    "rounded-2xl border border-fasea-border bg-white px-4 py-3 text-sm",
+                    "outline-none focus:ring-2 focus:ring-fasea-focus"
                   )}
                 />
               </label>
@@ -205,7 +205,7 @@ export default function BookingCheckPage() {
                 type="button"
                 disabled={!canLookupByCode || loading}
                 onClick={lookupByCode}
-                className="mt-4 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="mt-4 px-6 py-3 rounded-full bg-fasea-tonal text-sm font-medium hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Searching…" : "Search"}
               </button>
@@ -214,32 +214,32 @@ export default function BookingCheckPage() {
             <div className="mt-5">
               <div className="grid gap-3">
                 <label className="grid gap-1">
-                  <span className="text-xs text-[#716D64]">Name</span>
+                  <span className="text-xs text-fasea-secondary">Name</span>
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Your name"
                     className={cn(
-                      "rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm",
-                      "outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                      "rounded-2xl border border-fasea-border bg-white px-4 py-3 text-sm",
+                      "outline-none focus:ring-2 focus:ring-fasea-focus"
                     )}
                   />
                 </label>
                 <label className="grid gap-1">
-                  <span className="text-xs text-[#716D64]">Email (optional)</span>
+                  <span className="text-xs text-fasea-secondary">Email (optional)</span>
                   <input
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
                     inputMode="email"
                     className={cn(
-                      "rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm",
-                      "outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                      "rounded-2xl border border-fasea-border bg-white px-4 py-3 text-sm",
+                      "outline-none focus:ring-2 focus:ring-fasea-focus"
                     )}
                   />
                 </label>
                 <label className="grid gap-1">
-                  <span className="text-xs text-[#716D64]">
+                  <span className="text-xs text-fasea-secondary">
                     WhatsApp (optional)
                   </span>
                   <input
@@ -248,8 +248,8 @@ export default function BookingCheckPage() {
                     placeholder="+60 12-345 6789"
                     inputMode="tel"
                     className={cn(
-                      "rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm",
-                      "outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+                      "rounded-2xl border border-fasea-border bg-white px-4 py-3 text-sm",
+                      "outline-none focus:ring-2 focus:ring-fasea-focus"
                     )}
                   />
                 </label>
@@ -258,7 +258,7 @@ export default function BookingCheckPage() {
                 type="button"
                 disabled={!canLookupByDetails || loading}
                 onClick={lookupByDetails}
-                className="mt-4 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="mt-4 px-6 py-3 rounded-full bg-fasea-tonal text-sm font-medium hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Searching…" : "Search"}
               </button>
@@ -272,14 +272,14 @@ export default function BookingCheckPage() {
           </div>
         )}
 
-        <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+        <section className="bg-white/70 border border-fasea-border rounded-3xl p-6 shadow-sm">
           <div className="flex items-baseline justify-between gap-4">
             <div className="font-serif text-lg font-semibold">Results</div>
-            <div className="text-xs text-[#716D64]">Total: {items.length}</div>
+            <div className="text-xs text-fasea-secondary">Total: {items.length}</div>
           </div>
 
           {items.length === 0 ? (
-            <div className="mt-4 text-sm text-[#716D64]">
+            <div className="mt-4 text-sm text-fasea-secondary">
               No bookings found.
             </div>
           ) : (
@@ -287,10 +287,10 @@ export default function BookingCheckPage() {
               {items.map((b) => (
                 <div
                   key={`${b.code}-${b.dateKey}-${b.startMin}`}
-                  className="rounded-3xl border border-[#E8DDD4] bg-white/80 px-5 py-4"
+                  className="rounded-3xl border border-fasea-border bg-white/80 px-5 py-4"
                 >
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <div className="text-xs font-mono text-[#716D64]">#{b.code}</div>
+                    <div className="text-xs font-mono text-fasea-secondary">#{b.code}</div>
                     <div className="font-serif text-lg font-semibold">
                       {b.dateKey} · {formatLocalTimeRange(b.startUtc, b.endUtc)}
                     </div>
@@ -298,8 +298,8 @@ export default function BookingCheckPage() {
                       className={cn(
                         "text-[11px] px-2 py-1 rounded-full",
                         b.status === "confirmed"
-                          ? "bg-[#DFD1C9] text-[#444444]"
-                          : "bg-[#F3ECE6] text-[#716D64]"
+                          ? "bg-fasea-tonal text-fasea-tertiary"
+                          : "bg-[#F3ECE6] text-fasea-secondary"
                       )}
                     >
                       {b.status === "confirmed" ? "booked" : "cancelled"}
@@ -313,12 +313,12 @@ export default function BookingCheckPage() {
                       type="button"
                       disabled={Boolean(cancellingCode) || loading}
                       onClick={() => cancelBooking(b.code)}
-                      className="mt-3 px-4 py-2 rounded-full border border-[#E8DDD4] bg-[#F3ECE6] text-sm hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="mt-3 px-4 py-2 rounded-full border border-fasea-border bg-[#F3ECE6] text-sm hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span className="inline-flex items-center gap-2">
                         {cancellingCode === b.code ? (
                           <span
-                            className="h-3.5 w-3.5 rounded-full border-2 border-[#716D64]/30 border-t-[#716D64] animate-spin"
+                            className="h-3.5 w-3.5 rounded-full border-2 border-fasea-secondary/30 border-t-fasea-secondary animate-spin"
                             aria-hidden
                           />
                         ) : null}
