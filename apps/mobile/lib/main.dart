@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'dart:async';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kDebugMode, kIsWeb, kProfileMode, TargetPlatform;
 import 'package:flutter/material.dart';
@@ -9,6 +10,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api_dio.dart';
 import 'fasea_design_system.dart';
+import 'google_auth.dart';
+import 'google_logo_icon.dart';
+import 'oauth_web.dart';
+import 'push_service.dart';
+import 'schedule_screen.dart';
+import 'web_auth_callback.dart';
 
 /// Optional compile-time URL: `--dart-define=API_BASE_URL=https://...`
 const String _kApiBaseUrlFromDefine = String.fromEnvironment(
@@ -53,7 +60,7 @@ String formatApiError(Object error) {
       raw.contains('connection error') ||
       raw.contains('Failed host lookup')) {
     return 'Cannot reach the API at ${resolveApiBaseUrl()}. '
-        'Start the server in another terminal: yarn dev';
+        'Run yarn app (or yarn dev) on your Mac and use the same Wi‑Fi for a physical phone.';
   }
   if (error is DioException) {
     final message = error.message;
@@ -64,7 +71,11 @@ String formatApiError(Object error) {
 
 const studioPhone = '60145403560';
 
-void main() => runApp(const FaseaApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initPushNotifications();
+  runApp(const FaseaApp());
+}
 
 class FaseaApp extends StatelessWidget {
   const FaseaApp({super.key});
@@ -129,11 +140,20 @@ class _AppSessionState extends State<AppSession> {
   ClientMe? me;
   bool loading = true;
   bool adminAuthed = false;
+  String? webAuthError;
 
   @override
   void initState() {
     super.initState();
-    refresh();
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    final authErrCode = consumeWebAuthCallback();
+    if (authErrCode != null) {
+      webAuthError = describeWebAuthError(authErrCode);
+    }
+    await refresh();
   }
 
   Future<void> refresh() async {
@@ -141,19 +161,28 @@ class _AppSessionState extends State<AppSession> {
     try {
       final next = await widget.api.me();
       final admin = await widget.api.adminMe().catchError((_) => false);
+      if (!mounted) return;
       setState(() {
         me = next;
         adminAuthed = admin;
       });
+      if (next.authed) {
+        unawaited(
+          syncPushTokenWithServer(
+            ({required token, required platform}) =>
+                widget.api.registerPushToken(token: token, platform: platform),
+          ),
+        );
+      }
     } catch (_) {
-      setState(() {
-        me = null;
-        adminAuthed = false;
-      });
+      // Keep existing session on network errors — don't force re-login.
     } finally {
       if (mounted) setState(() => loading = false);
     }
   }
+
+  bool _needsName(ClientMe current) =>
+      current.needsName || (current.client?.name ?? '').trim().isEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -162,10 +191,18 @@ class _AppSessionState extends State<AppSession> {
     }
     final current = me;
     if (current == null || !current.authed) {
-      return AuthScreen(api: widget.api, onAuthed: refresh);
+      return AuthScreen(
+        api: widget.api,
+        onAuthed: refresh,
+        initialError: webAuthError,
+      );
     }
-    if ((current.client?.name ?? '').trim().isEmpty) {
-      return CompleteNameScreen(api: widget.api, onSaved: refresh);
+    if (_needsName(current)) {
+      return CompleteNameScreen(
+        api: widget.api,
+        email: current.client?.email,
+        onSaved: refresh,
+      );
     }
     return FaseaShell(
       api: widget.api,
@@ -274,6 +311,16 @@ class ApiClient {
       ),
     ),
   );
+  Future<ClientMe> googleAuth(String idToken) async => ClientMe.fromAuthData(
+    asMap(
+      _data(
+        await dio.post(
+          '/api/public/client/auth/google/mobile',
+          data: {'idToken': idToken},
+        ),
+      ),
+    ),
+  );
   Future<ClientMe> recover(String name, String whatsapp) async =>
       ClientMe.fromAuthData(
         asMap(
@@ -308,6 +355,24 @@ class ApiClient {
   Future<List<ClassItem>> items() async => asList(
     asMap(_data(await dio.get('/api/public/items')))['items'],
   ).map((e) => ClassItem.fromJson(asMap(e))).toList();
+  Future<PublicScheduleData> schedule({
+    required String fromDateKey,
+    required String toDateKey,
+    String? itemId,
+  }) async => PublicScheduleData.fromJson(
+    asMap(
+      _data(
+        await dio.get(
+          '/api/public/schedule',
+          queryParameters: {
+            'fromDateKey': fromDateKey,
+            'toDateKey': toDateKey,
+            if (itemId != null && itemId.isNotEmpty) 'itemId': itemId,
+          },
+        ),
+      ),
+    ),
+  );
   Future<List<String>> availableDates(
     String from,
     String to,
@@ -415,6 +480,27 @@ class ApiClient {
       _data(await dio.post('/api/admin/plans', data: body));
   Future<void> patchPlan(String id, Map<String, dynamic> body) async =>
       _data(await dio.patch('/api/admin/plans/$id', data: body));
+  Future<void> registerPushToken({
+    required String token,
+    required String platform,
+  }) async => _data(
+    await dio.post(
+      '/api/public/client/push-token',
+      data: {'token': token, 'platform': platform},
+    ),
+  );
+  Future<void> unregisterPushToken({String? token}) async => _data(
+    await dio.delete(
+      '/api/public/client/push-token',
+      data: {if (token != null && token.isNotEmpty) 'token': token},
+    ),
+  );
+  Future<void> setPushMarketingOptIn(bool enabled) async => _data(
+    await dio.patch(
+      '/api/public/client/push-preferences',
+      data: {'pushMarketingOptIn': enabled},
+    ),
+  );
 }
 
 Map<String, dynamic> asMap(dynamic value) =>
@@ -423,12 +509,14 @@ List<dynamic> asList(dynamic value) =>
     List<dynamic>.from(value as List? ?? const []);
 
 class ClientMe {
-  ClientMe({required this.authed, this.client, this.balance});
+  ClientMe({required this.authed, this.needsName = false, this.client, this.balance});
   final bool authed;
+  final bool needsName;
   final Client? client;
   final Balance? balance;
   factory ClientMe.fromJson(Map<String, dynamic> json) => ClientMe(
     authed: json['authed'] == true,
+    needsName: json['needsName'] == true,
     client: json['client'] == null
         ? null
         : Client.fromJson(asMap(json['client'])),
@@ -438,6 +526,7 @@ class ClientMe {
   );
   factory ClientMe.fromAuthData(Map<String, dynamic> json) => ClientMe(
     authed: true,
+    needsName: json['needsName'] == true,
     client: json['client'] == null
         ? null
         : Client.fromJson(asMap(json['client'])),
@@ -453,8 +542,10 @@ class Client {
       name = '${json['name'] ?? ''}',
       email = '${json['email'] ?? ''}',
       whatsapp = '${json['whatsapp'] ?? ''}',
-      studentStatus = '${json['studentStatus'] ?? 'none'}';
+      studentStatus = '${json['studentStatus'] ?? 'none'}',
+      pushMarketingOptIn = json['pushMarketingOptIn'] as bool? ?? true;
   final String id, name, email, whatsapp, studentStatus;
+  final bool pushMarketingOptIn;
 }
 
 class Balance {
@@ -577,9 +668,15 @@ class FaseaEvent {
 }
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key, required this.api, required this.onAuthed});
+  const AuthScreen({
+    super.key,
+    required this.api,
+    required this.onAuthed,
+    this.initialError,
+  });
   final ApiClient api;
   final Future<void> Function() onAuthed;
+  final String? initialError;
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
@@ -588,8 +685,57 @@ class _AuthScreenState extends State<AuthScreen> {
   final email = TextEditingController();
   final recoverName = TextEditingController();
   final recoverWhatsapp = TextEditingController();
-  bool recover = false, loading = false;
+  bool recover = false, loading = false, googleLoading = false;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    error = widget.initialError;
+  }
+
+  Future<void> _startOAuthRedirect(String url) async {
+    setState(() {
+      googleLoading = true;
+      error = null;
+    });
+    try {
+      final uri = Uri.parse(url);
+      final launched = await launchUrl(uri, webOnlyWindowName: '_self');
+      if (!launched) {
+        throw Exception('Could not open sign-in page.');
+      }
+    } catch (e) {
+      if (mounted) setState(() => error = formatApiError(e));
+      if (mounted) setState(() => googleLoading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (kIsWeb) {
+      await _startOAuthRedirect(googleOAuthStartUrl(resolveApiBaseUrl()));
+      return;
+    }
+    setState(() {
+      googleLoading = true;
+      error = null;
+    });
+    try {
+      final idToken = await signInWithGoogleIdToken();
+      if (idToken == null) return;
+      await widget.api.googleAuth(idToken);
+      await widget.onAuthed();
+    } catch (e) {
+      if (mounted) setState(() => error = formatApiError(e));
+    } finally {
+      if (mounted) setState(() => googleLoading = false);
+    }
+  }
+
+  Future<void> _signInWithApple() async {
+    await _startOAuthRedirect(appleOAuthStartUrl(resolveApiBaseUrl()));
+  }
+
   Future<void> submit() async {
     setState(() {
       loading = true;
@@ -653,6 +799,42 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                 ),
                 const SizedBox(height: FaseaSpacing.md),
+                if (!recover) ...[
+                  OutlinedButton.icon(
+                    onPressed: (loading || googleLoading)
+                        ? null
+                        : _signInWithGoogle,
+                    icon: googleLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const GoogleLogoIcon(size: 20),
+                    label: Text(
+                      googleLoading ? 'Signing in…' : 'Continue with Google',
+                    ),
+                  ),
+                  if (kIsWeb) ...[
+                    const SizedBox(height: FaseaSpacing.sm),
+                    OutlinedButton.icon(
+                      onPressed: (loading || googleLoading)
+                          ? null
+                          : _signInWithApple,
+                      icon: const Icon(Icons.apple, size: 20),
+                      label: const Text('Continue with Apple'),
+                    ),
+                  ],
+                  const SizedBox(height: FaseaSpacing.md),
+                  Text(
+                    'or continue with email',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: FaseaColors.secondary,
+                    ),
+                  ),
+                  const SizedBox(height: FaseaSpacing.md),
+                ],
                 if (!recover)
                   TextField(
                     controller: email,
@@ -701,9 +883,11 @@ class CompleteNameScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.onSaved,
+    this.email,
   });
   final ApiClient api;
   final Future<void> Function() onSaved;
+  final String? email;
   @override
   State<CompleteNameScreen> createState() => _CompleteNameScreenState();
 }
@@ -711,57 +895,95 @@ class CompleteNameScreen extends StatefulWidget {
 class _CompleteNameScreenState extends State<CompleteNameScreen> {
   final name = TextEditingController();
   bool loading = false;
+  String? error;
+
+  Future<void> _save() async {
+    final trimmed = name.text.trim();
+    if (trimmed.isEmpty) {
+      setState(() => error = 'Enter your name to continue.');
+      return;
+    }
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      await widget.api.saveName(trimmed);
+      await widget.onSaved();
+    } catch (e) {
+      if (mounted) setState(() => error = formatApiError(e));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          FaseaSpacing.lg,
-          FaseaSpacing.md,
-          FaseaSpacing.lg,
-          FaseaSpacing.lg,
-        ),
-        children: [
-          const Text(
-            'Almost there',
-            style: TextStyle(letterSpacing: 2, color: FaseaColors.primary),
+  Widget build(BuildContext context) => PopScope(
+    canPop: false,
+    child: Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            FaseaSpacing.lg,
+            FaseaSpacing.md,
+            FaseaSpacing.lg,
+            FaseaSpacing.lg,
           ),
-          Text(
-            'Your name',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: FaseaSpacing.afterHeadline),
-          FaseaCard(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'We use this on bookings and messages.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: FaseaColors.secondary,
-                  ),
-                ),
-                const SizedBox(height: FaseaSpacing.md),
-                TextField(
-                  controller: name,
-                  decoration: const InputDecoration(labelText: 'Full name'),
-                ),
-                const SizedBox(height: FaseaSpacing.md),
-                FilledButton(
-                  onPressed: loading
-                      ? null
-                      : () async {
-                          setState(() => loading = true);
-                          await widget.api.saveName(name.text);
-                          await widget.onSaved();
-                        },
-                  child: const Text('Continue'),
-                ),
-              ],
+          children: [
+            const Text(
+              'Almost there',
+              style: TextStyle(letterSpacing: 2, color: FaseaColors.primary),
             ),
-          ),
-        ],
+            Text(
+              'Your name',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: FaseaSpacing.afterHeadline),
+            FaseaCard(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'We use this on bookings and messages. Please add it before continuing.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: FaseaColors.secondary,
+                    ),
+                  ),
+                  if ((widget.email ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: FaseaSpacing.sm),
+                    Text(
+                      'Signed in as ${widget.email}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: FaseaColors.secondary,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: FaseaSpacing.md),
+                  TextField(
+                    controller: name,
+                    autofocus: true,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _save(),
+                    decoration: const InputDecoration(labelText: 'Full name'),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: FaseaSpacing.sm),
+                    Text(
+                      error!,
+                      style: const TextStyle(color: FaseaColors.error),
+                    ),
+                  ],
+                  const SizedBox(height: FaseaSpacing.md),
+                  FilledButton(
+                    onPressed: loading ? null : _save,
+                    child: Text(loading ? 'Saving…' : 'Continue'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -1133,6 +1355,32 @@ class _BookScreenState extends State<BookScreen> {
       padding: FaseaSpacing.screenPadding(),
       children: [
         Text('Book a class', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: FaseaSpacing.sm),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ScheduleScreen(
+                    loadSchedule: ({
+                      required fromDateKey,
+                      required toDateKey,
+                      itemId,
+                    }) =>
+                        widget.api.schedule(
+                          fromDateKey: fromDateKey,
+                          toDateKey: toDateKey,
+                          itemId: itemId,
+                        ),
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.calendar_view_month, size: 18),
+            label: const Text('View schedule'),
+          ),
+        ),
         const SizedBox(height: FaseaSpacing.afterHeadline),
         _upcomingSection(context),
         if (upcomingBookings.isNotEmpty)
@@ -1245,22 +1493,30 @@ class _BookScreenState extends State<BookScreen> {
             style: Theme.of(context).textTheme.bodySmall,
           )
         else
-          TableCalendar(
-            firstDay: DateTime.now(),
-            lastDay: DateTime.now().add(const Duration(days: 180)),
-            focusedDay: focused,
-            calendarStyle: buildFaseaCalendarStyle(),
-            headerStyle: buildFaseaCalendarHeaderStyle(),
-            daysOfWeekStyle: buildFaseaDaysOfWeekStyle(),
-            selectedDayPredicate: (d) =>
-                selectedDay != null && isSameDay(d, selectedDay),
-            enabledDayPredicate: (d) =>
-                availableDateKeys.contains(dateKey(d)),
-            onPageChanged: (d) async {
-              focused = d;
-              await _loadDates();
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cell = ((constraints.maxWidth - 8) / 7).clamp(44.0, 56.0);
+              return TableCalendar(
+                firstDay: DateTime.now(),
+                lastDay: DateTime.now().add(const Duration(days: 180)),
+                focusedDay: focused,
+                rowHeight: cell + 4,
+                calendarStyle: buildFaseaCalendarStyle(
+                  cellMargin: const EdgeInsets.all(2),
+                ),
+                headerStyle: buildFaseaCalendarHeaderStyle(),
+                daysOfWeekStyle: buildFaseaDaysOfWeekStyle(),
+                selectedDayPredicate: (d) =>
+                    selectedDay != null && isSameDay(d, selectedDay),
+                enabledDayPredicate: (d) =>
+                    availableDateKeys.contains(dateKey(d)),
+                onPageChanged: (d) async {
+                  focused = d;
+                  await _loadDates();
+                },
+                onDaySelected: (d, f) => _selectDay(d, f),
+              );
             },
-            onDaySelected: (d, f) => _selectDay(d, f),
           ),
         if (selectedDay != null && slots.isEmpty) ...[
           const SizedBox(height: FaseaSpacing.sm),
@@ -1273,7 +1529,7 @@ class _BookScreenState extends State<BookScreen> {
             slots.every((s) => !s.isSelectable)) ...[
           const SizedBox(height: FaseaSpacing.sm),
           Text(
-            'Sessions are scheduled but not open for booking yet, or they are full.',
+            'No available class on this date.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -1314,7 +1570,7 @@ class _BookScreenState extends State<BookScreen> {
           )
         else if (slots.every((s) => !s.isSelectable))
           Text(
-            'Sessions are scheduled but not open for booking yet, or they are full.',
+            'No available class on this date.',
             style: Theme.of(context).textTheme.bodySmall,
           )
         else
@@ -1451,7 +1707,7 @@ class _BookScreenState extends State<BookScreen> {
               const SizedBox(height: FaseaSpacing.md),
               FilledButton(
                 onPressed: booking ? null : _submit,
-                style: FilledButton.styleFrom(
+                style: FaseaButtons.filled(
                   backgroundColor: FaseaColors.primary,
                   foregroundColor: FaseaColors.onPrimary,
                 ),
@@ -1795,6 +2051,35 @@ class _AccountScreenState extends State<AccountScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
+              'Notifications',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: FaseaSpacing.sm),
+            Text(
+              'Booking confirmations and class reminders are sent to this device when notifications are allowed.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: FaseaColors.secondary,
+              ),
+            ),
+            const SizedBox(height: FaseaSpacing.md),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Promotions & events'),
+              subtitle: const Text('Optional studio updates on this device'),
+              value: widget.me.client?.pushMarketingOptIn ?? true,
+              onChanged: (v) async {
+                await widget.api.setPushMarketingOptIn(v);
+                await widget.onChanged();
+              },
+            ),
+          ],
+        ),
+      ),
+      FaseaCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
               'Booking check',
               style: Theme.of(context).textTheme.titleLarge,
             ),
@@ -1895,10 +2180,36 @@ class _AccountScreenState extends State<AccountScreen> {
             const SizedBox(height: FaseaSpacing.afterPrimaryButton),
             TextButton(
               onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Sign out?'),
+                    content: const Text(
+                      'You can sign in again anytime with the same email.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Stay signed in'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Sign out'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true || !context.mounted) return;
+                try {
+                  await signOutGoogle();
+                } catch (_) {}
+                await unregisterPushToken(
+                  ({token}) => widget.api.unregisterPushToken(token: token),
+                );
                 await widget.api.logout();
                 await widget.onChanged();
               },
-              child: const Text('Log out'),
+              child: const Text('Sign out'),
             ),
           ],
         ),
@@ -2227,8 +2538,16 @@ Future<void> showPlanDialog(BuildContext context, ApiClient api) async {
               items: const [
                 DropdownMenuItem(value: 'group_mat', child: Text('Group Mat')),
                 DropdownMenuItem(
+                  value: 'mat_private',
+                  child: Text('Mat Private'),
+                ),
+                DropdownMenuItem(
                   value: 'reformer_private',
                   child: Text('Reformer Private'),
+                ),
+                DropdownMenuItem(
+                  value: 'pre_post_reformer',
+                  child: Text('Pre & Post Reformer'),
                 ),
                 DropdownMenuItem(value: 'duet', child: Text('Duet')),
                 DropdownMenuItem(
@@ -2326,7 +2645,14 @@ Future<void> showEventDialog(BuildContext context, ApiClient api) async {
 }
 
 Map<String, List<Plan>> groupPlans(List<Plan> plans) {
-  const order = ['group_mat', 'reformer_private', 'duet', 'reformer_group'];
+  const order = [
+    'group_mat',
+    'mat_private',
+    'reformer_private',
+    'pre_post_reformer',
+    'duet',
+    'reformer_group',
+  ];
   final sorted = [...plans]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   return {
     for (final cat in order)
@@ -2337,7 +2663,9 @@ Map<String, List<Plan>> groupPlans(List<Plan> plans) {
 
 String planGroupTitle(String category) => switch (category) {
   'group_mat' => 'Group Mat Class',
+  'mat_private' => 'Mat Private Class',
   'reformer_private' => 'Reformer Private Class',
+  'pre_post_reformer' => 'Pre & Post Reformer Pilates',
   'duet' => 'Duet class',
   'reformer_group' => 'Reformer Group class',
   _ => category,
@@ -2346,10 +2674,13 @@ String planGroupTitle(String category) => switch (category) {
 bool classItemMatchesPlanCategory(ClassItem item, String category) {
   final name = item.name.toLowerCase();
   return switch (category) {
-    'group_mat' => name.contains('mat') && !name.contains('reformer'),
+    'group_mat' => name.contains('mat') && !name.contains('reformer') && !name.contains('private'),
+    'mat_private' => name.contains('mat') && name.contains('private'),
     'reformer_private' =>
       name.contains('private') ||
-          (name.contains('reformer') && !name.contains('group')),
+          (name.contains('reformer') && !name.contains('group') && !name.contains('pre') && !name.contains('post')),
+    'pre_post_reformer' =>
+      name.contains('pre') || name.contains('post') || name.contains('prenatal') || name.contains('postnatal'),
     'duet' => name.contains('duet'),
     'reformer_group' => name.contains('reformer') && name.contains('group'),
     _ => false,

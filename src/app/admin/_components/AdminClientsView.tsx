@@ -5,6 +5,7 @@ import { minutesToAmPmRange } from "@/app/admin/_lib/adminTime";
 import { CreditExpiryBannerStack } from "@/components/CreditExpiryBannerStack";
 import { cn } from "@/lib/cn";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
+import PlusIcon from "@heroicons/react/24/outline/PlusIcon";
 import { Skeleton, SkeletonLine } from "./Skeleton";
 
 type OrderHistoryEntry = {
@@ -152,6 +153,259 @@ function pendingCount(row: ClientRow) {
   return row.ordersHistory.filter((o) => o.status === "pending").length;
 }
 
+type PastGuest = {
+  name: string;
+  email: string;
+  whatsapp: string;
+  bookingCount: number;
+  lastDateKey: string;
+  lastBookedAt: string | null;
+  alreadyClient: boolean;
+};
+
+function RegisterClientModal({
+  open,
+  onClose,
+  onRegistered,
+  setError,
+  setMsg,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onRegistered: (clientId: string) => void;
+  setError: (v: string | null) => void;
+  setMsg: (v: string | null) => void;
+}) {
+  const [guests, setGuests] = useState<PastGuest[]>([]);
+  const [guestQ, setGuestQ] = useState("");
+  const [loadingGuests, setLoadingGuests] = useState(false);
+  const [selectedKey, setSelectedKey] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const loadGuests = useCallback(async (q: string) => {
+    const query = q.trim();
+    if (!query) {
+      setGuests([]);
+      setLoadingGuests(false);
+      return;
+    }
+    setLoadingGuests(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("q", query);
+      const res = await fetch(
+        `/api/admin/clients/past-guests?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Failed to load past guests");
+      }
+      setGuests(json.data.guests ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load past guests");
+    } finally {
+      setLoadingGuests(false);
+    }
+  }, [setError]);
+
+  useEffect(() => {
+    if (!open) {
+      setGuests([]);
+      setGuestQ("");
+      setSelectedKey("");
+      setName("");
+      setEmail("");
+      setWhatsapp("");
+      return;
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => void loadGuests(guestQ), 200);
+    return () => window.clearTimeout(t);
+  }, [guestQ, open, loadGuests]);
+
+  const showGuestList = guestQ.trim().length > 0;
+
+  function pickGuest(g: PastGuest) {
+    setSelectedKey(g.email);
+    setName(g.name);
+    setEmail(g.email);
+    setWhatsapp(g.whatsapp);
+    setGuestQ("");
+    setGuests([]);
+  }
+
+  async function submit() {
+    if (!name.trim() || !email.trim()) {
+      setError("Name and email are required");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/admin/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          whatsapp: whatsapp.trim() || undefined,
+          linkPastBookings: true,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Failed to register client");
+      }
+      const id = json.data?.client?.id as string;
+      const created = Boolean(json.data?.created);
+      setMsg(
+        created
+          ? "Client registered. Add purchases/credits next from Sales or Adjust credits."
+          : "Existing client updated. Add purchases/credits next from Sales or Adjust credits.",
+      );
+      onRegistered(id);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to register client");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 py-8">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/40"
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <div className="relative z-10 w-full max-w-lg rounded-3xl border border-[#E8DDD4] bg-[#FAF8F6] p-6 shadow-lg">
+        <h3 className="font-serif text-xl font-semibold">Register client</h3>
+        <p className="mt-1 text-sm text-[#716D64]">
+          Pick someone who already booked and confirm their contact info.
+          Purchases and credits can be added afterward.
+        </p>
+
+        <label className="mt-5 grid gap-1">
+          <span className="text-xs text-[#716D64]">Past booking contact</span>
+          <input
+            value={guestQ}
+            onChange={(e) => setGuestQ(e.target.value)}
+            placeholder="Type to search past guests…"
+            className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+          />
+        </label>
+        {showGuestList ? (
+          <div className="mt-2 max-h-36 overflow-auto rounded-2xl border border-[#E8DDD4] bg-white">
+            {loadingGuests ? (
+              <div className="px-4 py-3 text-sm text-[#716D64]">Loading…</div>
+            ) : guests.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-[#716D64]">
+                No matches.
+              </div>
+            ) : (
+              <ul>
+                {guests.map((g) => (
+                  <li key={g.email}>
+                    <button
+                      type="button"
+                      onClick={() => pickGuest(g)}
+                      className={cn(
+                        "w-full text-left px-4 py-2.5 text-sm hover:bg-[#FAF8F6] cursor-pointer border-b border-[#E8DDD4]/50 last:border-0",
+                        selectedKey === g.email && "bg-[#DFD1C9]/40",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{g.name || "—"}</span>
+                        {g.alreadyClient ? (
+                          <span className="text-[10px] text-[#A66A4A]">
+                            already client
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="text-xs text-[#716D64]">
+                        {g.email}
+                        {g.whatsapp ? ` · ${g.whatsapp}` : ""}
+                        {` · ${g.bookingCount} booking${g.bookingCount === 1 ? "" : "s"}`}
+                        {g.lastDateKey ? ` · last ${g.lastDateKey}` : ""}
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 sm:col-span-2">
+            <span className="text-xs text-[#716D64]">Name</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs text-[#716D64]">Email</span>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs text-[#716D64]">WhatsApp</span>
+            <input
+              value={whatsapp}
+              onChange={(e) => setWhatsapp(e.target.value)}
+              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+            />
+          </label>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-[#E8DDD4] bg-white px-5 py-2.5 text-sm cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void submit()}
+            className="rounded-full bg-[#DFD1C9] px-5 py-2.5 text-sm font-medium hover:brightness-95 disabled:opacity-50 cursor-pointer"
+          >
+            {saving ? "Saving…" : "Register"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type PlanOption = {
+  id: string;
+  title: string;
+  classCount: number;
+  priceRm: number;
+  studentPriceRm?: number | null;
+  active: boolean;
+};
+
 function AdminClientDetail({
   row,
   onBack,
@@ -169,9 +423,24 @@ function AdminClientDetail({
   const [email, setEmail] = useState(row.client.email);
   const [whatsapp, setWhatsapp] = useState(row.client.whatsapp);
 
+  const [addOrderOpen, setAddOrderOpen] = useState(false);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [orderPlanId, setOrderPlanId] = useState("");
+  const [orderClassCount, setOrderClassCount] = useState("");
+  const [orderAmountRm, setOrderAmountRm] = useState("");
+  const [orderNote, setOrderNote] = useState("");
+  const [orderMarkPaid, setOrderMarkPaid] = useState(true);
+  const [orderSaving, setOrderSaving] = useState(false);
+
   const pendingOrders = useMemo(
     () => row.ordersHistory.filter((o) => o.status === "pending"),
     [row.ordersHistory],
+  );
+
+  const selectedPlan = useMemo(
+    () => plans.find((p) => p.id === orderPlanId) ?? null,
+    [plans, orderPlanId],
   );
 
   useEffect(() => {
@@ -180,10 +449,105 @@ function AdminClientDetail({
     setWhatsapp(row.client.whatsapp);
   }, [row.client.id, row.client.name, row.client.email, row.client.whatsapp]);
 
+  useEffect(() => {
+    if (!addOrderOpen) return;
+    let cancelled = false;
+    setPlansLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/plans", { cache: "no-store" });
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok || !json?.ok) {
+          setError(json?.error?.message ?? "Failed to load plans");
+          return;
+        }
+        const list = ((json.data.plans ?? []) as PlanOption[]).filter(
+          (p) => p.active,
+        );
+        setPlans(list);
+      } catch {
+        if (!cancelled) setError("Failed to load plans");
+      } finally {
+        if (!cancelled) setPlansLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [addOrderOpen, setError]);
+
+  useEffect(() => {
+    if (!selectedPlan) return;
+    setOrderClassCount(String(selectedPlan.classCount));
+    const price =
+      row.client.studentStatus === "verified" &&
+      typeof selectedPlan.studentPriceRm === "number"
+        ? selectedPlan.studentPriceRm
+        : selectedPlan.priceRm;
+    setOrderAmountRm(String(price));
+  }, [selectedPlan, row.client.studentStatus]);
+
   const profileDirty =
     name.trim() !== row.client.name ||
     email.trim() !== row.client.email ||
     whatsapp.trim() !== row.client.whatsapp;
+
+  function resetAddOrderForm() {
+    setOrderPlanId("");
+    setOrderClassCount("");
+    setOrderAmountRm("");
+    setOrderNote("");
+    setOrderMarkPaid(true);
+  }
+
+  async function submitAddOrder() {
+    if (!orderPlanId) {
+      setError("Select a plan");
+      return;
+    }
+    const classCount = Number(orderClassCount);
+    const amountRm = Number(orderAmountRm);
+    if (!Number.isInteger(classCount) || classCount < 1) {
+      setError("Credits must be a positive whole number");
+      return;
+    }
+    if (!Number.isFinite(amountRm) || amountRm < 0) {
+      setError("Amount must be a valid number");
+      return;
+    }
+    setOrderSaving(true);
+    setMsg(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/clients/${row.client.id}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planId: orderPlanId,
+          classCount,
+          amountRm,
+          markPaid: orderMarkPaid,
+          ...(orderNote.trim() ? { note: orderNote.trim() } : {}),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        setError(json?.error?.message ?? "Failed to add order");
+        return;
+      }
+      setMsg(
+        orderMarkPaid
+          ? "Order added and credits granted."
+          : "Pending order added.",
+      );
+      setAddOrderOpen(false);
+      resetAddOrderForm();
+      await load();
+    } finally {
+      setOrderSaving(false);
+    }
+  }
 
   async function confirmOrder(orderId: string) {
     setMsg(null);
@@ -495,14 +859,110 @@ function AdminClientDetail({
 
       {/* Orders */}
       <div>
-        <div className="mb-3 flex items-baseline gap-2">
-          <h4 className="font-serif text-lg font-semibold text-[#444444]">
-            Orders
-          </h4>
-          <span className="text-sm text-[#716D64] tabular-nums">
-            {row.ordersHistory.length}
-          </span>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <h4 className="font-serif text-lg font-semibold text-[#444444]">
+              Orders
+            </h4>
+            <span className="text-sm text-[#716D64] tabular-nums">
+              {row.ordersHistory.length}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              if (addOrderOpen) {
+                setAddOrderOpen(false);
+                resetAddOrderForm();
+              } else {
+                setAddOrderOpen(true);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E8DDD4] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#FAF8F6] cursor-pointer"
+          >
+            <PlusIcon className="h-3.5 w-3.5" aria-hidden />
+            {addOrderOpen ? "Cancel" : "Add order"}
+          </button>
         </div>
+
+        {addOrderOpen ? (
+          <div className="mb-4 space-y-3 rounded-xl border border-[#E8DDD4] bg-[#FAF8F6]/60 p-3 sm:p-4">
+            <p className="text-xs text-[#716D64]">
+              Record a package purchase and grant remaining credits (override
+              credits if needed).
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-xs text-[#716D64] sm:col-span-2">
+                Plan
+                <select
+                  value={orderPlanId}
+                  onChange={(e) => setOrderPlanId(e.target.value)}
+                  disabled={plansLoading}
+                  className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm text-[#444444]"
+                >
+                  <option value="">
+                    {plansLoading ? "Loading plans…" : "Select plan"}
+                  </option>
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title} ({p.classCount} cr · RM {p.priceRm})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs text-[#716D64]">
+                Credits
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={orderClassCount}
+                  onChange={(e) => setOrderClassCount(e.target.value)}
+                  className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm text-[#444444] tabular-nums"
+                />
+              </label>
+              <label className="grid gap-1 text-xs text-[#716D64]">
+                Amount (RM)
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={orderAmountRm}
+                  onChange={(e) => setOrderAmountRm(e.target.value)}
+                  className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm text-[#444444] tabular-nums"
+                />
+              </label>
+              <label className="grid gap-1 text-xs text-[#716D64] sm:col-span-2">
+                Note (optional)
+                <input
+                  value={orderNote}
+                  onChange={(e) => setOrderNote(e.target.value)}
+                  placeholder="e.g. Remaining credits from prior purchase"
+                  className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm text-[#444444]"
+                />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-[#444444]">
+              <input
+                type="checkbox"
+                checked={orderMarkPaid}
+                onChange={(e) => setOrderMarkPaid(e.target.checked)}
+                className="rounded border-[#E8DDD4]"
+              />
+              Mark paid &amp; grant credits now
+            </label>
+            <button
+              type="button"
+              disabled={orderSaving || !orderPlanId}
+              onClick={() => void submitAddOrder()}
+              className="rounded-lg bg-[#DFD1C9] px-4 py-2 text-xs font-medium hover:brightness-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {orderSaving ? "Saving…" : "Add order"}
+            </button>
+          </div>
+        ) : null}
+
         {row.ordersHistory.length === 0 ? (
           <p className="text-sm text-[#716D64]">No orders.</p>
         ) : (
@@ -668,6 +1128,7 @@ export function AdminClientsView() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -750,14 +1211,27 @@ export function AdminClientsView() {
                 Open a row for orders, bookings, and account actions.
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={loading}
-              className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer disabled:opacity-50"
-            >
-              {loading ? "Loading..." : "Reload"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setRegisterOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition cursor-pointer"
+              >
+                <PlusIcon className="h-4 w-4" aria-hidden />
+                Register client
+              </button>
+              <button
+                type="button"
+                onClick={() => void load()}
+                disabled={loading}
+                className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition cursor-pointer disabled:opacity-50"
+              >
+                {loading ? "Loading..." : "Reload"}
+              </button>
+            </div>
           </div>
 
           <div className="mt-5 flex gap-2">
@@ -913,6 +1387,16 @@ export function AdminClientsView() {
               </table>
             )}
           </div>
+
+          <RegisterClientModal
+            open={registerOpen}
+            onClose={() => setRegisterOpen(false)}
+            onRegistered={(clientId) => {
+              void load().then(() => setSelectedId(clientId));
+            }}
+            setError={setError}
+            setMsg={setMsg}
+          />
         </>
       )}
     </section>

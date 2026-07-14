@@ -202,12 +202,35 @@ export const adminAdjustCreditSchema = z.object({
   expiresAt: z.string().datetime().optional(),
 });
 
+/** Admin: register a client from a past booking contact (credits/purchases added later). */
+export const adminRegisterClientSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  email: z.string().trim().email().max(320),
+  whatsapp: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(120).optional(),
+  ),
+  linkPastBookings: z.boolean().optional(),
+});
+
 export const adminConfirmOrderSchema = z.object({
   note: z.string().trim().max(800).optional(),
 });
 
 /** Decline a pending package order (no credits granted). */
 export const adminCancelOrderSchema = adminConfirmOrderSchema;
+
+/** Admin: add a package order on a client (e.g. after register / remaining credits). */
+export const adminCreateClientOrderSchema = z.object({
+  planId: z.string().min(1),
+  /** Override plan classCount (e.g. remaining credits). Defaults to plan.classCount. */
+  classCount: z.number().int().positive().max(500).optional(),
+  /** Override amount. Defaults to client-appropriate plan price. */
+  amountRm: z.number().nonnegative().max(100_000).optional(),
+  note: z.string().trim().max(800).optional(),
+  /** When true (default), mark paid and grant credits immediately. */
+  markPaid: z.boolean().optional(),
+});
 
 export const adminDeleteClientSchema = z.object({
   /** Must match the client's email (case-insensitive) to proceed. */

@@ -41,5 +41,5 @@ flutter build ipa --release --dart-define=API_BASE_URL=https://fasea.studio
 
 ## Assets
 
-- Replace default Flutter launcher icons before store submission.
-- Replace default launch screen artwork before store submission.
+- Brand icons & splash: run `python3 tool/generate_brand_assets.py` (requires Pillow).
+- Store listing copy: see `STORE_LISTING.md`.

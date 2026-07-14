@@ -95,7 +95,65 @@ abstract final class FaseaSpacing {
 String spotsLeftLabel(int count) =>
     count == 1 ? '1 spot left' : '$count spots left';
 
-CalendarStyle buildFaseaCalendarStyle() => CalendarStyle(
+/// Shared tap targets — mobile-friendly (≥48dp); aligned with DESIGN.md pill CTAs.
+abstract final class FaseaButtons {
+  static const Size minimumSize = Size(64, 52);
+  static const EdgeInsets padding = EdgeInsets.symmetric(
+    horizontal: FaseaSpacing.lg,
+    vertical: 16,
+  );
+  static const TextStyle labelStyle = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    height: 1.25,
+  );
+
+  static ButtonStyle filled({Color? backgroundColor, Color? foregroundColor}) {
+    return FilledButton.styleFrom(
+      backgroundColor: backgroundColor ?? FaseaColors.tonalButton,
+      foregroundColor: foregroundColor ?? FaseaColors.tertiary,
+      disabledBackgroundColor: const Color(0x99DFD1C9),
+      disabledForegroundColor: const Color(0x99716D64),
+      elevation: 0,
+      minimumSize: minimumSize,
+      padding: padding,
+      textStyle: labelStyle,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(FaseaRadii.lg * 2),
+      ),
+    );
+  }
+
+  static ButtonStyle outlined() {
+    return OutlinedButton.styleFrom(
+      foregroundColor: FaseaColors.tertiary,
+      side: const BorderSide(color: FaseaColors.border),
+      minimumSize: minimumSize,
+      padding: padding,
+      textStyle: labelStyle,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(FaseaRadii.lg * 2),
+      ),
+    );
+  }
+
+  static ButtonStyle text() {
+    return TextButton.styleFrom(
+      foregroundColor: FaseaColors.primary,
+      minimumSize: const Size(64, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      textStyle: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+
+CalendarStyle buildFaseaCalendarStyle({
+  EdgeInsets cellMargin = const EdgeInsets.all(4),
+}) => CalendarStyle(
+  cellMargin: cellMargin,
   outsideDaysVisible: false,
   weekendTextStyle: const TextStyle(color: FaseaColors.secondary),
   defaultTextStyle: const TextStyle(color: FaseaColors.tertiary),
@@ -173,6 +231,7 @@ ThemeData buildFaseaTheme() {
       scrolledUnderElevation: 0,
     ),
     navigationBarTheme: NavigationBarThemeData(
+      height: 72,
       backgroundColor: FaseaColors.surface,
       indicatorColor: FaseaColors.tonalButton,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -199,19 +258,7 @@ ThemeData buildFaseaTheme() {
       ),
       margin: const EdgeInsets.symmetric(vertical: FaseaSpacing.sm),
     ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        backgroundColor: FaseaColors.tonalButton,
-        foregroundColor: FaseaColors.tertiary,
-        disabledBackgroundColor: Color(0x99DFD1C9),
-        disabledForegroundColor: Color(0x99716D64),
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: FaseaSpacing.lg, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(FaseaRadii.lg * 2),
-        ),
-      ),
-    ),
+    filledButtonTheme: FilledButtonThemeData(style: FaseaButtons.filled()),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: FaseaColors.surface,
@@ -270,22 +317,8 @@ ThemeData buildFaseaTheme() {
       color: FaseaColors.primary,
       circularTrackColor: FaseaColors.border,
     ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: FaseaColors.tertiary,
-        side: const BorderSide(color: FaseaColors.border),
-        padding: const EdgeInsets.symmetric(
-          horizontal: FaseaSpacing.lg,
-          vertical: 14,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(FaseaRadii.lg * 2),
-        ),
-      ),
-    ),
-    textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(foregroundColor: FaseaColors.primary),
-    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: FaseaButtons.outlined()),
+    textButtonTheme: TextButtonThemeData(style: FaseaButtons.text()),
     chipTheme: ChipThemeData(
       backgroundColor: FaseaColors.surface,
       selectedColor: FaseaColors.tonalButton,
@@ -305,6 +338,11 @@ ThemeData buildFaseaTheme() {
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
+        minimumSize: WidgetStateProperty.all(FaseaButtons.minimumSize),
+        padding: WidgetStateProperty.all(
+          const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        ),
+        textStyle: WidgetStateProperty.all(FaseaButtons.labelStyle),
         backgroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return FaseaColors.tonalButton;

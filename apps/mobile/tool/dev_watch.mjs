@@ -1,24 +1,31 @@
 #!/usr/bin/env node
 /**
- * Flutter dev on iOS Simulator with auto hot-reload (5s throttle).
+ * Flutter dev with API server + auto hot-reload.
  *
  *   yarn app
  *
- * Reads repo `.env.local` for FASEA_DEVICE / FASEA_API_PORT.
- * Set FASEA_DEVICE=chrome to use Flutter web instead.
+ * Default: Chrome (Flutter web) + Next.js API on FASEA_API_PORT / FASEA_WEB_PORT.
+ * Occupied ports are force-freed before start.
+ *
+ * Reads repo `.env.local`:
+ * - FASEA_DEVICE=simulator | ios | android | device — native instead of web
+ * - FASEA_API_PORT / FASEA_WEB_PORT — dev ports (default 4819 / 7357)
  */
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  detectLanIp,
   devPorts,
   ensureApiServer,
   flutterRunArgs,
+  freeDevPorts,
   loadEnvLocal,
   repoRootFromMobile,
   resolveFlutterDevice,
+  setupAndroidUsbForward,
 } from "./load_env.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,8 +34,23 @@ const REPO_ROOT = repoRootFromMobile(MOBILE_ROOT);
 
 loadEnvLocal();
 const { webPort, apiPort } = devPorts();
+await freeDevPorts({ webPort, apiPort });
 const device = resolveFlutterDevice(MOBILE_ROOT);
+const lanIp = detectLanIp();
 const THROTTLE_MS = Number(process.env.FASEA_RELOAD_THROTTLE_MS ?? 5000);
+
+let apiBaseUrl = null;
+if (device.isPhysical) {
+  if (device.targetPlatform === "android" && setupAndroidUsbForward(apiPort)) {
+    apiBaseUrl = `http://127.0.0.1:${apiPort}`;
+    console.log(`[dev] adb reverse tcp:${apiPort} → API ${apiBaseUrl}`);
+  } else {
+    apiBaseUrl = `http://${lanIp}:${apiPort}`;
+    console.log(
+      `[dev] physical device — phone must reach ${apiBaseUrl} (same Wi‑Fi as this Mac)`,
+    );
+  }
+}
 
 const { process: apiProcess, startedByUs: apiStartedByUs } = await ensureApiServer(
   REPO_ROOT,
@@ -39,11 +61,28 @@ let lastReloadAt = 0;
 let throttleTimer = null;
 let flutterReady = false;
 let pendingKind = "r";
+let browserOpened = false;
 
-const flutter = spawn("flutter", flutterRunArgs({ device, apiPort, webPort }), {
-  cwd: MOBILE_ROOT,
-  stdio: ["pipe", "pipe", "inherit"],
-});
+function openWebApp() {
+  if (!device.isWeb || browserOpened) return;
+  browserOpened = true;
+  const url = `http://localhost:${webPort}`;
+  try {
+    execSync(`open "${url}"`, { stdio: "ignore" });
+    console.log(`[dev] opened ${url}`);
+  } catch {
+    console.log(`[dev] open ${url} in your browser`);
+  }
+}
+
+const flutter = spawn(
+  "flutter",
+  flutterRunArgs({ device, apiPort, webPort, apiBaseUrl }),
+  {
+    cwd: MOBILE_ROOT,
+    stdio: ["pipe", "pipe", "inherit"],
+  },
+);
 
 flutter.stdout.on("data", (buf) => {
   process.stdout.write(buf);
@@ -60,6 +99,7 @@ flutter.stdout.on("data", (buf) => {
     console.log(
       `\n[dev] watching lib/ + assets/ — auto reload (throttle ${THROTTLE_MS}ms)\n`,
     );
+    if (device.isWeb) openWebApp();
   }
 });
 
@@ -152,6 +192,8 @@ if (device.isWeb) {
   console.log(
     `[dev] ${device.label} http://localhost:${webPort} → API http://localhost:${apiPort}`,
   );
+} else if (device.isPhysical) {
+  console.log(`[dev] ${device.label} (physical) → API ${apiBaseUrl}`);
 } else {
-  console.log(`[dev] ${device.label} → API http://localhost:${apiPort}`);
+  console.log(`[dev] ${device.label} (simulator) → API http://localhost:${apiPort}`);
 }

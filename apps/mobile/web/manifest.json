@@ -1,11 +1,11 @@
 {
-    "name": "fasea",
-    "short_name": "fasea",
+    "name": "Faséa",
+    "short_name": "Faséa",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FAF8F6",
+    "theme_color": "#A66A4A",
+    "description": "Book Pilates classes, manage credits, and stay connected with Faséa Pilates Studio.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

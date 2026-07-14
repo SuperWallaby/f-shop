@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { execSync, spawn } from "node:child_process";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,7 +37,7 @@ export function loadEnvLocal() {
 export const DEV_DEFAULTS = {
   webPort: "7357",
   apiPort: "4819",
-  device: "ios",
+  device: "chrome",
 };
 
 export function devPorts() {
@@ -53,6 +54,37 @@ function flutterDevices(mobileRoot) {
     stdio: ["ignore", "pipe", "inherit"],
   });
   return JSON.parse(out);
+}
+
+/** Best-effort LAN IPv4 for physical phones on the same Wi‑Fi. */
+export function detectLanIp() {
+  const candidates = [];
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family !== "IPv4" && addr.family !== 4) continue;
+      if (addr.internal) continue;
+      if (addr.address.startsWith("169.254.")) continue;
+      candidates.push({ name, address: addr.address });
+    }
+  }
+  const score = (name) => {
+    if (/^en0$/i.test(name)) return 0;
+    if (/^(en\d|wlan\d|eth\d|Wi-?Fi)/i.test(name)) return 1;
+    return 2;
+  };
+  candidates.sort((a, b) => score(a.name) - score(b.name) || a.name.localeCompare(b.name));
+  return candidates[0]?.address ?? "127.0.0.1";
+}
+
+function physicalDevices(devices, platform) {
+  return devices.filter(
+    (d) => d.targetPlatform === platform && d.emulator === false,
+  );
+}
+
+function iosSimulator(devices) {
+  return devices.find((d) => d.targetPlatform === "ios" && d.emulator === true);
 }
 
 function bootIosSimulator(mobileRoot) {
@@ -76,39 +108,135 @@ function waitForIosSimulator(mobileRoot, attempts = 24) {
 
 /**
  * Resolve `FASEA_DEVICE`:
- * - `ios` / `simulator` → booted iOS Simulator (launches if needed)
+ * - `device` / `phone` / `physical` → connected phone (iOS, then Android), else simulator
+ * - `ios` / `simulator` → physical iOS if plugged in, else booted iOS Simulator
+ * - `android` → physical Android if plugged in, else Android emulator if any
  * - `chrome` → Flutter web
  * - anything else → passed through to `flutter run -d`
  */
 export function resolveFlutterDevice(mobileRoot) {
-  const requested = (process.env.FASEA_DEVICE ?? DEV_DEFAULTS.device).trim();
-  if (requested === "chrome" || requested === "web") {
-    return { id: "chrome", label: "Chrome (web)", isWeb: true };
+  const raw = (process.env.FASEA_DEVICE ?? DEV_DEFAULTS.device).trim();
+  const devices = flutterDevices(mobileRoot);
+
+  if (raw === "chrome" || raw === "web") {
+    return { id: "chrome", label: "Chrome (web)", isWeb: true, isPhysical: false };
   }
-  if (requested === "ios" || requested === "simulator") {
-    let sim = flutterDevices(mobileRoot).find(
-      (d) => d.targetPlatform === "ios" && d.emulator === true,
+
+  const pickPhysical = (platform) => {
+    const list = physicalDevices(devices, platform);
+    if (list.length === 0) return null;
+    const d = list[0];
+    return {
+      id: d.id,
+      label: d.name,
+      isWeb: false,
+      isPhysical: true,
+      targetPlatform: platform,
+    };
+  };
+
+  let mode = raw;
+  if (mode === "device" || mode === "phone" || mode === "physical") {
+    const ios = pickPhysical("ios");
+    if (ios) return ios;
+    const android = pickPhysical("android");
+    if (android) return android;
+    mode = "ios";
+  }
+
+  if (mode === "android") {
+    const physical = pickPhysical("android");
+    if (physical) return physical;
+    const emu = devices.find(
+      (d) => d.targetPlatform === "android" && d.emulator === true,
     );
+    if (emu) {
+      return {
+        id: emu.id,
+        label: emu.name,
+        isWeb: false,
+        isPhysical: false,
+        targetPlatform: "android",
+      };
+    }
+    throw new Error(
+      "No Android device found. Plug in a phone (USB debugging on) or start an emulator.",
+    );
+  }
+
+  if (mode === "simulator") {
+    let sim = iosSimulator(devices);
     if (!sim) {
       bootIosSimulator(mobileRoot);
       sim = waitForIosSimulator(mobileRoot);
     }
-    return { id: sim.id, label: sim.name, isWeb: false };
+    return {
+      id: sim.id,
+      label: sim.name,
+      isWeb: false,
+      isPhysical: false,
+      targetPlatform: "ios",
+    };
   }
-  return { id: requested, label: requested, isWeb: false };
+
+  if (mode === "ios") {
+    const physical = pickPhysical("ios");
+    if (physical) return physical;
+
+    let sim = iosSimulator(devices);
+    if (!sim) {
+      bootIosSimulator(mobileRoot);
+      sim = waitForIosSimulator(mobileRoot);
+    }
+    return {
+      id: sim.id,
+      label: sim.name,
+      isWeb: false,
+      isPhysical: false,
+      targetPlatform: "ios",
+    };
+  }
+
+  const explicit = devices.find((d) => d.id === raw);
+  if (explicit) {
+    return {
+      id: explicit.id,
+      label: explicit.name,
+      isWeb: false,
+      isPhysical: explicit.emulator === false,
+      targetPlatform: explicit.targetPlatform,
+    };
+  }
+
+  return { id: raw, label: raw, isWeb: false, isPhysical: false };
 }
 
-export function flutterRunArgs({ device, apiPort, webPort }) {
+export function flutterRunArgs({ device, apiPort, webPort, apiBaseUrl }) {
   const args = [
     "run",
     "-d",
     device.id,
     "--dart-define=FASEA_API_PORT=" + apiPort,
   ];
+  if (apiBaseUrl) {
+    args.push("--dart-define=API_BASE_URL=" + apiBaseUrl);
+  }
   if (device.isWeb) {
     args.push("--web-port", webPort);
   }
   return args;
+}
+
+/** USB Android: optional `adb reverse` so localhost works without Wi‑Fi. */
+export function setupAndroidUsbForward(apiPort) {
+  try {
+    execSync(`adb reverse tcp:${apiPort} tcp:${apiPort}`, {
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Returns true when Next.js is listening on [apiPort]. */
@@ -133,6 +261,41 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Kill any process listening on [port] (best-effort, macOS/Linux). */
+export async function freePort(port) {
+  const p = Number(port);
+  if (!Number.isFinite(p) || p <= 0) return false;
+
+  let pids = [];
+  try {
+    const out = execSync(`lsof -ti tcp:${p} -sTCP:LISTEN`, {
+      encoding: "utf8",
+    }).trim();
+    if (out) pids = [...new Set(out.split("\n").filter(Boolean))];
+  } catch {
+    return false;
+  }
+
+  if (pids.length === 0) return false;
+
+  for (const pid of pids) {
+    console.log(`[dev] freeing port ${p} — killing PID ${pid}`);
+    try {
+      process.kill(Number(pid), "SIGKILL");
+    } catch {
+      // ignore
+    }
+  }
+
+  await sleep(400);
+  return true;
+}
+
+export async function freeDevPorts({ webPort, apiPort }) {
+  await freePort(apiPort);
+  await freePort(webPort);
+}
+
 function prefixLines(stream, tag) {
   let buffer = "";
   stream.on("data", (chunk) => {
@@ -155,16 +318,20 @@ export async function ensureApiServer(repoRoot, apiPort, { timeoutMs = 120000 } 
     return { process: null, startedByUs: false };
   }
 
-  console.log(`[dev] starting API (yarn dev) on http://localhost:${apiPort}…`);
-  const child = spawn("yarn", ["dev"], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      PORT: String(apiPort),
-      FASEA_API_PORT: String(apiPort),
+  console.log(`[dev] starting API (next dev) on http://0.0.0.0:${apiPort}…`);
+  const child = spawn(
+    "npx",
+    ["next", "dev", "-H", "0.0.0.0", "-p", String(apiPort)],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        PORT: String(apiPort),
+        FASEA_API_PORT: String(apiPort),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
     },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  );
 
   prefixLines(child.stdout, "[api]");
   prefixLines(child.stderr, "[api]");

@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "1087823396336",
+    "project_id": "fasea-f2261",
+    "storage_bucket": "fasea-f2261.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1087823396336:android:4f62c28b3bd119889ff135",
+        "android_client_info": {
+          "package_name": "com.fasea.fasea"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1087823396336-6f6tqmktjauh7e6gng8urroi2l5mpk0p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fasea.fasea",
+            "certificate_hash": "4ba99bf0e4043cb00ae40be3f31a349af8b72280"
+          }
+        },
+        {
+          "client_id": "1087823396336-juu2k20ste2mr5m6cgmbis3otrv4ou86.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJ3L_G_H7vnAD5hEo8c7gTjDuDKM5UEmQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1087823396336-juu2k20ste2mr5m6cgmbis3otrv4ou86.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1087823396336-9rfo0uhv5rqgsuac9pbcd9sk9aujb21q.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.fasea.fasea"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
