@@ -18,6 +18,7 @@ import type { PlanDb } from "@/lib/db";
 import { applyPromotionDiscount } from "@/lib/promotionMath";
 import { findClassTypeIdForPlan } from "@/lib/planCategoryDisplay";
 import { cn } from "@/lib/cn";
+import { Checkbox } from "@/components/Checkbox";
 import { Pill } from "./Pill";
 import { SaleReceiptModal } from "./SaleReceipt";
 import type { ReceiptSaleView } from "@/lib/studioReceipt";
@@ -47,6 +48,12 @@ function planListPrice(plan: PlanOption, mode: PriceMode): number {
 }
 
 type ItemOption = { id: string; name: string; active: boolean };
+type ProductOption = {
+  id: string;
+  name: string;
+  priceRm: number;
+  active: boolean;
+};
 type PromoOption = {
   id: string;
   name: string;
@@ -71,8 +78,11 @@ type SaleRow = {
   clientName: string;
   clientEmail: string;
   clientWhatsapp: string;
+  saleKind: "plan" | "product";
   planTitle: string;
   itemName: string;
+  productName: string;
+  quantity: number | null;
   promotionName: string;
   classCount: number;
   listPriceRm: number;
@@ -128,10 +138,12 @@ export function AdminSalesView() {
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [plans, setPlans] = useState<PlanOption[]>([]);
   const [items, setItems] = useState<ItemOption[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const [promos, setPromos] = useState<PromoOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [productSaving, setProductSaving] = useState(false);
 
   const [soldAt, setSoldAt] = useState(
     () => DateTime.now().setZone(BUSINESS_TIME_ZONE).toISODate() ?? "",
@@ -142,8 +154,11 @@ export function AdminSalesView() {
   const [selectedClient, setSelectedClient] = useState<ClientSuggest | null>(
     null,
   );
+  const [saleKind, setSaleKind] = useState<"plan" | "product">("plan");
   const [planId, setPlanId] = useState("");
   const [itemId, setItemId] = useState("");
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [promotionId, setPromotionId] = useState("");
   const [priceMode, setPriceMode] = useState<PriceMode>("regular");
   const [classCount, setClassCount] = useState(0);
@@ -152,6 +167,8 @@ export function AdminSalesView() {
   const [amountRm, setAmountRm] = useState(0);
   const [amountOverridden, setAmountOverridden] = useState(false);
   const [note, setNote] = useState("");
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductPrice, setNewProductPrice] = useState(0);
 
   const [refundId, setRefundId] = useState<string | null>(null);
   const [refundAmount, setRefundAmount] = useState(0);
@@ -164,29 +181,35 @@ export function AdminSalesView() {
     () => plans.find((p) => p.id === planId) ?? null,
     [plans, planId],
   );
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === productId) ?? null,
+    [products, productId],
+  );
   const selectedPromo = useMemo(
     () => promos.find((p) => p.id === promotionId) ?? null,
     [promos, promotionId],
   );
 
-  const computedAmountRm = useMemo(
-    () => applyPromotionDiscount(listPriceRm, selectedPromo),
-    [listPriceRm, selectedPromo],
-  );
+  const computedAmountRm = useMemo(() => {
+    if (saleKind === "product") return listPriceRm;
+    return applyPromotionDiscount(listPriceRm, selectedPromo);
+  }, [listPriceRm, selectedPromo, saleKind]);
 
   useEffect(() => {
     if (!amountOverridden) setAmountRm(computedAmountRm);
   }, [computedAmountRm, amountOverridden]);
 
   const loadMeta = useCallback(async () => {
-    const [plansRes, itemsRes, promoRes] = await Promise.all([
+    const [plansRes, itemsRes, promoRes, productsRes] = await Promise.all([
       fetch("/api/admin/plans", { cache: "no-store" }),
       fetch("/api/admin/items", { cache: "no-store" }),
       fetch("/api/admin/promotions?active=1", { cache: "no-store" }),
+      fetch("/api/admin/shop-products", { cache: "no-store" }),
     ]);
     const plansJson = await plansRes.json();
     const itemsJson = await itemsRes.json();
     const promoJson = await promoRes.json();
+    const productsJson = await productsRes.json();
     if (plansJson?.ok) {
       setPlans(
         (plansJson.data.plans ?? []).map(
@@ -218,6 +241,18 @@ export function AdminSalesView() {
       );
     }
     if (promoJson?.ok) setPromos(promoJson.data.promotions ?? []);
+    if (productsJson?.ok) {
+      setProducts(
+        (productsJson.data.products ?? []).map(
+          (p: {
+            id: string;
+            name: string;
+            priceRm: number;
+            active: boolean;
+          }) => p,
+        ),
+      );
+    }
   }, []);
 
   const loadSalesAndStats = useCallback(async () => {
@@ -318,11 +353,53 @@ export function AdminSalesView() {
     );
   }
 
+  function applyProduct(id: string) {
+    setProductId(id);
+    const product = products.find((p) => p.id === id);
+    if (!product) return;
+    setListPriceRm(product.priceRm * Math.max(1, quantity));
+    setAmountOverridden(false);
+    setClassCount(0);
+    setValidityDays(0);
+  }
+
+  function switchSaleKind(next: "plan" | "product") {
+    setSaleKind(next);
+    setAmountOverridden(false);
+    setError(null);
+    if (next === "product") {
+      setPlanId("");
+      setItemId("");
+      setPromotionId("");
+      setClassCount(0);
+      setValidityDays(0);
+      setPriceMode("regular");
+      if (selectedProduct) {
+        setListPriceRm(selectedProduct.priceRm * Math.max(1, quantity));
+      } else {
+        setListPriceRm(0);
+        setAmountRm(0);
+      }
+    } else {
+      setProductId("");
+      setQuantity(1);
+      setValidityDays(30);
+      setListPriceRm(0);
+      setAmountRm(0);
+    }
+  }
+
   useEffect(() => {
-    if (!selectedPlan) return;
+    if (saleKind !== "plan" || !selectedPlan) return;
     setListPriceRm(planListPrice(selectedPlan, priceMode));
     setAmountOverridden(false);
-  }, [priceMode, selectedPlan]);
+  }, [priceMode, selectedPlan, saleKind]);
+
+  useEffect(() => {
+    if (saleKind !== "product" || !selectedProduct) return;
+    setListPriceRm(selectedProduct.priceRm * Math.max(1, quantity));
+    setAmountOverridden(false);
+  }, [quantity, selectedProduct, saleKind]);
 
   function pickClient(c: ClientSuggest) {
     setSelectedClient(c);
@@ -345,6 +422,10 @@ export function AdminSalesView() {
       setError("Client name is required");
       return;
     }
+    if (saleKind === "product" && !productId) {
+      setError("Select a product");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -357,18 +438,23 @@ export function AdminSalesView() {
           clientName: name,
           clientEmail: selectedClient?.email || undefined,
           clientWhatsapp: selectedClient?.whatsapp || undefined,
-          planId: planId || undefined,
-          itemId: itemId || undefined,
-          promotionId: promotionId || undefined,
-          classCount,
-          validityDays,
+          saleKind,
+          planId: saleKind === "plan" ? planId || undefined : undefined,
+          itemId: saleKind === "plan" ? itemId || undefined : undefined,
+          productId: saleKind === "product" ? productId || undefined : undefined,
+          quantity: saleKind === "product" ? Math.max(1, quantity) : undefined,
+          promotionId:
+            saleKind === "plan" ? promotionId || undefined : undefined,
+          classCount: saleKind === "product" ? 0 : classCount,
+          validityDays: saleKind === "product" ? 0 : validityDays,
           listPriceRm,
           computedAmountRm,
           amountRm,
           amountOverridden,
           note: note.trim() || undefined,
-          priceMode,
-          useStudentPrice: priceMode === "student",
+          priceMode: saleKind === "plan" ? priceMode : undefined,
+          useStudentPrice:
+            saleKind === "plan" ? priceMode === "student" : undefined,
         }),
       });
       const json = await res.json();
@@ -378,9 +464,11 @@ export function AdminSalesView() {
       clearClient();
       setPlanId("");
       setItemId("");
+      setProductId("");
+      setQuantity(1);
       setPromotionId("");
       setClassCount(0);
-      setValidityDays(30);
+      setValidityDays(saleKind === "product" ? 0 : 30);
       setListPriceRm(0);
       setAmountRm(0);
       setAmountOverridden(false);
@@ -391,6 +479,62 @@ export function AdminSalesView() {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function addShopProduct() {
+    const name = newProductName.trim();
+    if (!name) {
+      setError("Product name is required");
+      return;
+    }
+    setProductSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/shop-products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          priceRm: Number(newProductPrice) || 0,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Failed to add product");
+      }
+      setNewProductName("");
+      setNewProductPrice(0);
+      await loadMeta();
+      const createdId = json.data?.product?.id as string | undefined;
+      if (createdId) {
+        setSaleKind("product");
+        setProductId(createdId);
+        setListPriceRm((json.data.product.priceRm as number) || 0);
+        setAmountOverridden(false);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add product");
+    } finally {
+      setProductSaving(false);
+    }
+  }
+
+  async function toggleProductActive(id: string, active: boolean) {
+    try {
+      const res = await fetch(`/api/admin/shop-products/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Update failed");
+      }
+      await loadMeta();
+      if (!active && productId === id) setProductId("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Update failed");
     }
   }
 
@@ -557,7 +701,82 @@ export function AdminSalesView() {
       </section>
 
       <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+        <h2 className="font-serif text-xl font-semibold">Shop products</h2>
+        <p className="mt-1 text-sm text-[#716D64]">
+          Register simple retail items (name + unit price) for product sales.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_8rem_auto]">
+          <input
+            value={newProductName}
+            onChange={(e) => setNewProductName(e.target.value)}
+            placeholder="Product name"
+            className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+          />
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={newProductPrice}
+            onChange={(e) => setNewProductPrice(Number(e.target.value) || 0)}
+            placeholder="Price RM"
+            className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+          />
+          <button
+            type="button"
+            disabled={productSaving}
+            onClick={() => void addShopProduct()}
+            className="rounded-full bg-[#DFD1C9] px-5 py-3 text-sm font-medium hover:brightness-95 disabled:opacity-50 cursor-pointer"
+          >
+            {productSaving ? "Adding…" : "Add product"}
+          </button>
+        </div>
+        {products.length > 0 ? (
+          <ul className="mt-4 divide-y divide-[#E8DDD4]/80 rounded-2xl border border-[#E8DDD4] bg-white/60">
+            {products.map((p) => (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+              >
+                <div className={cn(!p.active && "opacity-50")}>
+                  <span className="font-medium">{p.name}</span>
+                  <span className="ml-2 text-[#716D64]">RM {p.priceRm}</span>
+                  {!p.active ? (
+                    <span className="ml-2 text-xs text-[#A66A4A]">inactive</span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void toggleProductActive(p.id, !p.active)}
+                  className="text-xs underline text-[#716D64] hover:text-[#444444] cursor-pointer"
+                >
+                  {p.active ? "Deactivate" : "Activate"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-sm text-[#716D64]">No products yet.</p>
+        )}
+      </section>
+
+      <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
         <h2 className="font-serif text-xl font-semibold">Record a sale</h2>
+        <div className="mt-4 flex flex-wrap gap-6">
+          <Checkbox
+            checked={saleKind === "plan"}
+            onCheckedChange={(on) => {
+              if (on) switchSaleKind("plan");
+            }}
+            label="Plan sale"
+          />
+          <Checkbox
+            checked={saleKind === "product"}
+            onCheckedChange={(on) => {
+              if (on) switchSaleKind("product");
+            }}
+            label="Product sale"
+          />
+        </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1">
             <span className="text-xs text-[#716D64]">Sale date</span>
@@ -656,115 +875,153 @@ export function AdminSalesView() {
               </ul>
             ) : null}
           </div>
-          <label className="grid gap-1">
-            <span className="text-xs text-[#716D64]">Plan / package</span>
-            <select
-              value={planId}
-              onChange={(e) => applyPlan(e.target.value)}
-              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
-            >
-              <option value="">—</option>
-              {plans
-                .filter((p) => p.active)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title} · {p.classCount} cr · RM {p.priceRm}
+          {saleKind === "product" ? (
+            <>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Product</span>
+                <select
+                  value={productId}
+                  onChange={(e) => applyProduct(e.target.value)}
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                >
+                  <option value="">Select product…</option>
+                  {products
+                    .filter((p) => p.active)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} · RM {p.priceRm}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Quantity</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={quantity}
+                  onChange={(e) =>
+                    setQuantity(Math.max(1, Number(e.target.value) || 1))
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Plan / package</span>
+                <select
+                  value={planId}
+                  onChange={(e) => applyPlan(e.target.value)}
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                >
+                  <option value="">—</option>
+                  {plans
+                    .filter((p) => p.active)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title} · {p.classCount} cr · RM {p.priceRm}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Class type</span>
+                <select
+                  value={itemId}
+                  onChange={(e) => setItemId(e.target.value)}
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                >
+                  <option value="">—</option>
+                  {items
+                    .filter((it) => it.active)
+                    .map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Promotion</span>
+                <select
+                  value={promotionId}
+                  onChange={(e) => {
+                    setPromotionId(e.target.value);
+                    setAmountOverridden(false);
+                  }}
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                >
+                  <option value="">None</option>
+                  {promos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} (
+                      {p.discountType === "percent"
+                        ? `${p.discountValue}%`
+                        : p.discountType === "fixed"
+                          ? `RM ${p.discountValue}`
+                          : p.discountLabel || "custom"}
+                      )
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Price</span>
+                <select
+                  value={priceMode}
+                  onChange={(e) => setPriceMode(e.target.value as PriceMode)}
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                >
+                  <option value="regular">
+                    Regular
+                    {selectedPlan ? ` · RM ${selectedPlan.priceRm}` : ""}
                   </option>
-                ))}
-            </select>
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs text-[#716D64]">Class type</span>
-            <select
-              value={itemId}
-              onChange={(e) => setItemId(e.target.value)}
-              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
-            >
-              <option value="">—</option>
-              {items
-                .filter((it) => it.active)
-                .map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {it.name}
+                  <option
+                    value="student"
+                    disabled={selectedPlan?.studentPriceRm == null}
+                  >
+                    Student
+                    {selectedPlan?.studentPriceRm != null
+                      ? ` · RM ${selectedPlan.studentPriceRm}`
+                      : " · n/a"}
                   </option>
-                ))}
-            </select>
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs text-[#716D64]">Promotion</span>
-            <select
-              value={promotionId}
-              onChange={(e) => {
-                setPromotionId(e.target.value);
-                setAmountOverridden(false);
-              }}
-              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
-            >
-              <option value="">None</option>
-              {promos.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} (
-                  {p.discountType === "percent"
-                    ? `${p.discountValue}%`
-                    : p.discountType === "fixed"
-                      ? `RM ${p.discountValue}`
-                      : p.discountLabel || "custom"}
-                  )
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs text-[#716D64]">Price</span>
-            <select
-              value={priceMode}
-              onChange={(e) => setPriceMode(e.target.value as PriceMode)}
-              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
-            >
-              <option value="regular">
-                Regular
-                {selectedPlan ? ` · RM ${selectedPlan.priceRm}` : ""}
-              </option>
-              <option
-                value="student"
-                disabled={selectedPlan?.studentPriceRm == null}
-              >
-                Student
-                {selectedPlan?.studentPriceRm != null
-                  ? ` · RM ${selectedPlan.studentPriceRm}`
-                  : " · n/a"}
-              </option>
-              <option
-                value="first_timer"
-                disabled={selectedPlan?.firstTimerPriceRm == null}
-              >
-                First-time visitor
-                {selectedPlan?.firstTimerPriceRm != null
-                  ? ` · RM ${selectedPlan.firstTimerPriceRm}`
-                  : " · n/a"}
-              </option>
-            </select>
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs text-[#716D64]">Credits</span>
-            <input
-              type="number"
-              min={0}
-              value={classCount}
-              onChange={(e) => setClassCount(Number(e.target.value) || 0)}
-              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
-            />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs text-[#716D64]">Validity (days)</span>
-            <input
-              type="number"
-              min={1}
-              value={validityDays}
-              onChange={(e) => setValidityDays(Number(e.target.value) || 30)}
-              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
-            />
-          </label>
+                  <option
+                    value="first_timer"
+                    disabled={selectedPlan?.firstTimerPriceRm == null}
+                  >
+                    First-time visitor
+                    {selectedPlan?.firstTimerPriceRm != null
+                      ? ` · RM ${selectedPlan.firstTimerPriceRm}`
+                      : " · n/a"}
+                  </option>
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Credits</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={classCount}
+                  onChange={(e) => setClassCount(Number(e.target.value) || 0)}
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Validity (days)</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={validityDays}
+                  onChange={(e) =>
+                    setValidityDays(Number(e.target.value) || 30)
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+            </>
+          )}
           <label className="grid gap-1">
             <span className="text-xs text-[#716D64]">List price (RM)</span>
             <input
@@ -832,9 +1089,9 @@ export function AdminSalesView() {
               <tr className="text-xs text-[#716D64] border-b border-[#E8DDD4]">
                 <th className="py-2 pr-3 font-medium">Date</th>
                 <th className="py-2 pr-3 font-medium">Client</th>
-                <th className="py-2 pr-3 font-medium">Plan / type</th>
+                <th className="py-2 pr-3 font-medium">Kind / item</th>
                 <th className="py-2 pr-3 font-medium">Promo</th>
-                <th className="py-2 pr-3 font-medium">Credits</th>
+                <th className="py-2 pr-3 font-medium">Credits / qty</th>
                 <th className="py-2 pr-3 font-medium">Amount</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 font-medium"> </th>
@@ -851,13 +1108,23 @@ export function AdminSalesView() {
                     <div className="text-xs text-[#716D64]">{s.clientEmail}</div>
                   </td>
                   <td className="py-3 pr-3">
-                    <div>{s.planTitle || "—"}</div>
+                    <div>
+                      {s.saleKind === "product"
+                        ? s.productName || "Product"
+                        : s.planTitle || "—"}
+                    </div>
                     <div className="text-xs text-[#716D64]">
-                      {s.itemName || ""}
+                      {s.saleKind === "product"
+                        ? "Product sale"
+                        : s.itemName || "Plan sale"}
                     </div>
                   </td>
                   <td className="py-3 pr-3">{s.promotionName || "—"}</td>
-                  <td className="py-3 pr-3">{s.classCount}</td>
+                  <td className="py-3 pr-3">
+                    {s.saleKind === "product"
+                      ? `×${s.quantity ?? 1}`
+                      : s.classCount}
+                  </td>
                   <td className="py-3 pr-3">
                     {s.status === "refunded"
                       ? money(s.refundAmountRm ?? s.amountRm)
@@ -881,9 +1148,20 @@ export function AdminSalesView() {
                             clientName: s.clientName,
                             clientEmail: s.clientEmail,
                             clientWhatsapp: s.clientWhatsapp,
-                            planTitle: s.planTitle,
-                            itemName: s.itemName,
-                            classCount: s.classCount,
+                            planTitle:
+                              s.saleKind === "product"
+                                ? s.productName || "Product"
+                                : s.planTitle,
+                            itemName:
+                              s.saleKind === "product"
+                                ? s.quantity
+                                  ? `Qty ${s.quantity}`
+                                  : "Shop product"
+                                : s.itemName,
+                            classCount:
+                              s.saleKind === "product"
+                                ? s.quantity ?? 1
+                                : s.classCount,
                             listPriceRm: s.listPriceRm,
                             amountRm: s.amountRm,
                             status: s.status,

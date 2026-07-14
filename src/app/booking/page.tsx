@@ -713,7 +713,7 @@ function BookingPageInner() {
             `Time: ${bookedParts.timeLabel}`,
             `Booking Code: ${successBookingCode}`,
             ...(needsPlanHint
-              ? ["", "현재 크레딧이 없는 상태에요."]
+              ? ["", "I currently have no credits."]
               : []),
             ...(planInterestLabel
               ? [`Plan interest: ${planInterestLabel}`]
@@ -723,7 +723,7 @@ function BookingPageInner() {
             "Booking Done",
             `Booking Code: ${successBookingCode}`,
             ...(needsPlanHint
-              ? ["", "현재 크레딧이 없는 상태에요."]
+              ? ["", "I currently have no credits."]
               : []),
             ...(planInterestLabel
               ? [`Plan interest: ${planInterestLabel}`]

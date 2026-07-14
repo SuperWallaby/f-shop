@@ -71,7 +71,13 @@ export async function GET(req: NextRequest) {
           // already counted classCount for grants that happened
         }
 
-        const planKey = s.planTitle || "No plan";
+        const isProduct =
+          s.saleKind === "product" || Boolean(s.productId || s.productName);
+        const planKey = isProduct
+          ? s.productName
+            ? `Product · ${s.productName}`
+            : "Product"
+          : s.planTitle || "No plan";
         const planRow = byPlan.get(planKey) ?? {
           label: planKey,
           revenue: 0,
@@ -81,7 +87,9 @@ export async function GET(req: NextRequest) {
         planRow.count += 1;
         byPlan.set(planKey, planRow);
 
-        const itemKey = s.itemName || "No class type";
+        const itemKey = isProduct
+          ? s.productName || "Shop product"
+          : s.itemName || "No class type";
         const itemRow = byItem.get(itemKey) ?? {
           label: itemKey,
           revenue: 0,

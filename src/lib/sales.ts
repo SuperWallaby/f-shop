@@ -66,6 +66,9 @@ export function findPromotionForPlanId(
 }
 
 export function serializeSale(doc: SaleDb & { _id?: ObjectId }) {
+  const saleKind =
+    doc.saleKind ??
+    (doc.productId || doc.productName ? "product" : "plan");
   return {
     id: doc._id?.toHexString() ?? "",
     soldAt: doc.soldAt.toISOString(),
@@ -76,10 +79,14 @@ export function serializeSale(doc: SaleDb & { _id?: ObjectId }) {
     clientName: doc.clientName,
     clientEmail: doc.clientEmail ?? "",
     clientWhatsapp: doc.clientWhatsapp ?? "",
+    saleKind,
     itemId: doc.itemId?.toHexString() ?? null,
     itemName: doc.itemName ?? "",
     planId: doc.planId?.toHexString() ?? null,
     planTitle: doc.planTitle ?? "",
+    productId: doc.productId?.toHexString() ?? null,
+    productName: doc.productName ?? "",
+    quantity: doc.quantity ?? (saleKind === "product" ? 1 : null),
     classCount: doc.classCount,
     validityDays: doc.validityDays,
     promotionId: doc.promotionId?.toHexString() ?? null,

@@ -248,6 +248,19 @@ export type PromotionDb = {
  updatedAt: Date;
 };
 
+/** Retail shop SKUs (K-beauty / merch) — separate from class-type `items`. */
+export type ShopProductDb = {
+ _id?: ObjectId;
+ name: string;
+ priceRm: number;
+ active: boolean;
+ sortOrder: number;
+ createdAt: Date;
+ updatedAt: Date;
+};
+
+export type SaleKind = "plan" | "product";
+
 export type SaleDb = {
  _id?: ObjectId;
  soldAt: Date;
@@ -255,10 +268,15 @@ export type SaleDb = {
  clientName: string;
  clientEmail?: string;
  clientWhatsapp?: string;
+ /** Defaults to plan for legacy rows. */
+ saleKind?: SaleKind;
  itemId?: ObjectId;
  itemName?: string;
  planId?: ObjectId;
  planTitle?: string;
+ productId?: ObjectId;
+ productName?: string;
+ quantity?: number;
  classCount: number;
  validityDays: number;
  promotionId?: ObjectId;
@@ -357,6 +375,7 @@ export async function getCollections(db?: Db): Promise<{
  pushTokens: Collection<PushTokenDb>;
  dataDeletionRequests: Collection<DataDeletionRequestDb>;
  promotions: Collection<PromotionDb>;
+ shopProducts: Collection<ShopProductDb>;
  sales: Collection<SaleDb>;
 }> {
  const resolvedDb = db ?? (await getDb());
@@ -378,6 +397,7 @@ export async function getCollections(db?: Db): Promise<{
    "dataDeletionRequests",
   ),
   promotions: resolvedDb.collection<PromotionDb>("promotions"),
+  shopProducts: resolvedDb.collection<ShopProductDb>("shopProducts"),
   sales: resolvedDb.collection<SaleDb>("sales"),
  };
 }
@@ -400,6 +420,7 @@ async function ensureIndexes(db: Db): Promise<void> {
   "dataDeletionRequests",
  );
  const promotions = db.collection<PromotionDb>("promotions");
+ const shopProducts = db.collection<ShopProductDb>("shopProducts");
  const sales = db.collection<SaleDb>("sales");
  // const settings = db.collection<SettingsDoc>("settings"); // _id index exists by default
 
@@ -488,6 +509,10 @@ async function ensureIndexes(db: Db): Promise<void> {
    ),
    dataDeletionRequests.createIndex({ status: 1 }, { name: "deletion_status" }),
    promotions.createIndex({ active: 1, sortOrder: 1 }, { name: "promo_active_sort" }),
+   shopProducts.createIndex(
+    { active: 1, sortOrder: 1, name: 1 },
+    { name: "shop_products_active_sort" },
+   ),
    sales.createIndex({ soldAt: -1 }, { name: "sales_soldAt_desc" }),
    sales.createIndex({ status: 1, soldAt: -1 }, { name: "sales_status_soldAt" }),
    sales.createIndex({ clientId: 1 }, { sparse: true, name: "sales_clientId" }),

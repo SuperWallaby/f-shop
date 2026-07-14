@@ -307,43 +307,69 @@ export const adminPromotionCreateSchema = z.object({
 
 export const adminPromotionPatchSchema = adminPromotionCreateSchema.partial();
 
-export const adminSaleCreateSchema = z.object({
-  soldAt: z.string().min(1),
-  clientId: z.string().min(1).optional(),
-  clientName: z.string().trim().min(1).max(200),
-  clientEmail: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    z.string().trim().email().max(320).optional(),
-  ),
-  clientWhatsapp: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    z.string().trim().max(120).optional(),
-  ),
-  itemId: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    z.string().min(1).optional(),
-  ),
-  planId: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    z.string().min(1).optional(),
-  ),
-  classCount: z.number().int().min(0).max(500),
-  validityDays: z.number().int().min(1).max(3650),
-  promotionId: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    z.string().min(1).optional(),
-  ),
-  listPriceRm: z.number().nonnegative(),
-  computedAmountRm: z.number().nonnegative(),
-  amountRm: z.number().nonnegative(),
-  amountOverridden: z.boolean().optional(),
-  note: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    z.string().trim().max(2000).optional(),
-  ),
-  useStudentPrice: z.boolean().optional(),
-  priceMode: z.enum(["regular", "student", "first_timer"]).optional(),
+export const adminShopProductCreateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  priceRm: z.number().nonnegative().max(1_000_000),
+  active: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
 });
+
+export const adminShopProductPatchSchema = adminShopProductCreateSchema.partial();
+
+export const adminSaleCreateSchema = z
+  .object({
+    soldAt: z.string().min(1),
+    clientId: z.string().min(1).optional(),
+    clientName: z.string().trim().min(1).max(200),
+    clientEmail: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().trim().email().max(320).optional(),
+    ),
+    clientWhatsapp: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().trim().max(120).optional(),
+    ),
+    saleKind: z.enum(["plan", "product"]).optional(),
+    itemId: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().min(1).optional(),
+    ),
+    planId: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().min(1).optional(),
+    ),
+    productId: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().min(1).optional(),
+    ),
+    quantity: z.number().int().min(1).max(999).optional(),
+    classCount: z.number().int().min(0).max(500),
+    validityDays: z.number().int().min(0).max(3650),
+    promotionId: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().min(1).optional(),
+    ),
+    listPriceRm: z.number().nonnegative(),
+    computedAmountRm: z.number().nonnegative(),
+    amountRm: z.number().nonnegative(),
+    amountOverridden: z.boolean().optional(),
+    note: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().trim().max(2000).optional(),
+    ),
+    useStudentPrice: z.boolean().optional(),
+    priceMode: z.enum(["regular", "student", "first_timer"]).optional(),
+  })
+  .superRefine((d, ctx) => {
+    const kind = d.saleKind ?? "plan";
+    if (kind === "product" && !d.productId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["productId"],
+        message: "Product is required for product sales",
+      });
+    }
+  });
 
 export const adminSaleRefundSchema = z.object({
   refundAmountRm: z.number().nonnegative().optional(),

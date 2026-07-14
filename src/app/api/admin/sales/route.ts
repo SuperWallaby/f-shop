@@ -108,9 +108,10 @@ export async function POST(req: NextRequest) {
     const soldAt = parseSoldAt(d.soldAt);
     if (!soldAt) return jsonError("Invalid soldAt", 400);
 
-    const { sales, clients, plans, items, promotions, creditLedger } =
+    const { sales, clients, plans, items, promotions, shopProducts, creditLedger } =
       await getCollections();
     const now = new Date();
+    const saleKind = d.saleKind ?? "plan";
 
     let clientId: ObjectId | undefined;
     let clientName = d.clientName.trim();
@@ -132,45 +133,71 @@ export async function POST(req: NextRequest) {
 
     let planId: ObjectId | undefined;
     let planTitle: string | undefined;
+    let productId: ObjectId | undefined;
+    let productName: string | undefined;
+    let quantity: number | undefined;
     let classCount = d.classCount;
     let validityDays = d.validityDays;
     let listPriceRm = d.listPriceRm;
 
-    const planIdRaw = emptyToUndef(d.planId);
-    if (planIdRaw) {
-      if (!ObjectId.isValid(planIdRaw)) return jsonError("Invalid planId", 400);
-      planId = new ObjectId(planIdRaw);
-      const plan = await plans.findOne({ _id: planId });
-      if (!plan) return jsonError("Plan not found", 404);
-      planTitle = plan.title;
-      if (!d.amountOverridden) {
-        // Prefer submitted values but fill gaps from plan
-        if (!classCount) classCount = plan.classCount;
-        if (!validityDays) validityDays = plan.validityDays;
+    if (saleKind === "product") {
+      const productIdRaw = emptyToUndef(d.productId);
+      if (!productIdRaw || !ObjectId.isValid(productIdRaw)) {
+        return jsonError("Product is required", 400);
       }
-      if (listPriceRm <= 0 || !d.amountOverridden) {
-        const mode: PlanPriceMode =
-          d.priceMode ??
-          (d.useStudentPrice ? "student" : "regular");
-        listPriceRm = resolvePlanListPriceRm(plan, mode);
+      productId = new ObjectId(productIdRaw);
+      const product = await shopProducts.findOne({ _id: productId });
+      if (!product || !product.active) {
+        return jsonError("Product not found", 404);
+      }
+      productName = product.name;
+      quantity = d.quantity && d.quantity > 0 ? d.quantity : 1;
+      classCount = 0;
+      validityDays = 0;
+      if (!d.amountOverridden || listPriceRm <= 0) {
+        listPriceRm = product.priceRm * quantity;
+      }
+      planId = undefined;
+      planTitle = undefined;
+    } else {
+      const planIdRaw = emptyToUndef(d.planId);
+      if (planIdRaw) {
+        if (!ObjectId.isValid(planIdRaw)) return jsonError("Invalid planId", 400);
+        planId = new ObjectId(planIdRaw);
+        const plan = await plans.findOne({ _id: planId });
+        if (!plan) return jsonError("Plan not found", 404);
+        planTitle = plan.title;
+        if (!d.amountOverridden) {
+          if (!classCount) classCount = plan.classCount;
+          if (!validityDays) validityDays = plan.validityDays;
+        }
+        if (listPriceRm <= 0 || !d.amountOverridden) {
+          const mode: PlanPriceMode =
+            d.priceMode ??
+            (d.useStudentPrice ? "student" : "regular");
+          listPriceRm = resolvePlanListPriceRm(plan, mode);
+        }
       }
     }
 
     let itemId: ObjectId | undefined;
     let itemName: string | undefined;
-    const itemIdRaw = emptyToUndef(d.itemId);
-    if (itemIdRaw) {
-      if (!ObjectId.isValid(itemIdRaw)) return jsonError("Invalid itemId", 400);
-      itemId = new ObjectId(itemIdRaw);
-      const item = await items.findOne({ _id: itemId });
-      if (!item) return jsonError("Class type not found", 404);
-      itemName = item.name;
+    if (saleKind === "plan") {
+      const itemIdRaw = emptyToUndef(d.itemId);
+      if (itemIdRaw) {
+        if (!ObjectId.isValid(itemIdRaw)) return jsonError("Invalid itemId", 400);
+        itemId = new ObjectId(itemIdRaw);
+        const item = await items.findOne({ _id: itemId });
+        if (!item) return jsonError("Class type not found", 404);
+        itemName = item.name;
+      }
     }
 
     let promotionId: ObjectId | undefined;
     let promotionName: string | undefined;
     let computedAmountRm = d.computedAmountRm;
-    const promoIdRaw = emptyToUndef(d.promotionId);
+    const promoIdRaw =
+      saleKind === "plan" ? emptyToUndef(d.promotionId) : undefined;
     if (promoIdRaw) {
       if (!ObjectId.isValid(promoIdRaw)) {
         return jsonError("Invalid promotionId", 400);
@@ -194,10 +221,14 @@ export async function POST(req: NextRequest) {
       clientName,
       clientEmail,
       clientWhatsapp,
+      saleKind,
       itemId,
       itemName,
       planId,
       planTitle,
+      productId,
+      productName,
+      quantity,
       classCount,
       validityDays,
       promotionId,
@@ -219,7 +250,7 @@ export async function POST(req: NextRequest) {
     const saleId = ins.insertedId;
 
     let creditLedgerId: ObjectId | undefined;
-    if (clientId && classCount > 0) {
+    if (saleKind === "plan" && clientId && classCount > 0) {
       const expiresAt = new Date(
         soldAt.getTime() + validityDays * 24 * 60 * 60 * 1000,
       );
