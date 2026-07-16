@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { toPng } from "html-to-image";
+import { useCallback, useRef, useState } from "react";
+import { getFontEmbedCSS, toPng } from "html-to-image";
 import {
   formatReceiptDate,
   formatReceiptMoney,
@@ -24,7 +24,6 @@ function FaseaReceiptLogo({ className }: { className?: string }) {
         src={src}
         alt="Faséa Pilates"
         className="h-20 w-auto object-contain"
-        crossOrigin="anonymous"
       />
     </div>
   );
@@ -45,6 +44,41 @@ async function waitForReceiptImages(root: HTMLElement) {
         }),
     ),
   );
+}
+
+async function waitForReceiptFonts() {
+  if (typeof document === "undefined" || !("fonts" in document)) return;
+  try {
+    await document.fonts.ready;
+  } catch {
+    // Ignore font readiness errors and continue with fallback fonts.
+  }
+}
+
+function triggerPngDownload(dataUrl: string, filename: string) {
+  const link = document.createElement("a");
+  link.download = filename;
+  link.href = dataUrl;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+async function captureReceiptPng(node: HTMLElement): Promise<string> {
+  await waitForReceiptImages(node);
+  await waitForReceiptFonts();
+  // Give layout/fonts one paint before rasterizing.
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => resolve()),
+  );
+  const fontEmbedCSS = await getFontEmbedCSS(node);
+  return toPng(node, {
+    cacheBust: true,
+    pixelRatio: 2,
+    backgroundColor: "#ffffff",
+    fontEmbedCSS,
+  });
 }
 
 export function SaleReceiptDocument({
@@ -200,77 +234,32 @@ export function SaleReceiptModal({
   onClose: () => void;
 }) {
   const receiptRef = useRef<HTMLDivElement>(null);
-  const startedRef = useRef(false);
-  const [saving, setSaving] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const filename = `${sale.receiptNo || "receipt"}.png`;
 
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-
-    let cancelled = false;
-    async function download() {
-      // Wait a frame so layout/fonts settle before capture.
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => resolve()),
-      );
-      const node = receiptRef.current?.querySelector(
-        "#sale-receipt-print",
-      ) as HTMLElement | null;
-      if (!node || cancelled) return;
-      setSaving(true);
-      setError(null);
-      try {
-        await waitForReceiptImages(node);
-        if (cancelled) return;
-        const dataUrl = await toPng(node, {
-          cacheBust: true,
-          pixelRatio: 2,
-          backgroundColor: "#ffffff",
-        });
-        if (cancelled) return;
-        const link = document.createElement("a");
-        link.download = `${sale.receiptNo || "receipt"}.png`;
-        link.href = dataUrl;
-        link.click();
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to save image");
-        }
-      } finally {
-        if (!cancelled) setSaving(false);
-      }
-    }
-    void download();
-    return () => {
-      cancelled = true;
-    };
-  }, [sale.receiptNo]);
-
-  async function retryDownload() {
+  const downloadReceipt = useCallback(async () => {
     const node = receiptRef.current?.querySelector(
       "#sale-receipt-print",
     ) as HTMLElement | null;
-    if (!node) return;
+    if (!node) {
+      setError("Receipt preview is not ready yet. Try again.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await waitForReceiptImages(node);
-      const dataUrl = await toPng(node, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-      });
-      const link = document.createElement("a");
-      link.download = `${sale.receiptNo || "receipt"}.png`;
-      link.href = dataUrl;
-      link.click();
+      const dataUrl = await captureReceiptPng(node);
+      triggerPngDownload(dataUrl, filename);
+      setSaved(true);
     } catch (e) {
+      setSaved(false);
       setError(e instanceof Error ? e.message : "Failed to save image");
     } finally {
       setSaving(false);
     }
-  }
+  }, [filename]);
 
   return (
     <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-4 sm:p-6">
@@ -286,23 +275,23 @@ export function SaleReceiptModal({
             <h3 className="font-serif text-lg font-semibold">Receipt</h3>
             <p className="text-xs text-[#716D64]">
               {saving
-                ? "Downloading image…"
+                ? "Preparing image…"
                 : error
                   ? "Download failed"
-                  : `${sale.receiptNo} · saved`}
+                  : saved
+                    ? `${sale.receiptNo} · saved`
+                    : "Tap Download to save the receipt image"}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {error ? (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void retryDownload()}
-                className="rounded-full bg-[#DFD1C9] px-3 py-1.5 text-xs font-medium hover:brightness-95 disabled:opacity-50 cursor-pointer"
-              >
-                Retry
-              </button>
-            ) : null}
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void downloadReceipt()}
+              className="rounded-full bg-[#DFD1C9] px-3 py-1.5 text-xs font-medium hover:brightness-95 disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? "Saving…" : saved ? "Download again" : "Download"}
+            </button>
             <button
               type="button"
               onClick={onClose}
