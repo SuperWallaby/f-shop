@@ -403,6 +403,29 @@ export const adminSaleRefundSchema = z.object({
   recallCredits: z.boolean().optional(),
 });
 
+export const adminSaleUpdateSchema = z.object({
+  soldAt: z.string().min(1),
+  clientName: z.string().trim().min(1).max(200),
+  clientEmail: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().email().max(320).optional(),
+  ),
+  clientWhatsapp: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(120).optional(),
+  ),
+  quantity: z.number().int().min(1).max(999).optional(),
+  classCount: z.number().int().min(0).max(500),
+  validityDays: z.number().int().min(0).max(3650),
+  listPriceRm: z.number().nonnegative(),
+  amountRm: z.number().nonnegative(),
+  paymentMethod: z.string().trim().min(1).max(120),
+  note: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(2000).optional(),
+  ),
+});
+
 export const adminSalesListQuerySchema = z.object({
   from: dateKeySchema.optional(),
   to: dateKeySchema.optional(),

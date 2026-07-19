@@ -89,6 +89,7 @@ type SaleRow = {
   quantity: number | null;
   promotionName: string;
   classCount: number;
+  validityDays: number;
   listPriceRm: number;
   amountRm: number;
   status: "paid" | "refunded";
@@ -97,6 +98,20 @@ type SaleRow = {
   clientId: string | null;
   receiptNo: string;
   paymentMethod: string;
+};
+
+type EditSaleForm = {
+  soldAt: string;
+  clientName: string;
+  clientEmail: string;
+  clientWhatsapp: string;
+  quantity: number;
+  classCount: number;
+  validityDays: number;
+  listPriceRm: number;
+  amountRm: number;
+  paymentMethod: string;
+  note: string;
 };
 
 type CashRow = {
@@ -306,6 +321,9 @@ export function AdminSalesView() {
   const [refundNote, setRefundNote] = useState("");
   const [refunding, setRefunding] = useState(false);
   const [receiptSale, setReceiptSale] = useState<ReceiptSaleView | null>(null);
+  const [editingSale, setEditingSale] = useState<SaleRow | null>(null);
+  const [editSaleForm, setEditSaleForm] = useState<EditSaleForm | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
   const clientComboRef = useRef<HTMLDivElement>(null);
 
   const selectedPlan = useMemo(
@@ -704,6 +722,61 @@ export function AdminSalesView() {
       if (!active && productId === id) setProductId("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed");
+    }
+  }
+
+  function openEditSale(sale: SaleRow) {
+    setEditingSale(sale);
+    setEditSaleForm({
+      soldAt: sale.soldAtDateKey || sale.soldAt.slice(0, 10),
+      clientName: sale.clientName,
+      clientEmail: sale.clientEmail,
+      clientWhatsapp: sale.clientWhatsapp,
+      quantity: sale.quantity ?? 1,
+      classCount: sale.classCount,
+      validityDays: sale.validityDays,
+      listPriceRm: sale.listPriceRm,
+      amountRm: sale.amountRm,
+      paymentMethod: sale.paymentMethod || "Online transfer",
+      note: sale.note,
+    });
+    setError(null);
+  }
+
+  function closeEditSale() {
+    if (editSaving) return;
+    setEditingSale(null);
+    setEditSaleForm(null);
+  }
+
+  async function submitSaleEdit() {
+    if (!editingSale || !editSaleForm) return;
+    if (!editSaleForm.clientName.trim()) {
+      setError("Client name is required");
+      return;
+    }
+    setEditSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/sales/${encodeURIComponent(editingSale.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editSaleForm),
+        },
+      );
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Update failed");
+      }
+      setEditingSale(null);
+      setEditSaleForm(null);
+      await Promise.all([loadSalesAndStats(), loadCashTransactions()]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -1691,6 +1764,13 @@ export function AdminSalesView() {
                     <div className="flex flex-col items-start gap-1">
                       <button
                         type="button"
+                        onClick={() => openEditSale(s)}
+                        className="text-xs font-medium underline text-[#A66A4A] hover:text-[#444444] cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
                         onClick={() =>
                           setReceiptSale({
                             id: s.id,
@@ -1745,6 +1825,252 @@ export function AdminSalesView() {
           </table>
         )}
       </section>
+      ) : null}
+
+      {editingSale && editSaleForm ? (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center overflow-y-auto p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/45"
+            aria-label="Close edit sale"
+            onClick={closeEditSale}
+          />
+          <div className="relative z-10 my-6 w-full max-w-2xl rounded-3xl border border-[#E8DDD4] bg-[#FAF8F6] p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[#A66A4A]">
+                  Edit sale
+                </div>
+                <h3 className="mt-1 font-serif text-2xl font-semibold">
+                  {editingSale.saleKind === "product"
+                    ? editingSale.productName || "Product sale"
+                    : editingSale.planTitle || "Plan sale"}
+                </h3>
+                <p className="mt-1 text-sm text-[#716D64]">
+                  {editingSale.receiptNo}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditSale}
+                className="rounded-full border border-[#E8DDD4] bg-white px-3 py-1.5 text-xs cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+            {editingSale.status === "refunded" ? (
+              <div className="mt-4 rounded-2xl bg-[#FFF4E5] px-4 py-3 text-sm text-[#8A5A24]">
+                This sale is refunded. Changes keep its refunded status.
+              </div>
+            ) : null}
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Sale date</span>
+                <input
+                  type="date"
+                  value={editSaleForm.soldAt}
+                  onChange={(e) =>
+                    setEditSaleForm((form) =>
+                      form ? { ...form, soldAt: e.target.value } : form,
+                    )
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Client name</span>
+                <input
+                  value={editSaleForm.clientName}
+                  onChange={(e) =>
+                    setEditSaleForm((form) =>
+                      form ? { ...form, clientName: e.target.value } : form,
+                    )
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Email</span>
+                <input
+                  type="email"
+                  value={editSaleForm.clientEmail}
+                  onChange={(e) =>
+                    setEditSaleForm((form) =>
+                      form ? { ...form, clientEmail: e.target.value } : form,
+                    )
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">WhatsApp</span>
+                <input
+                  value={editSaleForm.clientWhatsapp}
+                  onChange={(e) =>
+                    setEditSaleForm((form) =>
+                      form
+                        ? { ...form, clientWhatsapp: e.target.value }
+                        : form,
+                    )
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+              {editingSale.saleKind === "product" ? (
+                <label className="grid gap-1">
+                  <span className="text-xs text-[#716D64]">Quantity</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editSaleForm.quantity}
+                    onChange={(e) =>
+                      setEditSaleForm((form) =>
+                        form
+                          ? {
+                              ...form,
+                              quantity: Math.max(
+                                1,
+                                Number(e.target.value) || 1,
+                              ),
+                            }
+                          : form,
+                      )
+                    }
+                    className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                  />
+                </label>
+              ) : (
+                <>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[#716D64]">Credits</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editSaleForm.classCount}
+                      onChange={(e) =>
+                        setEditSaleForm((form) =>
+                          form
+                            ? {
+                                ...form,
+                                classCount: Number(e.target.value) || 0,
+                              }
+                            : form,
+                        )
+                      }
+                      className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-[#716D64]">
+                      Validity (days)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editSaleForm.validityDays}
+                      onChange={(e) =>
+                        setEditSaleForm((form) =>
+                          form
+                            ? {
+                                ...form,
+                                validityDays: Number(e.target.value) || 0,
+                              }
+                            : form,
+                        )
+                      }
+                      className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                    />
+                  </label>
+                </>
+              )}
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">List price (RM)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={editSaleForm.listPriceRm}
+                  onChange={(e) =>
+                    setEditSaleForm((form) =>
+                      form
+                        ? {
+                            ...form,
+                            listPriceRm: Number(e.target.value) || 0,
+                          }
+                        : form,
+                    )
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Paid amount (RM)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={editSaleForm.amountRm}
+                  onChange={(e) =>
+                    setEditSaleForm((form) =>
+                      form
+                        ? { ...form, amountRm: Number(e.target.value) || 0 }
+                        : form,
+                    )
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Payment method</span>
+                <input
+                  value={editSaleForm.paymentMethod}
+                  onChange={(e) =>
+                    setEditSaleForm((form) =>
+                      form ? { ...form, paymentMethod: e.target.value } : form,
+                    )
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+              <label className="grid gap-1 sm:col-span-2">
+                <span className="text-xs text-[#716D64]">Note</span>
+                <textarea
+                  rows={3}
+                  value={editSaleForm.note}
+                  onChange={(e) =>
+                    setEditSaleForm((form) =>
+                      form ? { ...form, note: e.target.value } : form,
+                    )
+                  }
+                  className="resize-none rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
+              </label>
+            </div>
+            {error ? (
+              <div className="mt-3 text-sm text-red-700">{error}</div>
+            ) : null}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={editSaving}
+                onClick={closeEditSale}
+                className="rounded-full border border-[#E8DDD4] bg-white px-5 py-2.5 text-sm disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={editSaving}
+                onClick={() => void submitSaleEdit()}
+                className="rounded-full bg-[#A66A4A] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50 cursor-pointer"
+              >
+                {editSaving ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {refundId ? (
