@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
     const dailyMap = new Map<string, { revenue: number; refunds: number; sales: number }>();
     const byPlan = new Map<string, { label: string; revenue: number; count: number }>();
     const byItem = new Map<string, { label: string; revenue: number; count: number }>();
+    const byProduct = new Map<string, { label: string; revenue: number; count: number }>();
     const byPromo = new Map<string, { label: string; revenue: number; count: number }>();
 
     for (const s of docs) {
@@ -73,31 +74,37 @@ export async function GET(req: NextRequest) {
 
         const isProduct =
           s.saleKind === "product" || Boolean(s.productId || s.productName);
-        const planKey = isProduct
-          ? s.productName
-            ? `Product · ${s.productName}`
-            : "Product"
-          : s.planTitle || "No plan";
-        const planRow = byPlan.get(planKey) ?? {
-          label: planKey,
-          revenue: 0,
-          count: 0,
-        };
-        planRow.revenue += s.amountRm;
-        planRow.count += 1;
-        byPlan.set(planKey, planRow);
+        if (isProduct) {
+          const productKey = s.productName || "Shop product";
+          const productRow = byProduct.get(productKey) ?? {
+            label: productKey,
+            revenue: 0,
+            count: 0,
+          };
+          productRow.revenue += s.amountRm;
+          productRow.count += 1;
+          byProduct.set(productKey, productRow);
+        } else {
+          const planKey = s.planTitle || "No plan";
+          const planRow = byPlan.get(planKey) ?? {
+            label: planKey,
+            revenue: 0,
+            count: 0,
+          };
+          planRow.revenue += s.amountRm;
+          planRow.count += 1;
+          byPlan.set(planKey, planRow);
 
-        const itemKey = isProduct
-          ? s.productName || "Shop product"
-          : s.itemName || "No class type";
-        const itemRow = byItem.get(itemKey) ?? {
-          label: itemKey,
-          revenue: 0,
-          count: 0,
-        };
-        itemRow.revenue += s.amountRm;
-        itemRow.count += 1;
-        byItem.set(itemKey, itemRow);
+          const itemKey = s.itemName || "No class type";
+          const itemRow = byItem.get(itemKey) ?? {
+            label: itemKey,
+            revenue: 0,
+            count: 0,
+          };
+          itemRow.revenue += s.amountRm;
+          itemRow.count += 1;
+          byItem.set(itemKey, itemRow);
+        }
 
         if (s.promotionName) {
           const promoRow = byPromo.get(s.promotionName) ?? {
@@ -155,6 +162,7 @@ export async function GET(req: NextRequest) {
       daily,
       byPlan: sortBreakdown(byPlan),
       byItem: sortBreakdown(byItem),
+      byProduct: sortBreakdown(byProduct),
       byPromotion: sortBreakdown(byPromo),
     });
   } catch (e) {

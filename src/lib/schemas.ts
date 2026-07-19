@@ -413,3 +413,22 @@ export const adminSalesStatsQuerySchema = z.object({
   from: dateKeySchema,
   to: dateKeySchema,
 });
+
+export const adminCashTxnCreateSchema = z.object({
+  kind: z.enum(["income", "expense"]),
+  occurredAt: z.string().min(1),
+  amountRm: z.number().positive(),
+  category: z.string().trim().min(1).max(120),
+  description: z.string().trim().min(1).max(500),
+  note: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().max(2000).optional(),
+  ),
+});
+
+export const adminCashTxnListQuerySchema = z.object({
+  from: dateKeySchema.optional(),
+  to: dateKeySchema.optional(),
+  status: z.enum(["recorded", "voided", "all"]).optional(),
+  kind: z.enum(["income", "expense", "all"]).optional(),
+});

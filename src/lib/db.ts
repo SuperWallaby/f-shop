@@ -261,6 +261,24 @@ export type ShopProductDb = {
 
 export type SaleKind = "plan" | "product";
 
+/** Shop other income/expense (not plan/product sales). */
+export type CashTxnKind = "income" | "expense";
+
+export type CashTransactionDb = {
+  _id?: ObjectId;
+  kind: CashTxnKind;
+  occurredAt: Date;
+  amountRm: number;
+  currency: "MYR";
+  category: string;
+  description: string;
+  note?: string;
+  status: "recorded" | "voided";
+  voidedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type SaleDb = {
  _id?: ObjectId;
  soldAt: Date;
@@ -375,11 +393,12 @@ export async function getCollections(db?: Db): Promise<{
  pushTokens: Collection<PushTokenDb>;
  dataDeletionRequests: Collection<DataDeletionRequestDb>;
  promotions: Collection<PromotionDb>;
- shopProducts: Collection<ShopProductDb>;
- sales: Collection<SaleDb>;
+  shopProducts: Collection<ShopProductDb>;
+  sales: Collection<SaleDb>;
+  cashTransactions: Collection<CashTransactionDb>;
 }> {
- const resolvedDb = db ?? (await getDb());
- return {
+  const resolvedDb = db ?? (await getDb());
+  return {
   db: resolvedDb,
   settings: resolvedDb.collection<SettingsDoc>("settings"),
   settingsHistory: resolvedDb.collection<SettingsHistoryDb>("settingsHistory"),
@@ -399,6 +418,7 @@ export async function getCollections(db?: Db): Promise<{
   promotions: resolvedDb.collection<PromotionDb>("promotions"),
   shopProducts: resolvedDb.collection<ShopProductDb>("shopProducts"),
   sales: resolvedDb.collection<SaleDb>("sales"),
+  cashTransactions: resolvedDb.collection<CashTransactionDb>("cashTransactions"),
  };
 }
 
@@ -420,9 +440,10 @@ async function ensureIndexes(db: Db): Promise<void> {
   "dataDeletionRequests",
  );
  const promotions = db.collection<PromotionDb>("promotions");
- const shopProducts = db.collection<ShopProductDb>("shopProducts");
- const sales = db.collection<SaleDb>("sales");
- // const settings = db.collection<SettingsDoc>("settings"); // _id index exists by default
+  const shopProducts = db.collection<ShopProductDb>("shopProducts");
+  const sales = db.collection<SaleDb>("sales");
+  const cashTransactions = db.collection<CashTransactionDb>("cashTransactions");
+  // const settings = db.collection<SettingsDoc>("settings"); // _id index exists by default
 
  try {
   // NOTE: MongoDB already has a unique _id index; attempting to specify `unique` on it errors.
@@ -516,6 +537,18 @@ async function ensureIndexes(db: Db): Promise<void> {
    sales.createIndex({ soldAt: -1 }, { name: "sales_soldAt_desc" }),
    sales.createIndex({ status: 1, soldAt: -1 }, { name: "sales_status_soldAt" }),
    sales.createIndex({ clientId: 1 }, { sparse: true, name: "sales_clientId" }),
+   cashTransactions.createIndex(
+    { occurredAt: -1 },
+    { name: "cash_occurredAt_desc" },
+   ),
+   cashTransactions.createIndex(
+    { status: 1, occurredAt: -1 },
+    { name: "cash_status_occurredAt" },
+   ),
+   cashTransactions.createIndex(
+    { kind: 1, occurredAt: -1 },
+    { name: "cash_kind_occurredAt" },
+   ),
    creditLedger.createIndex({ saleId: 1 }, { sparse: true, name: "ledger_saleId" }),
    creditLedger.createIndex(
     { expiresAt: 1 },

@@ -22,6 +22,10 @@ import { Checkbox } from "@/components/Checkbox";
 import { Pill } from "./Pill";
 import { SaleReceiptModal } from "./SaleReceipt";
 import type { ReceiptSaleView } from "@/lib/studioReceipt";
+import {
+  CASH_EXPENSE_CATEGORIES,
+  CASH_INCOME_CATEGORIES,
+} from "@/lib/cashTransactions";
 
 type PlanOption = {
   id: string;
@@ -95,6 +99,30 @@ type SaleRow = {
   paymentMethod: string;
 };
 
+type CashRow = {
+  id: string;
+  kind: "income" | "expense";
+  occurredAt: string;
+  occurredAtDateKey: string;
+  amountRm: number;
+  category: string;
+  description: string;
+  note: string;
+  status: "recorded" | "voided";
+};
+
+type CashTotals = {
+  otherIncome: number;
+  otherExpense: number;
+  otherNet: number;
+};
+
+type BreakdownRow = {
+  label: string;
+  amount: number;
+  count: number;
+};
+
 type StatsData = {
   kpis: {
     paidRevenue: number;
@@ -113,6 +141,7 @@ type StatsData = {
   }>;
   byPlan: Array<{ label: string; revenue: number; count: number }>;
   byItem: Array<{ label: string; revenue: number; count: number }>;
+  byProduct: Array<{ label: string; revenue: number; count: number }>;
   byPromotion: Array<{ label: string; revenue: number; count: number }>;
 };
 
@@ -124,6 +153,87 @@ function money(n: number) {
   }).format(n);
 }
 
+function BreakdownCard({
+  title,
+  description,
+  rows,
+  expense = false,
+}: {
+  title: string;
+  description: string;
+  rows: BreakdownRow[];
+  expense?: boolean;
+}) {
+  const totalAmount = rows.reduce((sum, row) => sum + row.amount, 0);
+  return (
+    <section className="rounded-3xl border border-[#E8DDD4] bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-serif text-lg font-semibold">{title}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-[#716D64]">
+            {description}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-[#F3ECE7] px-2.5 py-1 text-xs text-[#716D64]">
+          {rows.length}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <div className="mt-5 rounded-2xl bg-[#FAF8F6] px-4 py-6 text-center text-sm text-[#716D64]">
+          No data in this period
+        </div>
+      ) : (
+        <ol className="mt-5 space-y-4">
+          {rows.slice(0, 8).map((row, index) => {
+            const share =
+              totalAmount > 0 ? (row.amount / totalAmount) * 100 : 0;
+            return (
+              <li key={row.label}>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#F3ECE7] text-xs font-semibold text-[#A66A4A]">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="truncate text-sm font-medium text-[#444444]">
+                        {row.label}
+                      </span>
+                      <div className="shrink-0 text-right">
+                        <div
+                          className={cn(
+                            "text-sm font-semibold",
+                            expense ? "text-[#A66A4A]" : "text-[#444444]",
+                          )}
+                        >
+                          {expense ? "−" : ""}
+                          {money(row.amount)}
+                        </div>
+                        <div className="text-[11px] text-[#716D64]">
+                          {share.toFixed(1)}% share · {row.count}{" "}
+                          {row.count === 1 ? "entry" : "entries"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#F3ECE7]">
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          expense ? "bg-[#C98F73]" : "bg-[#A66A4A]",
+                        )}
+                        style={{ width: `${Math.max(3, share)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 function defaultRange() {
   const now = DateTime.now().setZone(BUSINESS_TIME_ZONE);
   return {
@@ -133,6 +243,9 @@ function defaultRange() {
 }
 
 export function AdminSalesView() {
+  const [activePanel, setActivePanel] = useState<
+    "overview" | "record" | "history" | "cash"
+  >("overview");
   const [range, setRange] = useState(defaultRange);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [sales, setSales] = useState<SaleRow[]>([]);
@@ -140,6 +253,14 @@ export function AdminSalesView() {
   const [items, setItems] = useState<ItemOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [promos, setPromos] = useState<PromoOption[]>([]);
+  const [cashTransactions, setCashTransactions] = useState<CashRow[]>([]);
+  const [cashTotals, setCashTotals] = useState<CashTotals>({
+    otherIncome: 0,
+    otherExpense: 0,
+    otherNet: 0,
+  });
+  const [byOtherIncome, setByOtherIncome] = useState<BreakdownRow[]>([]);
+  const [outcomeRanking, setOutcomeRanking] = useState<BreakdownRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -169,6 +290,16 @@ export function AdminSalesView() {
   const [note, setNote] = useState("");
   const [newProductName, setNewProductName] = useState("");
   const [newProductPrice, setNewProductPrice] = useState(0);
+  const [cashKind, setCashKind] = useState<"income" | "expense">("expense");
+  const [cashOccurredAt, setCashOccurredAt] = useState(
+    () => DateTime.now().setZone(BUSINESS_TIME_ZONE).toISODate() ?? "",
+  );
+  const [cashAmountRm, setCashAmountRm] = useState(0);
+  const [cashCategory, setCashCategory] = useState("Rent");
+  const [cashDescription, setCashDescription] = useState("");
+  const [cashNote, setCashNote] = useState("");
+  const [cashSaving, setCashSaving] = useState(false);
+  const [voidingCashId, setVoidingCashId] = useState<string | null>(null);
 
   const [refundId, setRefundId] = useState<string | null>(null);
   const [refundAmount, setRefundAmount] = useState(0);
@@ -288,6 +419,40 @@ export function AdminSalesView() {
     }
   }, [range.from, range.to]);
 
+  const loadCashTransactions = useCallback(async () => {
+    try {
+      const qs = new URLSearchParams({
+        from: range.from,
+        to: range.to,
+        status: "all",
+        kind: "all",
+      });
+      const res = await fetch(`/api/admin/cash-transactions?${qs}`, {
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(
+          json?.error?.message ?? "Failed to load other cash entries",
+        );
+      }
+      setCashTransactions(json.data.transactions ?? []);
+      setCashTotals(
+        json.data.totals ?? {
+          otherIncome: 0,
+          otherExpense: 0,
+          otherNet: 0,
+        },
+      );
+      setByOtherIncome(json.data.byOtherIncome ?? []);
+      setOutcomeRanking(json.data.outcomeRanking ?? []);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Failed to load other cash entries",
+      );
+    }
+  }, [range.from, range.to]);
+
   useEffect(() => {
     void loadMeta();
   }, [loadMeta]);
@@ -295,6 +460,10 @@ export function AdminSalesView() {
   useEffect(() => {
     void loadSalesAndStats();
   }, [loadSalesAndStats]);
+
+  useEffect(() => {
+    void loadCashTransactions();
+  }, [loadCashTransactions]);
 
   useEffect(() => {
     if (!clientMenuOpen) return;
@@ -565,16 +734,88 @@ export function AdminSalesView() {
     }
   }
 
+  function switchCashKind(next: "income" | "expense") {
+    setCashKind(next);
+    setCashCategory(
+      next === "income"
+        ? CASH_INCOME_CATEGORIES[0]
+        : CASH_EXPENSE_CATEGORIES[0],
+    );
+    setError(null);
+  }
+
+  async function submitCashTransaction() {
+    if (!(cashAmountRm > 0)) {
+      setError("Amount must be greater than 0");
+      return;
+    }
+    if (!cashCategory.trim() || !cashDescription.trim()) {
+      setError("Category and description are required");
+      return;
+    }
+    setCashSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/cash-transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: cashKind,
+          occurredAt: cashOccurredAt,
+          amountRm: cashAmountRm,
+          category: cashCategory.trim(),
+          description: cashDescription.trim(),
+          note: cashNote.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Save failed");
+      }
+      setCashAmountRm(0);
+      setCashDescription("");
+      setCashNote("");
+      await loadCashTransactions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setCashSaving(false);
+    }
+  }
+
+  async function voidCashTransaction(id: string) {
+    setVoidingCashId(id);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/cash-transactions/${encodeURIComponent(id)}/void`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Void failed");
+      }
+      await loadCashTransactions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Void failed");
+    } finally {
+      setVoidingCashId(null);
+    }
+  }
+
   const kpis = stats?.kpis;
 
   return (
     <div className="space-y-6">
-      <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+      <section className="rounded-3xl border border-[#E8DDD4] bg-white/80 p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="font-serif text-xl font-semibold">Sales dashboard</h2>
+            <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#A66A4A]">
+              Shop finance
+            </div>
+            <h1 className="mt-1 font-serif text-2xl font-semibold">Sales</h1>
             <p className="mt-1 text-sm text-[#716D64]">
-              Manual sales ledger (not linked to WhatsApp app orders).
+              Review performance, record sales, and manage shop cash.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 items-end">
@@ -601,6 +842,47 @@ export function AdminSalesView() {
               />
             </label>
           </div>
+        </div>
+        <nav
+          className="mt-5 flex gap-2 overflow-x-auto"
+          aria-label="Sales sections"
+          role="tablist"
+        >
+          {(
+            [
+              ["overview", "Overview"],
+              ["record", "Record sale"],
+              ["history", "Sales history"],
+              ["cash", "Other cash"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActivePanel(id)}
+              aria-current={activePanel === id ? "page" : undefined}
+              aria-selected={activePanel === id}
+              role="tab"
+              className={cn(
+                "shrink-0 rounded-xl border px-4 py-2.5 text-sm font-semibold shadow-sm transition-all cursor-pointer active:scale-[0.98]",
+                activePanel === id
+                  ? "border-[#A66A4A] bg-[#A66A4A] text-white shadow-sm"
+                  : "border-[#E8DDD4] bg-white text-[#716D64] hover:-translate-y-0.5 hover:border-[#C9A996] hover:bg-[#FAF8F6] hover:text-[#444444] hover:shadow-md",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </section>
+
+      {activePanel === "overview" ? (
+      <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+        <div>
+          <h2 className="font-serif text-xl font-semibold">Overview</h2>
+          <p className="mt-1 text-sm text-[#716D64]">
+            Plan and product sales for the selected period.
+          </p>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -666,41 +948,303 @@ export function AdminSalesView() {
           )}
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {(
-            [
-              ["By plan", stats?.byPlan ?? []],
-              ["By class type", stats?.byItem ?? []],
-              ["By promotion", stats?.byPromotion ?? []],
-            ] as const
-          ).map(([title, rows]) => (
-            <div key={title} className="rounded-2xl border border-[#E8DDD4] p-4">
-              <div className="text-sm font-medium text-[#444444] mb-2">
-                {title}
+        <div className="mt-8 border-t border-[#E8DDD4] pt-7">
+          <h2 className="font-serif text-xl font-semibold">Performance details</h2>
+          <p className="mt-1 text-sm text-[#716D64]">
+            Ranked breakdowns for sales, other income, and shop expenses.
+          </p>
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <BreakdownCard
+              title="By plan"
+              description="Plan packages ranked by paid revenue."
+              rows={(stats?.byPlan ?? []).map((row) => ({
+                label: row.label,
+                amount: row.revenue,
+                count: row.count,
+              }))}
+            />
+            <BreakdownCard
+              title="By class type"
+              description="Class types ranked by paid plan sales."
+              rows={(stats?.byItem ?? []).map((row) => ({
+                label: row.label,
+                amount: row.revenue,
+                count: row.count,
+              }))}
+            />
+            <BreakdownCard
+              title="By promotion"
+              description="Revenue recorded with each promotion."
+              rows={(stats?.byPromotion ?? []).map((row) => ({
+                label: row.label,
+                amount: row.revenue,
+                count: row.count,
+              }))}
+            />
+            <BreakdownCard
+              title="By items"
+              description="Retail products ranked by paid sales."
+              rows={(stats?.byProduct ?? []).map((row) => ({
+                label: row.label,
+                amount: row.revenue,
+                count: row.count,
+              }))}
+            />
+            <BreakdownCard
+              title="By others"
+              description="Other income ranked by category."
+              rows={byOtherIncome}
+            />
+            <BreakdownCard
+              title="Outcome ranking"
+              description="Shop expenses ranked by category."
+              rows={outcomeRanking}
+              expense
+            />
+          </div>
+        </div>
+      </section>
+      ) : null}
+
+      {activePanel === "cash" ? (
+      <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+        <div>
+          <h2 className="font-serif text-xl font-semibold">Other cash</h2>
+          <p className="mt-1 text-sm text-[#716D64]">
+            Record shop income and expenses that are not plan or product sales.
+          </p>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            {
+              label: "Other income",
+              value: money(cashTotals.otherIncome),
+              hint: "Recorded income",
+            },
+            {
+              label: "Other expense",
+              value: money(cashTotals.otherExpense),
+              hint: "Recorded expenses",
+            },
+            {
+              label: "Other cash net",
+              value: money(cashTotals.otherNet),
+              hint: "Income − expenses",
+            },
+            {
+              label: "Total net cash",
+              value: money((kpis?.netRevenue ?? 0) + cashTotals.otherNet),
+              hint: "Sales net + other cash net",
+            },
+          ].map((card) => (
+            <div
+              key={card.label}
+              className="rounded-3xl border border-[#E8DDD4] bg-white p-5 shadow-sm"
+            >
+              <div className="text-sm text-[#716D64]">{card.label}</div>
+              <div className="mt-2 font-serif text-2xl font-semibold">
+                {card.value}
               </div>
-              {rows.length === 0 ? (
-                <div className="text-xs text-[#716D64]">—</div>
-              ) : (
-                <ul className="space-y-1.5 text-sm">
-                  {rows.slice(0, 6).map((r) => (
-                    <li
-                      key={r.label}
-                      className="flex justify-between gap-2 text-[#716D64]"
-                    >
-                      <span className="truncate">{r.label}</span>
-                      <span className="shrink-0 text-[#444444]">
-                        {money(r.revenue)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div className="mt-1 text-xs text-[#716D64]">{card.hint}</div>
             </div>
           ))}
         </div>
-      </section>
 
-      <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+        <div className="mt-6 rounded-3xl border border-[#E8DDD4] bg-white/60 p-5">
+          <h3 className="font-serif text-lg font-semibold">Record other cash</h3>
+          <div className="mt-4 flex flex-wrap gap-6">
+            <Checkbox
+              checked={cashKind === "income"}
+              onCheckedChange={(on) => {
+                if (on) switchCashKind("income");
+              }}
+              label="Income"
+            />
+            <Checkbox
+              checked={cashKind === "expense"}
+              onCheckedChange={(on) => {
+                if (on) switchCashKind("expense");
+              }}
+              label="Expense"
+            />
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="grid gap-1">
+              <span className="text-xs text-[#716D64]">Date</span>
+              <input
+                type="date"
+                value={cashOccurredAt}
+                onChange={(e) => setCashOccurredAt(e.target.value)}
+                className="w-full min-w-0 rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs text-[#716D64]">Amount (RM)</span>
+              <input
+                type="number"
+                min={0.01}
+                step="0.01"
+                value={cashAmountRm || ""}
+                onChange={(e) => setCashAmountRm(Number(e.target.value) || 0)}
+                placeholder="0.00"
+                className="w-full min-w-0 rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs text-[#716D64]">Category</span>
+              <input
+                value={cashCategory}
+                onChange={(e) => setCashCategory(e.target.value)}
+                list={`cash-${cashKind}-categories`}
+                className="w-full min-w-0 rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+              />
+              <datalist id={`cash-${cashKind}-categories`}>
+                {(cashKind === "income"
+                  ? CASH_INCOME_CATEGORIES
+                  : CASH_EXPENSE_CATEGORIES
+                ).map((category) => (
+                  <option key={category} value={category} />
+                ))}
+              </datalist>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs text-[#716D64]">Description</span>
+              <input
+                value={cashDescription}
+                onChange={(e) => setCashDescription(e.target.value)}
+                placeholder="What was this for?"
+                className="w-full min-w-0 rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+              />
+            </label>
+            <label className="grid gap-1 sm:col-span-2 lg:col-span-3">
+              <span className="text-xs text-[#716D64]">Note (optional)</span>
+              <input
+                value={cashNote}
+                onChange={(e) => setCashNote(e.target.value)}
+                placeholder="Extra details"
+                className="w-full min-w-0 rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={cashSaving}
+              onClick={() => void submitCashTransaction()}
+              className="self-end rounded-full bg-[#DFD1C9] px-5 py-3 text-sm font-medium hover:brightness-95 disabled:opacity-50 cursor-pointer"
+            >
+              {cashSaving ? "Saving…" : "Save entry"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-[#E8DDD4]">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="bg-[#F3ECE7] text-xs text-[#716D64]">
+              <tr>
+                <th className="px-4 py-3 font-medium">Date</th>
+                <th className="px-4 py-3 font-medium">Type</th>
+                <th className="px-4 py-3 font-medium">Category</th>
+                <th className="px-4 py-3 font-medium">Description</th>
+                <th className="px-4 py-3 text-right font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E8DDD4] bg-white/70">
+              {cashTransactions.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-8 text-center text-[#716D64]"
+                  >
+                    No other cash entries in this range.
+                  </td>
+                </tr>
+              ) : (
+                cashTransactions.map((txn) => (
+                  <tr
+                    key={txn.id}
+                    className={cn(txn.status === "voided" && "opacity-45")}
+                  >
+                    <td className="px-4 py-3">{txn.occurredAtDateKey}</td>
+                    <td className="px-4 py-3">
+                      <Pill
+                        label={
+                          txn.status === "voided" ? "voided" : txn.kind
+                        }
+                        tone={
+                          txn.status === "voided"
+                            ? "warn"
+                            : txn.kind === "income"
+                              ? "good"
+                              : "warn"
+                        }
+                      />
+                    </td>
+                    <td className="px-4 py-3">{txn.category}</td>
+                    <td className="px-4 py-3">
+                      <div>{txn.description}</div>
+                      {txn.note ? (
+                        <div className="mt-0.5 text-xs text-[#716D64]">
+                          {txn.note}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-4 py-3 text-right font-medium",
+                        txn.kind === "income"
+                          ? "text-[#1B7A3D]"
+                          : "text-[#A66A4A]",
+                      )}
+                    >
+                      {txn.kind === "income" ? "+" : "−"}
+                      {money(txn.amountRm)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {txn.status === "recorded" ? (
+                        <button
+                          type="button"
+                          disabled={voidingCashId === txn.id}
+                          onClick={() => void voidCashTransaction(txn.id)}
+                          className="text-xs underline text-[#716D64] hover:text-[#444444] disabled:opacity-50 cursor-pointer"
+                        >
+                          {voidingCashId === txn.id ? "Voiding…" : "Void"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-[#716D64]">Voided</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      ) : null}
+
+      {activePanel === "record" ? (
+      <div className="flex flex-col gap-6">
+      <details
+        className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm"
+        style={{ order: 2 }}
+      >
+        <summary className="cursor-pointer list-none">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-serif text-lg font-semibold">
+                Product catalogue
+              </h2>
+              <p className="mt-1 text-sm text-[#716D64]">
+                Add or deactivate retail products.
+              </p>
+            </div>
+            <span className="rounded-full bg-[#F3ECE7] px-3 py-1 text-xs text-[#716D64]">
+              Manage
+            </span>
+          </div>
+        </summary>
+        <div className="mt-5 border-t border-[#E8DDD4] pt-5">
         <h2 className="font-serif text-xl font-semibold">Shop products</h2>
         <p className="mt-1 text-sm text-[#716D64]">
           Register simple retail items (name + unit price) for product sales.
@@ -757,9 +1301,13 @@ export function AdminSalesView() {
         ) : (
           <p className="mt-3 text-sm text-[#716D64]">No products yet.</p>
         )}
-      </section>
+        </div>
+      </details>
 
-      <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
+      <section
+        className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm"
+        style={{ order: 1 }}
+      >
         <h2 className="font-serif text-xl font-semibold">Record a sale</h2>
         <div className="mt-4 flex flex-wrap gap-6">
           <Checkbox
@@ -1076,7 +1624,10 @@ export function AdminSalesView() {
           {saving ? "Saving…" : "Save sale"}
         </button>
       </section>
+      </div>
+      ) : null}
 
+      {activePanel === "history" ? (
       <section className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm overflow-x-auto">
         <h2 className="font-serif text-xl font-semibold mb-4">Sales in range</h2>
         {loading ? (
@@ -1194,6 +1745,7 @@ export function AdminSalesView() {
           </table>
         )}
       </section>
+      ) : null}
 
       {refundId ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
