@@ -73,17 +73,40 @@ export async function GET(req: NextRequest) {
         }
 
         const isProduct =
-          s.saleKind === "product" || Boolean(s.productId || s.productName);
+          s.saleKind === "product" ||
+          Boolean(s.productId || s.productName || s.items?.length);
         if (isProduct) {
-          const productKey = s.productName || "Shop product";
-          const productRow = byProduct.get(productKey) ?? {
-            label: productKey,
-            revenue: 0,
-            count: 0,
-          };
-          productRow.revenue += s.amountRm;
-          productRow.count += 1;
-          byProduct.set(productKey, productRow);
+          if (s.items && s.items.length > 0) {
+            const lineTotal = s.items.reduce(
+              (sum, line) => sum + line.lineAmountRm,
+              0,
+            );
+            for (const line of s.items) {
+              const productKey = line.productName || "Shop product";
+              const productRow = byProduct.get(productKey) ?? {
+                label: productKey,
+                revenue: 0,
+                count: 0,
+              };
+              const share =
+                lineTotal > 0
+                  ? (line.lineAmountRm / lineTotal) * s.amountRm
+                  : s.amountRm / s.items.length;
+              productRow.revenue += share;
+              productRow.count += line.quantity;
+              byProduct.set(productKey, productRow);
+            }
+          } else {
+            const productKey = s.productName || "Shop product";
+            const productRow = byProduct.get(productKey) ?? {
+              label: productKey,
+              revenue: 0,
+              count: 0,
+            };
+            productRow.revenue += s.amountRm;
+            productRow.count += s.quantity ?? 1;
+            byProduct.set(productKey, productRow);
+          }
         } else {
           const planKey = s.planTitle || "No plan";
           const planRow = byPlan.get(planKey) ?? {

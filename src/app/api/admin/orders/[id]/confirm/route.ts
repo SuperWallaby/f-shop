@@ -65,7 +65,7 @@ export async function POST(
         saleKind: "plan",
         planId: order.planId,
         planTitle: order.planTitle,
-        quantity: 1,
+        quantity: order.quantity && order.quantity > 0 ? order.quantity : 1,
         classCount: order.classCount,
         validityDays,
         listPriceRm: order.amountRm,

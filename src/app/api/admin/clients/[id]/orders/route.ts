@@ -49,11 +49,17 @@ export async function POST(
     const now = new Date();
     const markPaid = parsed.data.markPaid !== false;
     const alsoCreateSale = Boolean(parsed.data.alsoCreateSale) && markPaid;
-    const classCount = parsed.data.classCount ?? plan.classCount;
+    const quantity =
+      parsed.data.quantity && parsed.data.quantity > 0
+        ? parsed.data.quantity
+        : 1;
+    const unitPriceRm = getOrderAmountForClient(plan, client);
+    const classCount =
+      parsed.data.classCount ?? plan.classCount * quantity;
     const amountRm =
       typeof parsed.data.amountRm === "number"
         ? parsed.data.amountRm
-        : getOrderAmountForClient(plan, client);
+        : unitPriceRm * quantity;
     const note = parsed.data.note?.trim();
     const validityDays = plan.validityDays ?? 30;
 
@@ -70,6 +76,7 @@ export async function POST(
       planId: plan._id!,
       planCode: plan.code,
       planTitle: plan.title,
+      quantity,
       classCount,
       amountRm,
       currency: "MYR" as const,
@@ -97,7 +104,7 @@ export async function POST(
         saleKind: "plan",
         planId: plan._id!,
         planTitle: plan.title,
-        quantity: 1,
+        quantity,
         classCount,
         validityDays,
         listPriceRm: amountRm,
@@ -133,7 +140,7 @@ export async function POST(
         planId: plan._id!,
         note:
           note ||
-          `Admin order ${orderDoc.orderRef} — ${plan.title} (${classCount} cr)`,
+          `Admin order ${orderDoc.orderRef} — ${plan.title} ×${quantity} (${classCount} cr)`,
         createdAt: now,
       });
       if (saleId) {
@@ -149,6 +156,7 @@ export async function POST(
         id: orderId.toHexString(),
         orderRef: orderDoc.orderRef,
         planTitle: plan.title,
+        quantity,
         classCount,
         amountRm,
         status: orderDoc.status,

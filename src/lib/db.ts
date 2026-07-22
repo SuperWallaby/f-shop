@@ -147,6 +147,8 @@ export type OrderDb = {
  planId: ObjectId;
  planCode: string;
  planTitle: string;
+ /** Pack count (how many of this plan). Defaults to 1 for legacy rows. */
+ quantity?: number;
  classCount: number;
  amountRm: number;
  currency: "MYR";
@@ -286,6 +288,14 @@ export type CashTransactionDb = {
   updatedAt: Date;
 };
 
+export type SaleLineItemDb = {
+ productId: ObjectId;
+ productName: string;
+ quantity: number;
+ unitPriceRm: number;
+ lineAmountRm: number;
+};
+
 export type SaleDb = {
  _id?: ObjectId;
  soldAt: Date;
@@ -302,6 +312,8 @@ export type SaleDb = {
  productId?: ObjectId;
  productName?: string;
  quantity?: number;
+ /** Multi-product lines on one receipt (product sales). */
+ items?: SaleLineItemDb[];
  classCount: number;
  validityDays: number;
  promotionId?: ObjectId;

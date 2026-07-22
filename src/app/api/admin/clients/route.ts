@@ -77,6 +77,7 @@ export async function GET(req: NextRequest) {
             orderRef: order.orderRef,
             planTitle: order.planTitle,
             status: order.status,
+            quantity: order.quantity && order.quantity > 0 ? order.quantity : 1,
             classCount: order.classCount,
             amountRm: order.amountRm,
             createdAt: order.createdAt.toISOString(),

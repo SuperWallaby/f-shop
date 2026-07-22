@@ -15,6 +15,7 @@ type OrderHistoryEntry = {
   orderRef: string;
   planTitle: string;
   status: "pending" | "paid" | "cancelled";
+  quantity?: number;
   classCount: number;
   amountRm: number;
   createdAt: string;
@@ -487,6 +488,7 @@ function AdminClientDetail({
   const [plans, setPlans] = useState<PlanOption[]>([]);
   const [plansLoading, setPlansLoading] = useState(false);
   const [orderPlanId, setOrderPlanId] = useState("");
+  const [orderQuantity, setOrderQuantity] = useState(1);
   const [orderClassCount, setOrderClassCount] = useState("");
   const [orderAmountRm, setOrderAmountRm] = useState("");
   const [orderNote, setOrderNote] = useState("");
@@ -543,14 +545,15 @@ function AdminClientDetail({
 
   useEffect(() => {
     if (!selectedPlan) return;
-    setOrderClassCount(String(selectedPlan.classCount));
-    const price =
+    const qty = Math.max(1, orderQuantity);
+    setOrderClassCount(String(selectedPlan.classCount * qty));
+    const unitPrice =
       row.client.studentStatus === "verified" &&
       typeof selectedPlan.studentPriceRm === "number"
         ? selectedPlan.studentPriceRm
         : selectedPlan.priceRm;
-    setOrderAmountRm(String(price));
-  }, [selectedPlan, row.client.studentStatus]);
+    setOrderAmountRm(String(unitPrice * qty));
+  }, [selectedPlan, orderQuantity, row.client.studentStatus]);
 
   const profileDirty =
     name.trim() !== row.client.name ||
@@ -559,6 +562,7 @@ function AdminClientDetail({
 
   function resetAddOrderForm() {
     setOrderPlanId("");
+    setOrderQuantity(1);
     setOrderClassCount("");
     setOrderAmountRm("");
     setOrderNote("");
@@ -571,6 +575,7 @@ function AdminClientDetail({
       setError("Select a plan");
       return;
     }
+    const quantity = Math.max(1, Math.floor(Number(orderQuantity) || 1));
     const classCount = Number(orderClassCount);
     const amountRm = Number(orderAmountRm);
     if (!Number.isInteger(classCount) || classCount < 1) {
@@ -599,6 +604,7 @@ function AdminClientDetail({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planId: orderPlanId,
+          quantity,
           classCount,
           amountRm,
           markPaid: orderMarkPaid,
@@ -1054,6 +1060,22 @@ function AdminClientDetail({
                 </select>
               </label>
               <label className="grid gap-1 text-xs text-[#716D64]">
+                Quantity
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={orderQuantity}
+                  onChange={(e) =>
+                    setOrderQuantity(
+                      Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                    )
+                  }
+                  className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm text-[#444444] tabular-nums"
+                />
+              </label>
+              <label className="grid gap-1 text-xs text-[#716D64]">
                 Credits
                 <input
                   type="number"
@@ -1157,6 +1179,11 @@ function AdminClientDetail({
                     </td>
                     <td className="py-2.5 pr-3 max-w-[180px]">
                       <span className="line-clamp-1">{order.planTitle}</span>
+                      {(order.quantity ?? 1) > 1 ? (
+                        <span className="mt-0.5 block text-[11px] text-[#716D64]">
+                          ×{order.quantity}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="py-2.5 pr-3 tabular-nums">{order.classCount}</td>
                     <td className="py-2.5 pr-3 tabular-nums">{order.amountRm}</td>

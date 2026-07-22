@@ -93,7 +93,31 @@ export function findPromotionForPlanId(
 export function serializeSale(doc: SaleDb & { _id?: ObjectId }) {
   const saleKind =
     doc.saleKind ??
-    (doc.productId || doc.productName ? "product" : "plan");
+    (doc.productId || doc.productName || doc.items?.length
+      ? "product"
+      : "plan");
+  const items =
+    doc.items?.map((line) => ({
+      productId: line.productId.toHexString(),
+      productName: line.productName,
+      quantity: line.quantity,
+      unitPriceRm: line.unitPriceRm,
+      lineAmountRm: line.lineAmountRm,
+    })) ??
+    (saleKind === "product" && (doc.productId || doc.productName)
+      ? [
+          {
+            productId: doc.productId?.toHexString() ?? "",
+            productName: doc.productName ?? "",
+            quantity: doc.quantity ?? 1,
+            unitPriceRm:
+              doc.quantity && doc.quantity > 0
+                ? doc.listPriceRm / doc.quantity
+                : doc.listPriceRm,
+            lineAmountRm: doc.amountRm,
+          },
+        ]
+      : []);
   return {
     id: doc._id?.toHexString() ?? "",
     soldAt: doc.soldAt.toISOString(),
@@ -112,6 +136,7 @@ export function serializeSale(doc: SaleDb & { _id?: ObjectId }) {
     productId: doc.productId?.toHexString() ?? null,
     productName: doc.productName ?? "",
     quantity: doc.quantity ?? (saleKind === "product" ? 1 : null),
+    items,
     classCount: doc.classCount,
     validityDays: doc.validityDays,
     promotionId: doc.promotionId?.toHexString() ?? null,

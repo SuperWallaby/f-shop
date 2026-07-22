@@ -20,12 +20,13 @@ import { findClassTypeIdForPlan } from "@/lib/planCategoryDisplay";
 import { cn } from "@/lib/cn";
 import { Checkbox } from "@/components/Checkbox";
 import { Pill } from "./Pill";
-import { SaleReceiptModal } from "./SaleReceipt";
 import type { ReceiptSaleView } from "@/lib/studioReceipt";
+import { mergeReceiptSales } from "@/lib/studioReceipt";
 import {
   CASH_EXPENSE_CATEGORIES,
   CASH_INCOME_CATEGORIES,
 } from "@/lib/cashTransactions";
+import { SaleReceiptModal } from "./SaleReceipt";
 
 type PlanOption = {
   id: string;
@@ -75,6 +76,14 @@ type ClientSuggest = {
   studentStatus: string;
 };
 
+type SaleLineItem = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPriceRm: number;
+  lineAmountRm: number;
+};
+
 type SaleRow = {
   id: string;
   soldAt: string;
@@ -87,6 +96,7 @@ type SaleRow = {
   itemName: string;
   productName: string;
   quantity: number | null;
+  items?: SaleLineItem[];
   promotionName: string;
   classCount: number;
   validityDays: number;
@@ -100,6 +110,26 @@ type SaleRow = {
   receiptNo: string;
   paymentMethod: string;
 };
+
+type ProductLineDraft = {
+  key: string;
+  productId: string;
+  quantity: number;
+};
+
+function newProductLineDraft(
+  productId = "",
+  quantity = 1,
+): ProductLineDraft {
+  return {
+    key:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    productId,
+    quantity,
+  };
+}
 
 type EditSaleForm = {
   soldAt: string;
@@ -132,6 +162,59 @@ type CashTotals = {
   otherExpense: number;
   otherNet: number;
 };
+
+function saleToReceiptView(s: SaleRow): ReceiptSaleView {
+  return {
+    id: s.id,
+    receiptNo: s.receiptNo,
+    soldAt: s.soldAt,
+    clientName: s.clientName,
+    clientEmail: s.clientEmail,
+    clientWhatsapp: s.clientWhatsapp,
+    planTitle:
+      s.saleKind === "product" ? s.productName || "Product" : s.planTitle,
+    itemName: s.saleKind === "product" ? "" : s.itemName,
+    quantity:
+      s.saleKind === "product"
+        ? s.items?.length
+          ? s.items.reduce((n, i) => n + i.quantity, 0)
+          : s.quantity ?? 1
+        : s.quantity && s.quantity > 0
+          ? s.quantity
+          : 1,
+    classCount: s.saleKind === "product" ? 0 : s.classCount,
+    listPriceRm: s.listPriceRm,
+    amountRm: s.amountRm,
+    status: s.status,
+    paymentMethod: s.paymentMethod,
+    promotionName: s.promotionName,
+    lines:
+      s.saleKind === "product" && s.items?.length
+        ? s.items.map((line) => ({
+            title: line.productName,
+            quantity: line.quantity,
+            amountRm: line.lineAmountRm,
+          }))
+        : undefined,
+  };
+}
+
+function saleReceiptLabel(s: SaleRow): string {
+  if (s.saleKind === "product") {
+    if (s.items && s.items.length > 1) {
+      return s.items.map((i) => i.productName).join(" + ");
+    }
+    return s.productName || "Product";
+  }
+  return s.planTitle || "Plan";
+}
+
+function sameSaleClient(a: SaleRow, b: SaleRow): boolean {
+  if (a.clientId && b.clientId) return a.clientId === b.clientId;
+  return (
+    a.clientName.trim().toLowerCase() === b.clientName.trim().toLowerCase()
+  );
+}
 
 type BreakdownRow = {
   label: string;
@@ -294,8 +377,10 @@ export function AdminSalesView() {
   const [saleKind, setSaleKind] = useState<"plan" | "product">("plan");
   const [planId, setPlanId] = useState("");
   const [itemId, setItemId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState(1);
+  const [planQuantity, setPlanQuantity] = useState(1);
+  const [productLines, setProductLines] = useState<ProductLineDraft[]>(() => [
+    newProductLineDraft(),
+  ]);
   const [promotionId, setPromotionId] = useState("");
   const [priceMode, setPriceMode] = useState<PriceMode>("regular");
   const [classCount, setClassCount] = useState(0);
@@ -321,7 +406,7 @@ export function AdminSalesView() {
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundNote, setRefundNote] = useState("");
   const [refunding, setRefunding] = useState(false);
-  const [receiptSale, setReceiptSale] = useState<ReceiptSaleView | null>(null);
+  const [receiptParts, setReceiptParts] = useState<ReceiptSaleView[]>([]);
   const [editingSale, setEditingSale] = useState<SaleRow | null>(null);
   const [editSaleForm, setEditSaleForm] = useState<EditSaleForm | null>(null);
   const [editSaving, setEditSaving] = useState(false);
@@ -331,13 +416,59 @@ export function AdminSalesView() {
     () => plans.find((p) => p.id === planId) ?? null,
     [plans, planId],
   );
-  const selectedProduct = useMemo(
-    () => products.find((p) => p.id === productId) ?? null,
-    [products, productId],
-  );
   const selectedPromo = useMemo(
     () => promos.find((p) => p.id === promotionId) ?? null,
     [promos, promotionId],
+  );
+  const receiptSale = useMemo(
+    () => mergeReceiptSales(receiptParts),
+    [receiptParts],
+  );
+  const receiptAnchorRow = useMemo(() => {
+    const anchorId = receiptParts[0]?.id;
+    if (!anchorId) return null;
+    return sales.find((s) => s.id === anchorId) ?? null;
+  }, [receiptParts, sales]);
+  const receiptCandidates = useMemo(() => {
+    if (!receiptAnchorRow) return [];
+    const included = new Set(receiptParts.map((p) => p.id));
+    return sales
+      .filter(
+        (s) =>
+          !included.has(s.id) &&
+          s.status === "paid" &&
+          sameSaleClient(s, receiptAnchorRow),
+      )
+      .map((s) => ({
+        id: s.id,
+        label: saleReceiptLabel(s),
+        receiptNo: s.receiptNo,
+        amountRm: s.amountRm,
+        view: saleToReceiptView(s),
+      }));
+  }, [receiptAnchorRow, receiptParts, sales]);
+  const receiptIncludedExtras = useMemo(
+    () =>
+      receiptParts.slice(1).map((part) => ({
+        id: part.id,
+        receiptNo: part.receiptNo,
+        label:
+          part.planTitle ||
+          part.itemName ||
+          part.receiptNo,
+      })),
+    [receiptParts],
+  );
+  const productLinesTotalRm = useMemo(() => {
+    return productLines.reduce((sum, line) => {
+      const product = products.find((p) => p.id === line.productId);
+      if (!product) return sum;
+      return sum + product.priceRm * Math.max(1, line.quantity);
+    }, 0);
+  }, [productLines, products]);
+  const filledProductLines = useMemo(
+    () => productLines.filter((line) => line.productId),
+    [productLines],
   );
 
   const computedAmountRm = useMemo(() => {
@@ -525,13 +656,14 @@ export function AdminSalesView() {
     }
     const plan = plans.find((p) => p.id === id);
     if (!plan) return;
-    setClassCount(plan.classCount);
+    const qty = Math.max(1, planQuantity);
+    setClassCount(plan.classCount * qty);
     setValidityDays(plan.validityDays);
     let mode = priceMode;
     if (mode === "student" && plan.studentPriceRm == null) mode = "regular";
     if (mode === "first_timer" && plan.firstTimerPriceRm == null) mode = "regular";
     if (mode !== priceMode) setPriceMode(mode);
-    setListPriceRm(planListPrice(plan, mode));
+    setListPriceRm(planListPrice(plan, mode) * qty);
     setAmountOverridden(false);
     setItemId(
       findClassTypeIdForPlan(
@@ -541,14 +673,38 @@ export function AdminSalesView() {
     );
   }
 
-  function applyProduct(id: string) {
-    setProductId(id);
-    const product = products.find((p) => p.id === id);
-    if (!product) return;
-    setListPriceRm(product.priceRm * Math.max(1, quantity));
+  function applyProductLine(key: string, productId: string) {
+    setProductLines((prev) =>
+      prev.map((line) =>
+        line.key === key ? { ...line, productId } : line,
+      ),
+    );
     setAmountOverridden(false);
     setClassCount(0);
     setValidityDays(0);
+  }
+
+  function updateProductLineQty(key: string, quantity: number) {
+    setProductLines((prev) =>
+      prev.map((line) =>
+        line.key === key
+          ? { ...line, quantity: Math.max(1, quantity) }
+          : line,
+      ),
+    );
+    setAmountOverridden(false);
+  }
+
+  function addProductLine() {
+    setProductLines((prev) => [...prev, newProductLineDraft()]);
+  }
+
+  function removeProductLine(key: string) {
+    setProductLines((prev) => {
+      if (prev.length <= 1) return [newProductLineDraft()];
+      return prev.filter((line) => line.key !== key);
+    });
+    setAmountOverridden(false);
   }
 
   function switchSaleKind(next: "plan" | "product") {
@@ -562,15 +718,12 @@ export function AdminSalesView() {
       setClassCount(0);
       setValidityDays(0);
       setPriceMode("regular");
-      if (selectedProduct) {
-        setListPriceRm(selectedProduct.priceRm * Math.max(1, quantity));
-      } else {
-        setListPriceRm(0);
-        setAmountRm(0);
-      }
+      setProductLines([newProductLineDraft()]);
+      setListPriceRm(0);
+      setAmountRm(0);
     } else {
-      setProductId("");
-      setQuantity(1);
+      setProductLines([newProductLineDraft()]);
+      setPlanQuantity(1);
       setValidityDays(30);
       setListPriceRm(0);
       setAmountRm(0);
@@ -579,15 +732,17 @@ export function AdminSalesView() {
 
   useEffect(() => {
     if (saleKind !== "plan" || !selectedPlan) return;
-    setListPriceRm(planListPrice(selectedPlan, priceMode));
+    const qty = Math.max(1, planQuantity);
+    setClassCount(selectedPlan.classCount * qty);
+    setListPriceRm(planListPrice(selectedPlan, priceMode) * qty);
     setAmountOverridden(false);
-  }, [priceMode, selectedPlan, saleKind]);
+  }, [priceMode, selectedPlan, saleKind, planQuantity]);
 
   useEffect(() => {
-    if (saleKind !== "product" || !selectedProduct) return;
-    setListPriceRm(selectedProduct.priceRm * Math.max(1, quantity));
+    if (saleKind !== "product") return;
+    setListPriceRm(productLinesTotalRm);
     setAmountOverridden(false);
-  }, [quantity, selectedProduct, saleKind]);
+  }, [productLinesTotalRm, saleKind]);
 
   function pickClient(c: ClientSuggest) {
     setSelectedClient(c);
@@ -610,8 +765,8 @@ export function AdminSalesView() {
       setError("Client name is required");
       return;
     }
-    if (saleKind === "product" && !productId) {
-      setError("Select a product");
+    if (saleKind === "product" && filledProductLines.length === 0) {
+      setError("Add at least one product");
       return;
     }
     const alsoCreateOrder =
@@ -636,8 +791,15 @@ export function AdminSalesView() {
           saleKind,
           planId: saleKind === "plan" ? planId || undefined : undefined,
           itemId: saleKind === "plan" ? itemId || undefined : undefined,
-          productId: saleKind === "product" ? productId || undefined : undefined,
-          quantity: saleKind === "product" ? Math.max(1, quantity) : undefined,
+          products:
+            saleKind === "product"
+              ? filledProductLines.map((line) => ({
+                  productId: line.productId,
+                  quantity: Math.max(1, line.quantity),
+                }))
+              : undefined,
+          quantity:
+            saleKind === "plan" ? Math.max(1, planQuantity) : undefined,
           promotionId:
             saleKind === "plan" ? promotionId || undefined : undefined,
           classCount: saleKind === "product" ? 0 : classCount,
@@ -660,8 +822,8 @@ export function AdminSalesView() {
       clearClient();
       setPlanId("");
       setItemId("");
-      setProductId("");
-      setQuantity(1);
+      setPlanQuantity(1);
+      setProductLines([newProductLineDraft()]);
       setPromotionId("");
       setClassCount(0);
       setValidityDays(saleKind === "product" ? 0 : 30);
@@ -705,7 +867,7 @@ export function AdminSalesView() {
       const createdId = json.data?.product?.id as string | undefined;
       if (createdId) {
         setSaleKind("product");
-        setProductId(createdId);
+        setProductLines([newProductLineDraft(createdId, 1)]);
         setListPriceRm((json.data.product.priceRm as number) || 0);
         setAmountOverridden(false);
       }
@@ -728,7 +890,13 @@ export function AdminSalesView() {
         throw new Error(json?.error?.message ?? "Update failed");
       }
       await loadMeta();
-      if (!active && productId === id) setProductId("");
+      if (!active) {
+        setProductLines((prev) =>
+          prev.map((line) =>
+            line.productId === id ? { ...line, productId: "" } : line,
+          ),
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Update failed");
     }
@@ -1506,37 +1674,81 @@ export function AdminSalesView() {
             ) : null}
           </div>
           {saleKind === "product" ? (
-            <>
-              <label className="grid gap-1">
-                <span className="text-xs text-[#716D64]">Product</span>
-                <select
-                  value={productId}
-                  onChange={(e) => applyProduct(e.target.value)}
-                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+            <div className="sm:col-span-2 grid gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-[#716D64]">Products</span>
+                <button
+                  type="button"
+                  onClick={addProductLine}
+                  className="text-xs font-medium text-[#A66A4A] underline hover:text-[#444444] cursor-pointer"
                 >
-                  <option value="">Select product…</option>
-                  {products
-                    .filter((p) => p.active)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} · RM {p.priceRm}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="grid gap-1">
-                <span className="text-xs text-[#716D64]">Quantity</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={quantity}
-                  onChange={(e) =>
-                    setQuantity(Math.max(1, Number(e.target.value) || 1))
-                  }
-                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
-                />
-              </label>
-            </>
+                  + Add product
+                </button>
+              </div>
+              {productLines.map((line, index) => {
+                const product = products.find((p) => p.id === line.productId);
+                const lineTotal = product
+                  ? product.priceRm * Math.max(1, line.quantity)
+                  : 0;
+                return (
+                  <div
+                    key={line.key}
+                    className="grid gap-2 sm:grid-cols-[1fr_5.5rem_auto] sm:items-end"
+                  >
+                    <label className="grid gap-1">
+                      <span className="text-xs text-[#716D64]">
+                        Product {index + 1}
+                      </span>
+                      <select
+                        value={line.productId}
+                        onChange={(e) =>
+                          applyProductLine(line.key, e.target.value)
+                        }
+                        className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                      >
+                        <option value="">Select product…</option>
+                        {products
+                          .filter((p) => p.active)
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} · RM {p.priceRm}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-xs text-[#716D64]">Qty</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={line.quantity}
+                        onChange={(e) =>
+                          updateProductLineQty(
+                            line.key,
+                            Math.max(1, Number(e.target.value) || 1),
+                          )
+                        }
+                        className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                      />
+                    </label>
+                    <div className="flex items-center gap-2 pb-1">
+                      <span className="text-xs text-[#716D64] whitespace-nowrap">
+                        {product ? `RM ${lineTotal}` : "—"}
+                      </span>
+                      {productLines.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => removeProductLine(line.key)}
+                          className="text-xs text-[#716D64] underline hover:text-[#444444] cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <>
               <label className="grid gap-1">
@@ -1627,6 +1839,21 @@ export function AdminSalesView() {
                       : " · n/a"}
                   </option>
                 </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-[#716D64]">Quantity</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={planQuantity}
+                  onChange={(e) =>
+                    setPlanQuantity(
+                      Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                    )
+                  }
+                  className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                />
               </label>
               <label className="grid gap-1">
                 <span className="text-xs text-[#716D64]">Credits</span>
@@ -1743,19 +1970,27 @@ export function AdminSalesView() {
                   <td className="py-3 pr-3">
                     <div>
                       {s.saleKind === "product"
-                        ? s.productName || "Product"
+                        ? (s.items?.length ?? 0) > 1
+                          ? s.items!.map((i) => i.productName).join(" + ")
+                          : s.productName || "Product"
                         : s.planTitle || "—"}
                     </div>
                     <div className="text-xs text-[#716D64]">
                       {s.saleKind === "product"
-                        ? "Product sale"
+                        ? (s.items?.length ?? 0) > 1
+                          ? `${s.items!.length} products`
+                          : "Product sale"
                         : s.itemName || "Plan sale"}
                     </div>
                   </td>
                   <td className="py-3 pr-3">{s.promotionName || "—"}</td>
                   <td className="py-3 pr-3">
                     {s.saleKind === "product"
-                      ? `×${s.quantity ?? 1}`
+                      ? `×${
+                          s.items && s.items.length > 0
+                            ? s.items.reduce((n, i) => n + i.quantity, 0)
+                            : s.quantity ?? 1
+                        }`
                       : s.classCount}
                   </td>
                   <td className="py-3 pr-3">
@@ -1781,31 +2016,7 @@ export function AdminSalesView() {
                       <button
                         type="button"
                         onClick={() =>
-                          setReceiptSale({
-                            id: s.id,
-                            receiptNo: s.receiptNo,
-                            soldAt: s.soldAt,
-                            clientName: s.clientName,
-                            clientEmail: s.clientEmail,
-                            clientWhatsapp: s.clientWhatsapp,
-                            planTitle:
-                              s.saleKind === "product"
-                                ? s.productName || "Product"
-                                : s.planTitle,
-                            itemName:
-                              s.saleKind === "product" ? "" : s.itemName,
-                            quantity:
-                              s.saleKind === "product"
-                                ? s.quantity ?? 1
-                                : 1,
-                            classCount:
-                              s.saleKind === "product" ? 0 : s.classCount,
-                            listPriceRm: s.listPriceRm,
-                            amountRm: s.amountRm,
-                            status: s.status,
-                            paymentMethod: s.paymentMethod,
-                            promotionName: s.promotionName,
-                          })
+                          setReceiptParts([saleToReceiptView(s)])
                         }
                         className="text-xs underline text-[#A66A4A] hover:text-[#444444] cursor-pointer"
                       >
@@ -2142,7 +2353,21 @@ export function AdminSalesView() {
       {receiptSale ? (
         <SaleReceiptModal
           sale={receiptSale}
-          onClose={() => setReceiptSale(null)}
+          candidates={receiptCandidates}
+          includedExtras={receiptIncludedExtras}
+          onAddSale={(id) => {
+            const candidate = receiptCandidates.find((c) => c.id === id);
+            if (!candidate) return;
+            setReceiptParts((prev) => [...prev, candidate.view]);
+          }}
+          onRemoveExtra={(id) => {
+            setReceiptParts((prev) => {
+              if (prev.length <= 1) return prev;
+              if (prev[0]?.id === id) return prev;
+              return prev.filter((part) => part.id !== id);
+            });
+          }}
+          onClose={() => setReceiptParts([])}
         />
       ) : null}
     </div>

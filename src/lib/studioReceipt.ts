@@ -74,6 +74,13 @@ export function resolveReceiptNo(
   return fallbackReceiptNo(doc.soldAt, id);
 }
 
+export type ReceiptLineView = {
+  title: string;
+  detail?: string;
+  quantity: number;
+  amountRm: number;
+};
+
 export type ReceiptSaleView = {
   id: string;
   receiptNo: string;
@@ -92,6 +99,13 @@ export type ReceiptSaleView = {
   status: "paid" | "refunded";
   paymentMethod: string;
   promotionName?: string;
+  /** Multi-product rows; when set, receipt prints one table row per line. */
+  lines?: ReceiptLineView[];
+  /**
+   * Extra receipt numbers merged into this print (ephemeral combine).
+   * Printed as a small note; anchor receiptNo stays in the header.
+   */
+  includedReceiptNos?: string[];
 };
 
 export function receiptLineQty(sale: ReceiptSaleView): number {
@@ -115,8 +129,74 @@ export function receiptLineDescription(sale: ReceiptSaleView): {
   return { title, detail: sale.promotionName?.trim() || "" };
 }
 
+export function receiptTableLines(sale: ReceiptSaleView): ReceiptLineView[] {
+  if (sale.lines && sale.lines.length > 0) {
+    return sale.lines.map((line) => ({
+      title: line.title,
+      detail: line.detail,
+      quantity:
+        Number.isFinite(line.quantity) && line.quantity > 0
+          ? Math.floor(line.quantity)
+          : 1,
+      amountRm: line.amountRm,
+    }));
+  }
+  const { title, detail } = receiptLineDescription(sale);
+  return [
+    {
+      title,
+      detail: detail || undefined,
+      quantity: receiptLineQty(sale),
+      amountRm: sale.amountRm,
+    },
+  ];
+}
+
 export function receiptDiscountRm(sale: ReceiptSaleView): number | null {
   const discount = sale.listPriceRm - sale.amountRm;
   if (discount > 0.009) return discount;
   return null;
+}
+
+/**
+ * Merge multiple sales into one printable receipt (plan + product, etc.).
+ * Anchor keeps header receiptNo / client / date; lines and totals are summed.
+ */
+export function mergeReceiptSales(
+  parts: ReceiptSaleView[],
+): ReceiptSaleView | null {
+  if (parts.length === 0) return null;
+  const anchor = parts[0]!;
+  if (parts.length === 1) {
+    return {
+      ...anchor,
+      lines: receiptTableLines(anchor),
+      includedReceiptNos: undefined,
+    };
+  }
+  const lines = parts.flatMap((part) => receiptTableLines(part));
+  const listPriceRm = parts.reduce((sum, part) => sum + part.listPriceRm, 0);
+  const amountRm = parts.reduce((sum, part) => sum + part.amountRm, 0);
+  const methods = new Set(
+    parts
+      .map((part) => part.paymentMethod.trim())
+      .filter(Boolean),
+  );
+  return {
+    ...anchor,
+    lines,
+    listPriceRm,
+    amountRm,
+    status: parts.every((part) => part.status === "paid")
+      ? "paid"
+      : "refunded",
+    paymentMethod:
+      methods.size <= 1
+        ? anchor.paymentMethod || STUDIO_RECEIPT.defaultPaymentMethod
+        : "Mixed",
+    includedReceiptNos: parts
+      .slice(1)
+      .map((part) => part.receiptNo.trim())
+      .filter(Boolean),
+  };
 }

@@ -7,8 +7,7 @@ import {
   formatReceiptMoney,
   formatReceiptPhone,
   receiptDiscountRm,
-  receiptLineDescription,
-  receiptLineQty,
+  receiptTableLines,
   STUDIO_RECEIPT,
   type ReceiptSaleView,
 } from "@/lib/studioReceipt";
@@ -87,12 +86,11 @@ export function SaleReceiptDocument({
 }: {
   sale: ReceiptSaleView;
 }) {
-  const { title, detail } = receiptLineDescription(sale);
+  const lines = receiptTableLines(sale);
   const discount = receiptDiscountRm(sale);
   const dateLabel = formatReceiptDate(sale.soldAt);
   const phone = formatReceiptPhone(sale.clientWhatsapp);
   const paid = sale.status === "paid";
-  const qty = receiptLineQty(sale);
 
   return (
     <article
@@ -163,18 +161,22 @@ export function SaleReceiptDocument({
           </tr>
         </thead>
         <tbody>
-          <tr className="align-top">
-            <td className="py-3 pr-3">
-              <div className="font-medium">{title}</div>
-              {detail ? (
-                <div className="mt-1 text-[11px] text-black/55">{detail}</div>
-              ) : null}
-            </td>
-            <td className="py-3 text-center">{qty}</td>
-            <td className="py-3 text-right whitespace-nowrap">
-              {formatReceiptMoney(sale.amountRm)}
-            </td>
-          </tr>
+          {lines.map((line, idx) => (
+            <tr key={`${line.title}-${idx}`} className="align-top">
+              <td className="py-3 pr-3">
+                <div className="font-medium">{line.title}</div>
+                {line.detail ? (
+                  <div className="mt-1 text-[11px] text-black/55">
+                    {line.detail}
+                  </div>
+                ) : null}
+              </td>
+              <td className="py-3 text-center">{line.quantity}</td>
+              <td className="py-3 text-right whitespace-nowrap">
+                {formatReceiptMoney(line.amountRm)}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
@@ -216,6 +218,12 @@ export function SaleReceiptDocument({
           <span className="text-black/60">Payment Date : </span>
           <span>{dateLabel}</span>
         </div>
+        {sale.includedReceiptNos && sale.includedReceiptNos.length > 0 ? (
+          <div>
+            <span className="text-black/60">Also includes : </span>
+            <span>{sale.includedReceiptNos.join(", ")}</span>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-6 text-[12px] leading-relaxed">
@@ -228,18 +236,38 @@ export function SaleReceiptDocument({
   );
 }
 
+export type ReceiptCandidate = {
+  id: string;
+  label: string;
+  receiptNo: string;
+  amountRm: number;
+  view: ReceiptSaleView;
+};
+
 export function SaleReceiptModal({
   sale,
+  candidates = [],
+  includedExtras = [],
+  onAddSale,
+  onRemoveExtra,
   onClose,
 }: {
   sale: ReceiptSaleView;
+  /** Other sales that can be merged onto this print (same client). */
+  candidates?: ReceiptCandidate[];
+  /** Sales already added (excluding the anchor). */
+  includedExtras?: Array<{ id: string; receiptNo: string; label: string }>;
+  onAddSale?: (id: string) => void;
+  onRemoveExtra?: (id: string) => void;
   onClose: () => void;
 }) {
   const receiptRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickId, setPickId] = useState("");
   const filename = `${sale.receiptNo || "receipt"}.png`;
+  const extraCount = includedExtras.length;
 
   const downloadReceipt = useCallback(async () => {
     const node = receiptRef.current?.querySelector(
@@ -282,7 +310,9 @@ export function SaleReceiptModal({
                   ? "Download failed"
                   : saved
                     ? `${sale.receiptNo} · saved`
-                    : "Tap Download to save the receipt image"}
+                    : extraCount > 0
+                      ? `${extraCount + 1} sales on one receipt`
+                      : "Tap Download to save the receipt image"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -303,6 +333,66 @@ export function SaleReceiptModal({
             </button>
           </div>
         </div>
+        {onAddSale ? (
+          <div className="border-b border-[#E8DDD4] px-4 py-3 space-y-2">
+            <p className="text-xs text-[#716D64]">
+              Add another sale (plan or product) onto this receipt
+            </p>
+            {candidates.length > 0 ? (
+              <div className="flex gap-2">
+                <select
+                  value={pickId}
+                  onChange={(e) => setPickId(e.target.value)}
+                  className="min-w-0 flex-1 rounded-xl border border-[#E8DDD4] bg-white px-3 py-2 text-xs"
+                >
+                  <option value="">Select sale…</option>
+                  {candidates.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label} · {c.receiptNo} · RM {c.amountRm}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={!pickId}
+                  onClick={() => {
+                    if (!pickId) return;
+                    onAddSale(pickId);
+                    setPickId("");
+                  }}
+                  className="shrink-0 rounded-xl bg-[#DFD1C9] px-3 py-2 text-xs font-medium hover:brightness-95 disabled:opacity-40 cursor-pointer"
+                >
+                  Add
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-[#716D64]">
+                No other sales for this client in the current list.
+              </p>
+            )}
+            {includedExtras.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {includedExtras.map((extra) => (
+                  <span
+                    key={extra.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-[#E8DDD4] bg-white px-2 py-0.5 text-[11px] text-[#716D64]"
+                  >
+                    {extra.label} · {extra.receiptNo}
+                    {onRemoveExtra ? (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveExtra(extra.id)}
+                        className="ml-0.5 text-[#A66A4A] underline cursor-pointer"
+                      >
+                        remove
+                      </button>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {error ? (
           <div className="px-4 pt-3 text-sm text-red-700">{error}</div>
         ) : null}

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { ObjectId } from "mongodb";
 import { DateTime } from "luxon";
-import { getCollections, type SaleDb } from "@/lib/db";
+import { getCollections, type SaleDb, type SaleLineItemDb } from "@/lib/db";
 import {
   adminSaleCreateSchema,
   adminSalesListQuerySchema,
@@ -123,31 +123,61 @@ export async function POST(req: NextRequest) {
     let productId: ObjectId | undefined;
     let productName: string | undefined;
     let quantity: number | undefined;
+    let saleItems: SaleLineItemDb[] | undefined;
     let classCount = d.classCount;
     let validityDays = d.validityDays;
     let listPriceRm = d.listPriceRm;
 
     if (saleKind === "product") {
-      const productIdRaw = emptyToUndef(d.productId);
-      if (!productIdRaw || !ObjectId.isValid(productIdRaw)) {
-        return jsonError("Product is required", 400);
+      const rawLines =
+        d.products && d.products.length > 0
+          ? d.products
+          : emptyToUndef(d.productId)
+            ? [{ productId: d.productId!, quantity: d.quantity }]
+            : [];
+      if (rawLines.length === 0) {
+        return jsonError("Add at least one product", 400);
       }
-      productId = new ObjectId(productIdRaw);
-      const product = await shopProducts.findOne({ _id: productId });
-      if (!product || !product.active) {
-        return jsonError("Product not found", 404);
+
+      const items: SaleLineItemDb[] = [];
+      for (const line of rawLines) {
+        const productIdRaw = emptyToUndef(line.productId);
+        if (!productIdRaw || !ObjectId.isValid(productIdRaw)) {
+          return jsonError("Invalid productId", 400);
+        }
+        const lineProductId = new ObjectId(productIdRaw);
+        const product = await shopProducts.findOne({ _id: lineProductId });
+        if (!product || !product.active) {
+          return jsonError(`Product not found: ${productIdRaw}`, 404);
+        }
+        const qty = line.quantity && line.quantity > 0 ? line.quantity : 1;
+        const unitPriceRm = product.priceRm;
+        items.push({
+          productId: lineProductId,
+          productName: product.name,
+          quantity: qty,
+          unitPriceRm,
+          lineAmountRm: unitPriceRm * qty,
+        });
       }
-      productName = product.name;
-      quantity = d.quantity && d.quantity > 0 ? d.quantity : 1;
+
+      saleItems = items;
+      productId = items[0]!.productId;
+      productName =
+        items.length === 1
+          ? items[0]!.productName
+          : items.map((i) => i.productName).join(" + ");
+      quantity = items.reduce((sum, i) => sum + i.quantity, 0);
       classCount = 0;
       validityDays = 0;
       if (!d.amountOverridden || listPriceRm <= 0) {
-        listPriceRm = product.priceRm * quantity;
+        listPriceRm = items.reduce((sum, i) => sum + i.lineAmountRm, 0);
       }
       planId = undefined;
       planTitle = undefined;
     } else {
       const planIdRaw = emptyToUndef(d.planId);
+      quantity = d.quantity && d.quantity > 0 ? d.quantity : 1;
       if (planIdRaw) {
         if (!ObjectId.isValid(planIdRaw)) return jsonError("Invalid planId", 400);
         planId = new ObjectId(planIdRaw);
@@ -155,14 +185,14 @@ export async function POST(req: NextRequest) {
         if (!plan) return jsonError("Plan not found", 404);
         planTitle = plan.title;
         if (!d.amountOverridden) {
-          if (!classCount) classCount = plan.classCount;
+          if (!classCount) classCount = plan.classCount * quantity;
           if (!validityDays) validityDays = plan.validityDays;
         }
         if (listPriceRm <= 0 || !d.amountOverridden) {
           const mode: PlanPriceMode =
             d.priceMode ??
             (d.useStudentPrice ? "student" : "regular");
-          listPriceRm = resolvePlanListPriceRm(plan, mode);
+          listPriceRm = resolvePlanListPriceRm(plan, mode) * quantity;
         }
       }
     }
@@ -212,6 +242,7 @@ export async function POST(req: NextRequest) {
         planId,
         planCode: plan.code,
         planTitle: plan.title,
+        quantity: quantity && quantity > 0 ? quantity : 1,
         classCount,
         amountRm,
         currency: "MYR",
@@ -240,6 +271,7 @@ export async function POST(req: NextRequest) {
       productId,
       productName,
       quantity,
+      ...(saleItems ? { items: saleItems } : {}),
       classCount,
       validityDays,
       promotionId,

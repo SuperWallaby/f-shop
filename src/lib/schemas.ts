@@ -241,9 +241,11 @@ export const adminOrderUpdateSchema = z.object({
 /** Admin: add a package order on a client (e.g. after register / remaining credits). */
 export const adminCreateClientOrderSchema = z.object({
   planId: z.string().min(1),
-  /** Override plan classCount (e.g. remaining credits). Defaults to plan.classCount. */
+  /** How many of this plan (e.g. 2 × RM70). Defaults to 1. */
+  quantity: z.number().int().min(1).max(50).optional(),
+  /** Override total credits. Defaults to plan.classCount × quantity. */
   classCount: z.number().int().positive().max(500).optional(),
-  /** Override amount. Defaults to client-appropriate plan price. */
+  /** Override total amount. Defaults to unit price × quantity. */
   amountRm: z.number().nonnegative().max(100_000).optional(),
   note: z.string().trim().max(800).optional(),
   /** When true (default), mark paid and grant credits immediately. */
@@ -394,6 +396,17 @@ export const adminSaleCreateSchema = z
       z.string().min(1).optional(),
     ),
     quantity: z.number().int().min(1).max(999).optional(),
+    /** Multi-product lines (preferred for product sales). */
+    products: z
+      .array(
+        z.object({
+          productId: z.string().min(1),
+          quantity: z.number().int().min(1).max(999).optional(),
+        }),
+      )
+      .min(1)
+      .max(50)
+      .optional(),
     classCount: z.number().int().min(0).max(500),
     validityDays: z.number().int().min(0).max(3650),
     promotionId: z.preprocess(
@@ -415,12 +428,16 @@ export const adminSaleCreateSchema = z
   })
   .superRefine((d, ctx) => {
     const kind = d.saleKind ?? "plan";
-    if (kind === "product" && !d.productId) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["productId"],
-        message: "Product is required for product sales",
-      });
+    if (kind === "product") {
+      const hasLines = Boolean(d.products?.length);
+      const hasSingle = Boolean(d.productId);
+      if (!hasLines && !hasSingle) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["products"],
+          message: "Add at least one product",
+        });
+      }
     }
     if (d.alsoCreateOrder) {
       if (kind !== "plan") {
