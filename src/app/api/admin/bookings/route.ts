@@ -11,6 +11,7 @@ import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
 import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
+import { insertBookingConsume } from "@/lib/credits";
 
 class HttpError extends Error {
   status: number;
@@ -37,7 +38,8 @@ export async function POST(req: NextRequest) {
     const slotObjectId = ObjectId.isValid(slotId) ? new ObjectId(slotId) : null;
     if (!slotObjectId) return jsonError("Invalid slotId", 400);
 
-    const { timeSlots, bookings, items, exclusiveLocks } = await getCollections();
+    const { timeSlots, bookings, items, exclusiveLocks, clients, creditLedger } =
+      await getCollections();
     const now = new Date();
 
     const existingSlot = await timeSlots.findOne({ _id: slotObjectId });
@@ -48,6 +50,12 @@ export async function POST(req: NextRequest) {
     if (!item || !item.active) return jsonError("Item not found or inactive", 409);
     const exclusiveKey = (item.exclusiveKey ?? "").trim();
     const effectiveCapacity = item.capacity;
+
+    const emailTrim = email.trim().toLowerCase();
+    const clientByEmail = emailTrim
+      ? await clients.findOne({ email: emailTrim })
+      : null;
+    const linkedClientId = clientByEmail?._id;
 
     let insertedBuckets: number[] = [];
     if (exclusiveKey && usesExclusiveTimeBlocking(effectiveCapacity)) {
@@ -109,6 +117,7 @@ export async function POST(req: NextRequest) {
         detached: false,
         itemId: item._id,
         exclusiveKey: exclusiveKey || undefined,
+        ...(linkedClientId ? { clientId: linkedClientId } : {}),
         name,
         email,
         whatsapp,
@@ -142,6 +151,16 @@ export async function POST(req: NextRequest) {
         }
       }
       if (!result) throw new Error("Failed to allocate booking code");
+
+      if (linkedClientId) {
+        await insertBookingConsume({
+          creditLedger,
+          clientId: linkedClientId,
+          bookingId: result.insertedId,
+          now,
+          note: "Admin class booking",
+        });
+      }
 
       try {
         await sendBookingCreatedEmail({

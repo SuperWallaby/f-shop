@@ -1,6 +1,6 @@
 import type { PromotionDb, SaleDb } from "@/lib/db";
 import { DateTime } from "luxon";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Collection } from "mongodb";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import {
   applyPromotionDiscount,
@@ -8,6 +8,7 @@ import {
   promotionBadgeLabel,
 } from "@/lib/promotionMath";
 import {
+  buildReceiptNo,
   resolveReceiptNo,
   STUDIO_RECEIPT,
 } from "@/lib/studioReceipt";
@@ -17,6 +18,30 @@ export {
   formatPromotionDiscountText,
   promotionBadgeLabel,
 };
+
+export function parseSaleSoldAt(raw: string): Date | null {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const dt = DateTime.fromISO(raw, { zone: BUSINESS_TIME_ZONE }).startOf(
+      "day",
+    );
+    return dt.isValid ? dt.toJSDate() : null;
+  }
+  const dt = DateTime.fromISO(raw, { zone: BUSINESS_TIME_ZONE });
+  return dt.isValid ? dt.toJSDate() : null;
+}
+
+export async function allocateSaleReceiptNo(
+  sales: Collection<SaleDb>,
+  soldAt: Date,
+): Promise<string> {
+  const day = DateTime.fromJSDate(soldAt, { zone: BUSINESS_TIME_ZONE });
+  const from = day.startOf("day").toJSDate();
+  const to = day.endOf("day").toJSDate();
+  const count = await sales.countDocuments({
+    soldAt: { $gte: from, $lte: to },
+  });
+  return buildReceiptNo(soldAt, count + 1);
+}
 
 export function serializePromotion(
   doc: PromotionDb & { _id?: { toHexString(): string } },
@@ -102,6 +127,7 @@ export function serializeSale(doc: SaleDb & { _id?: ObjectId }) {
       doc.paymentMethod?.trim() || STUDIO_RECEIPT.defaultPaymentMethod,
     note: doc.note ?? "",
     creditLedgerId: doc.creditLedgerId?.toHexString() ?? null,
+    orderId: doc.orderId?.toHexString() ?? null,
     refundedAt: doc.refundedAt?.toISOString() ?? null,
     refundAmountRm: doc.refundAmountRm ?? null,
     refundNote: doc.refundNote ?? "",

@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DateTime } from "luxon";
 import { minutesToAmPmRange } from "@/app/admin/_lib/adminTime";
 import { CreditExpiryBannerStack } from "@/components/CreditExpiryBannerStack";
 import { cn } from "@/lib/cn";
+import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
 import PlusIcon from "@heroicons/react/24/outline/PlusIcon";
 import { Skeleton, SkeletonLine } from "./Skeleton";
@@ -17,6 +19,7 @@ type OrderHistoryEntry = {
   amountRm: number;
   createdAt: string;
   paidAt: string | null;
+  saleId?: string | null;
 };
 
 type BookingHistoryEntry = {
@@ -39,6 +42,7 @@ type ClientRow = {
   };
   balance: {
     balance: number;
+    rawBalance?: number;
     expiringCredits: Array<{ amount: number; expiresAt: string; source: string }>;
     expiryAlerts?: Array<{
       expiresAt: string;
@@ -53,6 +57,18 @@ type ClientRow = {
   ordersHistory: OrderHistoryEntry[];
   bookingHistory: BookingHistoryEntry[];
 };
+
+function todayDateKey() {
+  return DateTime.now().setZone(BUSINESS_TIME_ZONE).toISODate() ?? "";
+}
+
+function isoToDateKey(iso: string | null | undefined) {
+  if (!iso) return todayDateKey();
+  return (
+    DateTime.fromISO(iso, { zone: BUSINESS_TIME_ZONE }).toISODate() ??
+    todayDateKey()
+  );
+}
 
 function fmtShortDateTime(iso: string) {
   try {
@@ -184,6 +200,11 @@ function RegisterClientModal({
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [saving, setSaving] = useState(false);
+  const [existingTaken, setExistingTaken] = useState<{
+    id: string;
+    name: string;
+    email: string;
+  } | null>(null);
 
   const loadGuests = useCallback(async (q: string) => {
     const query = q.trim();
@@ -220,6 +241,7 @@ function RegisterClientModal({
       setName("");
       setEmail("");
       setWhatsapp("");
+      setExistingTaken(null);
       return;
     }
   }, [open]);
@@ -262,6 +284,21 @@ function RegisterClientModal({
       });
       const json = await res.json();
       if (!res.ok || !json?.ok) {
+        const existing = json?.error?.details?.existingClient as
+          | { id?: string; name?: string; email?: string }
+          | undefined;
+        if (json?.error?.details?.code === "whatsapp_taken" && existing?.id) {
+          setError(
+            json?.error?.message ??
+              "This WhatsApp is already registered to another client.",
+          );
+          setExistingTaken({
+            id: existing.id,
+            name: existing.name ?? "",
+            email: existing.email ?? "",
+          });
+          return;
+        }
         throw new Error(json?.error?.message ?? "Failed to register client");
       }
       const id = json.data?.client?.id as string;
@@ -369,11 +406,34 @@ function RegisterClientModal({
             <span className="text-xs text-[#716D64]">WhatsApp</span>
             <input
               value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value)}
+              onChange={(e) => {
+                setWhatsapp(e.target.value);
+                setExistingTaken(null);
+              }}
               className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
             />
           </label>
         </div>
+
+        {existingTaken ? (
+          <div className="mt-4 rounded-2xl border border-[#F2D3A2] bg-[#FFFDF8] px-4 py-3 text-sm text-[#444444]">
+            <p>
+              Already registered:{" "}
+              <span className="font-medium">{existingTaken.name || "—"}</span>
+              {existingTaken.email ? ` · ${existingTaken.email}` : ""}
+            </p>
+            <button
+              type="button"
+              className="mt-2 text-sm font-medium underline text-[#A66A4A] cursor-pointer"
+              onClick={() => {
+                onRegistered(existingTaken.id);
+                onClose();
+              }}
+            >
+              Open existing client
+            </button>
+          </div>
+        ) : null}
 
         <div className="mt-5 flex justify-end gap-2">
           <button
@@ -431,7 +491,11 @@ function AdminClientDetail({
   const [orderAmountRm, setOrderAmountRm] = useState("");
   const [orderNote, setOrderNote] = useState("");
   const [orderMarkPaid, setOrderMarkPaid] = useState(true);
+  const [orderPaidAt, setOrderPaidAt] = useState(todayDateKey);
   const [orderSaving, setOrderSaving] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [editOrderPaidAt, setEditOrderPaidAt] = useState("");
+  const [editOrderSaving, setEditOrderSaving] = useState(false);
 
   const pendingOrders = useMemo(
     () => row.ordersHistory.filter((o) => o.status === "pending"),
@@ -499,6 +563,7 @@ function AdminClientDetail({
     setOrderAmountRm("");
     setOrderNote("");
     setOrderMarkPaid(true);
+    setOrderPaidAt(todayDateKey());
   }
 
   async function submitAddOrder() {
@@ -516,6 +581,15 @@ function AdminClientDetail({
       setError("Amount must be a valid number");
       return;
     }
+    if (orderMarkPaid && !orderPaidAt) {
+      setError("Paid date is required");
+      return;
+    }
+    const alsoCreateSale =
+      orderMarkPaid &&
+      window.confirm(
+        "Also record this in Sales?\n\nCredits are granted only once either way.",
+      );
     setOrderSaving(true);
     setMsg(null);
     setError(null);
@@ -528,6 +602,8 @@ function AdminClientDetail({
           classCount,
           amountRm,
           markPaid: orderMarkPaid,
+          alsoCreateSale,
+          ...(orderMarkPaid && orderPaidAt ? { soldAt: orderPaidAt } : {}),
           ...(orderNote.trim() ? { note: orderNote.trim() } : {}),
         }),
       });
@@ -536,9 +612,12 @@ function AdminClientDetail({
         setError(json?.error?.message ?? "Failed to add order");
         return;
       }
+      const saleCreated = Boolean(json?.data?.saleCreated);
       setMsg(
         orderMarkPaid
-          ? "Order added and credits granted."
+          ? saleCreated
+            ? "Order + sale recorded. Credits granted once."
+            : "Order added and credits granted."
           : "Pending order added.",
       );
       setAddOrderOpen(false);
@@ -550,20 +629,75 @@ function AdminClientDetail({
   }
 
   async function confirmOrder(orderId: string) {
+    const defaultDate = todayDateKey();
+    const paidDateRaw = window.prompt(
+      "Paid date (YYYY-MM-DD)",
+      defaultDate,
+    );
+    if (paidDateRaw == null) return;
+    const paidDate = paidDateRaw.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)) {
+      setError("Paid date must be YYYY-MM-DD");
+      return;
+    }
+    const alsoCreateSale = window.confirm(
+      "Also record this in Sales?\n\nCredits are granted only once either way.",
+    );
     setMsg(null);
     setError(null);
     const res = await fetch(`/api/admin/orders/${orderId}/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: "Confirmed from admin clients view" }),
+      body: JSON.stringify({
+        note: "Confirmed from admin clients view",
+        alsoCreateSale,
+        soldAt: paidDate,
+      }),
     });
     const json = await res.json();
     if (!res.ok || !json?.ok) {
       setError(json?.error?.message ?? "Failed to confirm order");
       return;
     }
-    setMsg("Order confirmed and credits granted.");
+    setMsg(
+      json?.data?.saleCreated
+        ? "Order confirmed + sale recorded. Credits granted once."
+        : "Order confirmed and credits granted.",
+    );
     await load();
+  }
+
+  function openEditOrderDate(order: OrderHistoryEntry) {
+    setEditingOrderId(order.id);
+    setEditOrderPaidAt(isoToDateKey(order.paidAt ?? order.createdAt));
+    setError(null);
+  }
+
+  async function saveOrderDate(orderId: string) {
+    if (!editOrderPaidAt) {
+      setError("Paid date is required");
+      return;
+    }
+    setEditOrderSaving(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paidAt: editOrderPaidAt }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        setError(json?.error?.message ?? "Failed to update order date");
+        return;
+      }
+      setMsg("Order date updated.");
+      setEditingOrderId(null);
+      await load();
+    } finally {
+      setEditOrderSaving(false);
+    }
   }
 
   async function denyOrder(orderId: string) {
@@ -766,7 +900,15 @@ function AdminClientDetail({
               title="Adjust credits"
             >
               Credits{" "}
-              <span className="font-semibold">{row.balance.balance}</span>
+              <span
+                className={cn(
+                  "font-semibold",
+                  (row.balance.rawBalance ?? row.balance.balance) < 0 &&
+                    "text-[#B42318]",
+                )}
+              >
+                {row.balance.rawBalance ?? row.balance.balance}
+              </span>
             </button>
           </div>
           <div className="mt-0.5 text-xs text-[#716D64] truncate">
@@ -933,6 +1075,17 @@ function AdminClientDetail({
                   className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm text-[#444444] tabular-nums"
                 />
               </label>
+              {orderMarkPaid ? (
+                <label className="grid gap-1 text-xs text-[#716D64]">
+                  Paid date
+                  <input
+                    type="date"
+                    value={orderPaidAt}
+                    onChange={(e) => setOrderPaidAt(e.target.value)}
+                    className="rounded-lg border border-[#E8DDD4] bg-white px-3 py-2 text-sm text-[#444444]"
+                  />
+                </label>
+              ) : null}
               <label className="grid gap-1 text-xs text-[#716D64] sm:col-span-2">
                 Note (optional)
                 <input
@@ -967,7 +1120,7 @@ function AdminClientDetail({
           <p className="text-sm text-[#716D64]">No orders.</p>
         ) : (
           <div className="overflow-x-auto -mx-1">
-            <table className="min-w-[640px] w-full text-sm">
+            <table className="min-w-[720px] w-full text-sm">
               <thead>
                 <tr className="border-b border-[#E8DDD4] text-left text-[11px] text-[#716D64]">
                   <th className="pb-2 pr-3 font-medium">Date</th>
@@ -976,7 +1129,7 @@ function AdminClientDetail({
                   <th className="pb-2 pr-3 font-medium">Cr</th>
                   <th className="pb-2 pr-3 font-medium">RM</th>
                   <th className="pb-2 pr-3 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Paid</th>
+                  <th className="pb-2 font-medium"> </th>
                 </tr>
               </thead>
               <tbody>
@@ -986,7 +1139,18 @@ function AdminClientDetail({
                     className="border-b border-[#E8DDD4]/50 last:border-0"
                   >
                     <td className="py-2.5 pr-3 text-[#716D64] whitespace-nowrap text-xs">
-                      {fmtShortDateTime(order.createdAt)}
+                      {editingOrderId === order.id ? (
+                        <input
+                          type="date"
+                          value={editOrderPaidAt}
+                          onChange={(e) => setEditOrderPaidAt(e.target.value)}
+                          className="rounded-lg border border-[#E8DDD4] bg-white px-2 py-1 text-xs text-[#444444]"
+                        />
+                      ) : order.paidAt ? (
+                        fmtShortDateTime(order.paidAt)
+                      ) : (
+                        fmtShortDateTime(order.createdAt)
+                      )}
                     </td>
                     <td className="py-2.5 pr-3 font-mono text-xs">
                       {order.orderRef}
@@ -999,8 +1163,37 @@ function AdminClientDetail({
                     <td className="py-2.5 pr-3">
                       <OrderStatusPill status={order.status} />
                     </td>
-                    <td className="py-2.5 text-[#716D64] text-xs whitespace-nowrap">
-                      {order.paidAt ? fmtShortDateTime(order.paidAt) : "—"}
+                    <td className="py-2.5">
+                      {order.status === "paid" ? (
+                        editingOrderId === order.id ? (
+                          <div className="flex flex-wrap gap-1">
+                            <button
+                              type="button"
+                              disabled={editOrderSaving}
+                              onClick={() => void saveOrderDate(order.id)}
+                              className="rounded-lg bg-[#DFD1C9] px-2 py-1 text-[11px] font-medium hover:brightness-95 cursor-pointer disabled:opacity-40"
+                            >
+                              {editOrderSaving ? "…" : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={editOrderSaving}
+                              onClick={() => setEditingOrderId(null)}
+                              className="rounded-lg border border-[#E8DDD4] bg-white px-2 py-1 text-[11px] cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openEditOrderDate(order)}
+                            className="text-[11px] font-medium underline text-[#A66A4A] hover:text-[#444444] cursor-pointer"
+                          >
+                            Edit date
+                          </button>
+                        )
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -1347,8 +1540,14 @@ export function AdminClientsView() {
                             </div>
                           ) : null}
                         </td>
-                        <td className="px-4 py-3 font-medium tabular-nums">
-                          {row.balance.balance}
+                        <td
+                          className={cn(
+                            "px-4 py-3 font-medium tabular-nums",
+                            (row.balance.rawBalance ?? row.balance.balance) < 0 &&
+                              "text-[#B42318]",
+                          )}
+                        >
+                          {row.balance.rawBalance ?? row.balance.balance}
                         </td>
                         <td className="px-4 py-3">
                           <StudentPill status={row.client.studentStatus} />

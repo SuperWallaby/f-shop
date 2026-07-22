@@ -2,6 +2,7 @@ import {
  MongoClient,
  type Db,
  type Collection,
+ type Filter,
  ObjectId,
  type WithId,
 } from "mongodb";
@@ -22,6 +23,8 @@ export type SettingsDoc = {
   minNoticeHours: number; // minimum hours before slot start
   maxDaysAhead: number; // max days ahead (inclusive) user can book
  };
+ /** One-time: merge clients that shared +60… / 60… WhatsApp variants. */
+ whatsappDedupeV1Done?: boolean;
  updatedAt: Date;
 };
 
@@ -152,6 +155,8 @@ export type OrderDb = {
  createdAt: Date;
  paidAt?: Date;
  adminNote?: string;
+ /** Linked sales ledger row when order was recorded as a sale too. */
+ saleId?: ObjectId;
 };
 
 export type StudentStatus = "none" | "pending" | "verified" | "rejected";
@@ -162,6 +167,8 @@ export type ClientDb = {
  name: string;
  email: string;
  whatsapp: string;
+ /** Canonical digits (MY 0… → 60…); unique sparse index prevents dup accounts. */
+ whatsappDigits?: string;
  studentStatus: StudentStatus;
  studentName?: string;
  studentAge?: number | null;
@@ -311,6 +318,8 @@ export type SaleDb = {
  paymentMethod?: string;
  note?: string;
  creditLedgerId?: ObjectId;
+ /** Linked package order when sale was also recorded as an order. */
+ orderId?: ObjectId;
  refundedAt?: Date;
  refundAmountRm?: number;
  refundNote?: string;
@@ -449,6 +458,37 @@ async function ensureIndexes(db: Db): Promise<void> {
   // NOTE: MongoDB already has a unique _id index; attempting to specify `unique` on it errors.
   // We keep settings as a singleton by always using _id="singleton".
 
+  // Backfill canonical WhatsApp digits before unique index.
+  try {
+   const { clientWhatsappFields } = await import("@/lib/whatsapp");
+   const needDigits = await clients
+    .find({
+     whatsapp: { $exists: true, $type: "string", $ne: "" },
+     $or: [
+      { whatsappDigits: { $exists: false } },
+      { whatsappDigits: null as unknown as string },
+      { whatsappDigits: "" },
+     ],
+    } as Filter<ClientDb>)
+    .toArray();
+   for (const c of needDigits) {
+    if (!c._id) continue;
+    const fields = clientWhatsappFields(c.whatsapp ?? "");
+    if (!fields) continue;
+    await clients.updateOne(
+     { _id: c._id },
+     {
+      $set: {
+       whatsapp: fields.whatsapp,
+       whatsappDigits: fields.whatsappDigits,
+      },
+     },
+    );
+   }
+  } catch (e) {
+   console.error("[db] whatsappDigits backfill failed", e);
+  }
+
   // Drop legacy unique index (dateKey+startMin+endMin) if it still exists.
   // We now use dateKey+itemId+startMin+endMin so different class types can share the same times.
   try {
@@ -514,6 +554,10 @@ async function ensureIndexes(db: Db): Promise<void> {
    ),
    clients.createIndex({ email: 1 }, { unique: true, name: "uniq_client_email" }),
    clients.createIndex({ customerKey: 1 }, { unique: true, name: "uniq_client_customerKey" }),
+   clients.createIndex(
+    { whatsappDigits: 1 },
+    { unique: true, sparse: true, name: "uniq_client_whatsappDigits" },
+   ),
    clients.createIndex({ appleSub: 1 }, { unique: true, sparse: true, name: "uniq_client_appleSub" }),
    plans.createIndex({ code: 1 }, { unique: true, name: "uniq_plan_code" }),
    orders.createIndex({ orderRef: 1 }, { unique: true, name: "uniq_order_ref" }),
@@ -555,6 +599,33 @@ async function ensureIndexes(db: Db): Promise<void> {
     { sparse: true, name: "ledger_expiresAt" },
    ),
   ]);
+
+  // One-time: merge +60… / 60… WhatsApp duplicate client accounts.
+  try {
+   const settings = db.collection<SettingsDoc>("settings");
+   const singleton = await settings.findOne({ _id: "singleton" });
+   if (!singleton?.whatsappDedupeV1Done) {
+    const { dedupeClientsByWhatsapp } = await import("@/lib/clientMerge");
+    await dedupeClientsByWhatsapp({
+     clients,
+     creditLedger,
+     orders,
+     bookings,
+    });
+    await settings.updateOne(
+     { _id: "singleton" },
+     {
+      $set: {
+       whatsappDedupeV1Done: true,
+       updatedAt: new Date(),
+      },
+     },
+     { upsert: true },
+    );
+   }
+  } catch (e) {
+   console.error("[db] whatsapp dedupe migration failed", e);
+  }
 
   global._mongoIndexesEnsured = true;
  } catch (e) {

@@ -6,8 +6,9 @@ import {
   makeCustomerKey,
   publicClient,
 } from "@/lib/credits";
+import { findClientsByWhatsapp } from "@/lib/clientMerge";
 import { adminRegisterClientSchema } from "@/lib/schemas";
-import { normalizeWhatsapp } from "@/lib/whatsapp";
+import { clientWhatsappFields } from "@/lib/whatsapp";
 import { requireAdmin } from "../../_utils/adminAuth";
 import { jsonError, jsonOk } from "../../_utils/http";
 
@@ -80,6 +81,7 @@ export async function GET(req: NextRequest) {
             amountRm: order.amountRm,
             createdAt: order.createdAt.toISOString(),
             paidAt: order.paidAt?.toISOString() ?? null,
+            saleId: order.saleId?.toHexString() ?? null,
           })),
           bookingHistory: bookingDocs.map((booking) => ({
             id: booking._id!.toHexString(),
@@ -116,13 +118,42 @@ export async function POST(req: NextRequest) {
     const email = d.email.trim().toLowerCase();
     const name = d.name.trim();
     const whatsappRaw = (d.whatsapp ?? "").trim();
-    const whatsapp = whatsappRaw ? normalizeWhatsapp(whatsappRaw) : "";
+    const waFields = whatsappRaw ? clientWhatsappFields(whatsappRaw) : null;
+    const whatsapp = waFields?.whatsapp ?? "";
     const linkPast = d.linkPastBookings !== false;
     const now = new Date();
 
     const { clients, creditLedger, bookings } = await getCollections();
+
     let client = await clients.findOne({ email });
     let created = false;
+
+    if (whatsapp) {
+      const waMatches = await findClientsByWhatsapp(clients, whatsapp);
+      const other = waMatches.find(
+        (c) => !client?._id || !c._id.equals(client._id!),
+      );
+      if (other) {
+        const otherEmail = (other.email ?? "").trim().toLowerCase();
+        if (otherEmail && otherEmail !== email) {
+          return jsonError(
+            `This WhatsApp is already registered to ${other.name || "a client"} (${other.email}). Open that client instead of creating a new one.`,
+            409,
+            {
+              code: "whatsapp_taken",
+              existingClient: {
+                id: other._id.toHexString(),
+                name: other.name,
+                email: other.email,
+                whatsapp: other.whatsapp,
+              },
+            },
+          );
+        }
+        // Same person found by WhatsApp only (email empty / match) — use that row
+        if (!client) client = other;
+      }
+    }
 
     if (client) {
       await clients.updateOne(
@@ -130,7 +161,13 @@ export async function POST(req: NextRequest) {
         {
           $set: {
             name,
-            ...(whatsapp ? { whatsapp } : {}),
+            email,
+            ...(waFields
+              ? {
+                  whatsapp: waFields.whatsapp,
+                  whatsappDigits: waFields.whatsappDigits,
+                }
+              : {}),
             updatedAt: now,
           },
         },
@@ -146,6 +183,7 @@ export async function POST(req: NextRequest) {
           name,
           email,
           whatsapp,
+          ...(waFields ? { whatsappDigits: waFields.whatsappDigits } : {}),
           studentStatus: "none",
           createdAt: now,
           updatedAt: now,
@@ -154,6 +192,14 @@ export async function POST(req: NextRequest) {
         created = true;
       } catch (e) {
         if (e instanceof MongoServerError && e.code === 11000) {
+          const msg = String(e.message ?? "");
+          if (msg.includes("whatsappDigits")) {
+            return jsonError(
+              "This WhatsApp number is already registered to another client.",
+              409,
+              { code: "whatsapp_taken" },
+            );
+          }
           return jsonError("Client already exists for this contact", 409);
         }
         throw e;

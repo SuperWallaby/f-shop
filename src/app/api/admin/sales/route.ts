@@ -7,45 +7,23 @@ import {
   adminSalesListQuerySchema,
 } from "@/lib/schemas";
 import {
+  allocateSaleReceiptNo,
   applyPromotionDiscount,
+  parseSaleSoldAt,
   serializeSale,
 } from "@/lib/sales";
 import {
+  createOrderRef,
   resolvePlanListPriceRm,
   type PlanPriceMode,
 } from "@/lib/credits";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
-import { buildReceiptNo } from "@/lib/studioReceipt";
 import { requireAdmin } from "../../_utils/adminAuth";
 import { jsonError, jsonOk } from "../../_utils/http";
 
 function emptyToUndef(v: string | undefined): string | undefined {
   const t = (v ?? "").trim();
   return t ? t : undefined;
-}
-
-function parseSoldAt(raw: string): Date | null {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const dt = DateTime.fromISO(raw, { zone: BUSINESS_TIME_ZONE }).startOf(
-      "day",
-    );
-    return dt.isValid ? dt.toJSDate() : null;
-  }
-  const dt = DateTime.fromISO(raw, { zone: BUSINESS_TIME_ZONE });
-  return dt.isValid ? dt.toJSDate() : null;
-}
-
-async function allocateReceiptNo(
-  sales: Awaited<ReturnType<typeof getCollections>>["sales"],
-  soldAt: Date,
-): Promise<string> {
-  const day = DateTime.fromJSDate(soldAt, { zone: BUSINESS_TIME_ZONE });
-  const from = day.startOf("day").toJSDate();
-  const to = day.endOf("day").toJSDate();
-  const count = await sales.countDocuments({
-    soldAt: { $gte: from, $lte: to },
-  });
-  return buildReceiptNo(soldAt, count + 1);
 }
 
 export async function GET(req: NextRequest) {
@@ -105,13 +83,22 @@ export async function POST(req: NextRequest) {
       return jsonError("Invalid body", 400, parsed.error.flatten());
     }
     const d = parsed.data;
-    const soldAt = parseSoldAt(d.soldAt);
+    const soldAt = parseSaleSoldAt(d.soldAt);
     if (!soldAt) return jsonError("Invalid soldAt", 400);
 
-    const { sales, clients, plans, items, promotions, shopProducts, creditLedger } =
-      await getCollections();
+    const {
+      sales,
+      clients,
+      plans,
+      items,
+      promotions,
+      shopProducts,
+      creditLedger,
+      orders,
+    } = await getCollections();
     const now = new Date();
     const saleKind = d.saleKind ?? "plan";
+    const alsoCreateOrder = Boolean(d.alsoCreateOrder);
 
     let clientId: ObjectId | undefined;
     let clientName = d.clientName.trim();
@@ -213,7 +200,31 @@ export async function POST(req: NextRequest) {
 
     const amountOverridden = Boolean(d.amountOverridden);
     const amountRm = amountOverridden ? d.amountRm : computedAmountRm;
-    const receiptNo = await allocateReceiptNo(sales, soldAt);
+    const receiptNo = await allocateSaleReceiptNo(sales, soldAt);
+
+    let orderId: ObjectId | undefined;
+    if (alsoCreateOrder && clientId && planId) {
+      const plan = await plans.findOne({ _id: planId });
+      if (!plan) return jsonError("Plan not found", 404);
+      const orderIns = await orders.insertOne({
+        orderRef: createOrderRef(),
+        clientId,
+        planId,
+        planCode: plan.code,
+        planTitle: plan.title,
+        classCount,
+        amountRm,
+        currency: "MYR",
+        status: "paid",
+        whatsappMessage: emptyToUndef(d.note)
+          ? `Admin sale + order. ${d.note}`
+          : "Admin sale linked order.",
+        createdAt: now,
+        paidAt: soldAt,
+        ...(emptyToUndef(d.note) ? { adminNote: d.note!.trim() } : {}),
+      });
+      orderId = orderIns.insertedId;
+    }
 
     const saleDoc: SaleDb = {
       soldAt,
@@ -242,12 +253,20 @@ export async function POST(req: NextRequest) {
       receiptNo,
       paymentMethod: "Online transfer",
       note: emptyToUndef(d.note),
+      orderId,
       createdAt: now,
       updatedAt: now,
     };
 
     const ins = await sales.insertOne(saleDoc);
     const saleId = ins.insertedId;
+
+    if (orderId) {
+      await orders.updateOne(
+        { _id: orderId },
+        { $set: { saleId } },
+      );
+    }
 
     let creditLedgerId: ObjectId | undefined;
     if (saleKind === "plan" && clientId && classCount > 0) {
@@ -262,6 +281,7 @@ export async function POST(req: NextRequest) {
         expiryApproved: false,
         planId,
         saleId,
+        ...(orderId ? { orderId } : {}),
         note:
           emptyToUndef(d.note) ||
           `Sale: ${planTitle || clientName} (${amountRm} MYR)`,
@@ -279,6 +299,7 @@ export async function POST(req: NextRequest) {
     return jsonOk({
       sale: serializeSale(created),
       creditsGranted: Boolean(creditLedgerId),
+      orderCreated: Boolean(orderId),
     });
   } catch (e) {
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);

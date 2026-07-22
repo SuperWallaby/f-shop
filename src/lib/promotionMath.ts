@@ -20,7 +20,11 @@ export function applyPromotionDiscount(
   }
   if (promo.discountType === "percent") {
     const pct = Math.min(100, Math.max(0, promo.discountValue ?? 0));
-    return Math.max(0, Math.round(listPriceRm * (100 - pct) * 100) / 100);
+    // e.g. 50% off RM 50 → 25 (not 2500)
+    return Math.max(
+      0,
+      Math.round(listPriceRm * (100 - pct)) / 100,
+    );
   }
   return Math.max(
     0,

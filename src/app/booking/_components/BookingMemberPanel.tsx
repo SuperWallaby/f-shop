@@ -19,6 +19,7 @@ export type BookingClientMe = {
   };
   balance?: {
     balance: number;
+    rawBalance?: number;
     expiryAlerts?: Array<{
       expiresAt: string;
       windowStart: string;
@@ -90,6 +91,10 @@ export function BookingMemberPanel({
 
   const urlAuthErr = authErrMessage(authErr);
   const credits = clientMe.balance?.balance ?? 0;
+  const rawCredits =
+    typeof clientMe.balance?.rawBalance === "number"
+      ? clientMe.balance.rawBalance
+      : credits;
   const profileWhatsapp = (clientMe.client?.whatsapp ?? "").trim();
   const needsWhatsapp = clientMe.authed && !profileWhatsapp;
   const whatsappReady =
@@ -104,7 +109,6 @@ export function BookingMemberPanel({
     consentWhatsapp &&
     !needsName &&
     whatsappReady &&
-    credits >= 1 &&
     !submitting;
 
   async function emailSignIn() {
@@ -172,8 +176,8 @@ export function BookingMemberPanel({
     if (needsName) return "Add your name";
     if (!whatsappReady) return "Add your WhatsApp";
     if (!consentWhatsapp) return "Agree to WhatsApp updates";
-    if (credits < 1) return "Buy credits to book";
     if (submitting) return "Submitting…";
+    if (credits < 1) return "Confirm booking (pay later)";
     return "Confirm booking";
   }
 
@@ -333,7 +337,9 @@ export function BookingMemberPanel({
         <div className="flex flex-col items-end gap-2">
           <div className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-2 text-right">
             <div className="text-xs text-[#716D64]">Credits</div>
-            <div className="font-serif text-xl font-semibold">{credits}</div>
+            <div className="font-serif text-xl font-semibold">
+              {rawCredits < 0 ? rawCredits : credits}
+            </div>
           </div>
           <div className="flex gap-2 text-xs">
             <Link href="/booking/account" className="text-[#716D64] underline">
@@ -345,8 +351,8 @@ export function BookingMemberPanel({
 
       {credits < 1 ? (
         <div className="rounded-2xl border border-[#F2D3A2] bg-[#FFFDF8] px-4 py-3 text-sm text-[#444444]">
-          You need at least 1 credit to book. Choose a package below and complete
-          payment via WhatsApp.
+          You can book now and settle payment with the studio. One credit will be
+          deducted (balance may go negative until you buy a package).
         </div>
       ) : null}
 

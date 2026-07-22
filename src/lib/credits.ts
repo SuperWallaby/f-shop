@@ -415,6 +415,33 @@ export async function getCreditBalance(args: {
   };
 }
 
+/** Deduct 1 credit for a confirmed booking. Allows overdraft (pay later). Idempotent per booking. */
+export async function insertBookingConsume(args: {
+  creditLedger: Collection<CreditLedgerDb>;
+  clientId: ObjectId;
+  bookingId: ObjectId;
+  now?: Date;
+  note?: string;
+}) {
+  const now = args.now ?? new Date();
+  const existing = await args.creditLedger.findOne({
+    bookingId: args.bookingId,
+    type: "booking_consume",
+    amount: { $lt: 0 },
+  });
+  if (existing) return { inserted: false as const, id: existing._id! };
+
+  const ins = await args.creditLedger.insertOne({
+    clientId: args.clientId,
+    type: "booking_consume",
+    amount: -1,
+    bookingId: args.bookingId,
+    note: args.note ?? "Class booking",
+    createdAt: now,
+  });
+  return { inserted: true as const, id: ins.insertedId };
+}
+
 export function createOrderRef() {
   const n = Math.floor(100000 + Math.random() * 900000);
   return `FS${Date.now().toString(36).toUpperCase()}${n}`;

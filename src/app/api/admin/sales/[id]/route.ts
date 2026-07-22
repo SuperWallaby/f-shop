@@ -38,7 +38,7 @@ export async function PATCH(
     const soldAt = parseSoldAt(d.soldAt);
     if (!soldAt) return jsonError("Invalid soldAt", 400);
 
-    const { sales, creditLedger } = await getCollections();
+    const { sales, creditLedger, orders } = await getCollections();
     const saleId = new ObjectId(id);
     const sale = await sales.findOne({ _id: saleId });
     if (!sale) return jsonError("Sale not found", 404);
@@ -89,6 +89,15 @@ export async function PATCH(
         ...(Object.keys(unset).length ? { $unset: unset } : {}),
       },
     );
+
+    if (sale.orderId) {
+      const orderSet: Record<string, unknown> = { paidAt: soldAt };
+      if (!isProduct) {
+        orderSet.classCount = classCount;
+        orderSet.amountRm = d.amountRm;
+      }
+      await orders.updateOne({ _id: sale.orderId }, { $set: orderSet });
+    }
 
     let creditLedgerId = sale.creditLedgerId;
     if (!isProduct && sale.status === "paid" && sale.clientId) {

@@ -11,10 +11,12 @@ import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
 import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
-import { makeCustomerKey } from "@/lib/credits";
+import { makeCustomerKey, insertBookingConsume } from "@/lib/credits";
 import { hashPassword } from "@/lib/password";
 import { setClientSessionCookie } from "@/lib/clientSession";
 import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
+import { findClientsByWhatsapp } from "@/lib/clientMerge";
+import { clientWhatsappFields, normalizeWhatsapp } from "@/lib/whatsapp";
 
 class HttpError extends Error {
   status: number;
@@ -58,8 +60,15 @@ export async function POST(req: NextRequest) {
     const slotObjectId = ObjectId.isValid(slotId) ? new ObjectId(slotId) : null;
     if (!slotObjectId) return jsonError("Invalid slotId", 400);
 
-    const { settings, timeSlots, bookings, items, exclusiveLocks, clients } =
-      await getCollections();
+    const {
+      settings,
+      timeSlots,
+      bookings,
+      items,
+      exclusiveLocks,
+      clients,
+      creditLedger,
+    } = await getCollections();
     const now = new Date();
 
     const sessionClientId = getClientIdFromRequest(req);
@@ -69,12 +78,27 @@ export async function POST(req: NextRequest) {
     if (signUp && password) {
       const emailLower = email.trim().toLowerCase();
       const nameTrim = name.trim();
+      const waFields = clientWhatsappFields(whatsapp);
+      const waNorm = waFields?.whatsapp ?? normalizeWhatsapp(whatsapp);
       const existing = await clients.findOne({ email: emailLower });
       if (existing?.passwordHash) {
         return jsonError(
           "An account with this email already exists. Sign in instead, or book as a guest.",
           409,
         );
+      }
+      if (waNorm) {
+        const waMatches = await findClientsByWhatsapp(clients, waNorm);
+        const other = waMatches.find(
+          (c) => !existing?._id || !c._id.equals(existing._id),
+        );
+        if (other) {
+          return jsonError(
+            "This WhatsApp number is already registered to another account. Sign in or recover that account, or book as a guest.",
+            409,
+            { code: "whatsapp_taken" },
+          );
+        }
       }
       const passwordHash = await hashPassword(password);
       if (existing) {
@@ -84,7 +108,10 @@ export async function POST(req: NextRequest) {
             $set: {
               passwordHash,
               name: nameTrim || existing.name,
-              whatsapp,
+              whatsapp: waNorm,
+              ...(waFields
+                ? { whatsappDigits: waFields.whatsappDigits }
+                : {}),
               updatedAt: now,
               lastLoginAt: now,
             },
@@ -97,7 +124,10 @@ export async function POST(req: NextRequest) {
             customerKey: makeCustomerKey({ email: emailLower }),
             name: nameTrim,
             email: emailLower,
-            whatsapp,
+            whatsapp: waNorm,
+            ...(waFields
+              ? { whatsappDigits: waFields.whatsappDigits }
+              : {}),
             passwordHash,
             studentStatus: "none" as const,
             createdAt: now,
@@ -107,6 +137,14 @@ export async function POST(req: NextRequest) {
           signupClientId = ins.insertedId;
         } catch (e) {
           if (e instanceof MongoServerError && e.code === 11000) {
+            const msg = String(e.message ?? "");
+            if (msg.includes("whatsappDigits")) {
+              return jsonError(
+                "This WhatsApp number is already registered. Sign in or recover that account, or book as a guest.",
+                409,
+                { code: "whatsapp_taken" },
+              );
+            }
             return jsonError(
               "An account with this email already exists. Sign in instead, or book as a guest.",
               409,
@@ -222,6 +260,11 @@ export async function POST(req: NextRequest) {
     const nameTrim = name.trim();
     const emailTrim = email.trim().toLowerCase();
 
+    if (!linkedClientId && emailTrim) {
+      const byEmail = await clients.findOne({ email: emailTrim });
+      if (byEmail?._id) linkedClientId = byEmail._id;
+    }
+
     const bookingDoc: BookingDb = {
       code: generateBookingCode6(),
       slotId: slotRef._id,
@@ -273,6 +316,21 @@ export async function POST(req: NextRequest) {
     if (!result) {
       await rollbackSlotLocks();
       throw new Error("Failed to allocate booking code");
+    }
+
+    if (linkedClientId) {
+      try {
+        await insertBookingConsume({
+          creditLedger,
+          clientId: linkedClientId,
+          bookingId: result.insertedId,
+          now,
+        });
+      } catch (ledgerErr) {
+        await bookings.deleteOne({ _id: result.insertedId });
+        await rollbackSlotLocks();
+        throw ledgerErr;
+      }
     }
 
     try {

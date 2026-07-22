@@ -180,7 +180,10 @@ export const clientAuthSignupSchema = z.object({
   email: z.string().trim().email().max(320),
   password: z.string().regex(/^\d{4}$/),
   name: z.string().trim().max(200).optional(),
-  whatsapp: z.string().trim().max(120).optional(),
+  whatsapp: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    normalizedWhatsappSchema.optional(),
+  ),
 });
 
 export const clientAuthRecoverSchema = z.object({
@@ -208,17 +211,32 @@ export const adminRegisterClientSchema = z.object({
   email: z.string().trim().email().max(320),
   whatsapp: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    z.string().trim().max(120).optional(),
+    normalizedWhatsappSchema.optional(),
   ),
   linkPastBookings: z.boolean().optional(),
 });
 
 export const adminConfirmOrderSchema = z.object({
   note: z.string().trim().max(800).optional(),
+  /** Also create a sales ledger row (credits granted only once). */
+  alsoCreateSale: z.boolean().optional(),
+  /** Business / paid date (YYYY-MM-DD or ISO). Defaults to confirm time. */
+  soldAt: z.string().min(1).optional(),
 });
 
 /** Decline a pending package order (no credits granted). */
-export const adminCancelOrderSchema = adminConfirmOrderSchema;
+export const adminCancelOrderSchema = z.object({
+  note: z.string().trim().max(800).optional(),
+});
+
+/** Admin: edit a paid/pending order (date, amount, credits, note). */
+export const adminOrderUpdateSchema = z.object({
+  /** Business / paid date (YYYY-MM-DD or ISO). Required for paid orders. */
+  paidAt: z.string().min(1).optional(),
+  classCount: z.number().int().positive().max(500).optional(),
+  amountRm: z.number().nonnegative().max(100_000).optional(),
+  note: z.string().trim().max(800).optional(),
+});
 
 /** Admin: add a package order on a client (e.g. after register / remaining credits). */
 export const adminCreateClientOrderSchema = z.object({
@@ -230,6 +248,13 @@ export const adminCreateClientOrderSchema = z.object({
   note: z.string().trim().max(800).optional(),
   /** When true (default), mark paid and grant credits immediately. */
   markPaid: z.boolean().optional(),
+  /** Also create a sales ledger row (only when markPaid; credits once). */
+  alsoCreateSale: z.boolean().optional(),
+  /**
+   * Business date for paidAt / linked sale (YYYY-MM-DD or ISO).
+   * Used when markPaid; defaults to now.
+   */
+  soldAt: z.string().min(1).optional(),
 });
 
 export const adminDeleteClientSchema = z.object({
@@ -287,7 +312,10 @@ export const adminEventPatchSchema = adminEventCreateSchema.partial();
 export const adminUpdateClientSchema = z.object({
   name: z.string().trim().max(200).optional(),
   email: z.string().trim().email().max(320).optional(),
-  whatsapp: z.string().max(120).optional(),
+  whatsapp: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    normalizedWhatsappSchema.optional(),
+  ),
   studentStatus: z.enum(["none", "pending", "verified", "rejected"]).optional(),
   studentName: z.string().trim().max(200).optional(),
   studentAge: z.number().nullable().optional(),
@@ -382,6 +410,8 @@ export const adminSaleCreateSchema = z
     ),
     useStudentPrice: z.boolean().optional(),
     priceMode: z.enum(["regular", "student", "first_timer"]).optional(),
+    /** Also create a paid package order (plan sales with client+plan only). Credits once. */
+    alsoCreateOrder: z.boolean().optional(),
   })
   .superRefine((d, ctx) => {
     const kind = d.saleKind ?? "plan";
@@ -391,6 +421,29 @@ export const adminSaleCreateSchema = z
         path: ["productId"],
         message: "Product is required for product sales",
       });
+    }
+    if (d.alsoCreateOrder) {
+      if (kind !== "plan") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["alsoCreateOrder"],
+          message: "alsoCreateOrder is only for plan sales",
+        });
+      }
+      if (!d.clientId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["clientId"],
+          message: "Client is required to also create an order",
+        });
+      }
+      if (!d.planId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["planId"],
+          message: "Plan is required to also create an order",
+        });
+      }
     }
   });
 

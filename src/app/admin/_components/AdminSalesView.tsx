@@ -96,6 +96,7 @@ type SaleRow = {
   refundAmountRm: number | null;
   note: string;
   clientId: string | null;
+  orderId: string | null;
   receiptNo: string;
   paymentMethod: string;
 };
@@ -613,6 +614,13 @@ export function AdminSalesView() {
       setError("Select a product");
       return;
     }
+    const alsoCreateOrder =
+      saleKind === "plan" &&
+      Boolean(selectedClient?.id) &&
+      Boolean(planId) &&
+      window.confirm(
+        "Also add an Order for this client?\n\nCredits are granted only once either way.",
+      );
     setSaving(true);
     setError(null);
     try {
@@ -642,6 +650,7 @@ export function AdminSalesView() {
           priceMode: saleKind === "plan" ? priceMode : undefined,
           useStudentPrice:
             saleKind === "plan" ? priceMode === "student" : undefined,
+          alsoCreateOrder,
         }),
       });
       const json = await res.json();
@@ -1876,6 +1885,10 @@ export function AdminSalesView() {
                   }
                   className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
                 />
+                <span className="text-[11px] text-[#716D64]">
+                  Changes the business date on this sale
+                  {editingSale.orderId ? " and its linked order" : ""}.
+                </span>
               </label>
               <label className="grid gap-1">
                 <span className="text-xs text-[#716D64]">Client name</span>
