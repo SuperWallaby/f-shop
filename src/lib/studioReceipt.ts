@@ -83,6 +83,9 @@ export type ReceiptSaleView = {
   clientWhatsapp: string;
   planTitle: string;
   itemName: string;
+  /** Line quantity printed in the Qty column (products: pack count; plans: 1). */
+  quantity: number;
+  /** Plan package credits / sessions shown in the description detail. */
   classCount: number;
   listPriceRm: number;
   amountRm: number;
@@ -90,6 +93,11 @@ export type ReceiptSaleView = {
   paymentMethod: string;
   promotionName?: string;
 };
+
+export function receiptLineQty(sale: ReceiptSaleView): number {
+  const qty = Number(sale.quantity);
+  return Number.isFinite(qty) && qty > 0 ? Math.floor(qty) : 1;
+}
 
 export function receiptLineDescription(sale: ReceiptSaleView): {
   title: string;
@@ -99,12 +107,12 @@ export function receiptLineDescription(sale: ReceiptSaleView): {
     sale.planTitle.trim() ||
     sale.itemName.trim() ||
     "Studio package";
-  const sessionLabel = sale.itemName.trim() || "Sessions";
-  const detail =
-    sale.classCount > 0
-      ? `${sale.classCount}x ${sessionLabel}`
-      : sale.promotionName?.trim() || "";
-  return { title, detail };
+  // Product receipts show qty in the Qty column; keep detail for plan sessions only.
+  if (sale.classCount > 0) {
+    const sessionLabel = sale.itemName.trim() || "Sessions";
+    return { title, detail: `${sale.classCount}x ${sessionLabel}` };
+  }
+  return { title, detail: sale.promotionName?.trim() || "" };
 }
 
 export function receiptDiscountRm(sale: ReceiptSaleView): number | null {

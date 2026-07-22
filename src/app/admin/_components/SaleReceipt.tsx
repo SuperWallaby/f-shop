@@ -8,6 +8,7 @@ import {
   formatReceiptPhone,
   receiptDiscountRm,
   receiptLineDescription,
+  receiptLineQty,
   STUDIO_RECEIPT,
   type ReceiptSaleView,
 } from "@/lib/studioReceipt";
@@ -91,6 +92,7 @@ export function SaleReceiptDocument({
   const dateLabel = formatReceiptDate(sale.soldAt);
   const phone = formatReceiptPhone(sale.clientWhatsapp);
   const paid = sale.status === "paid";
+  const qty = receiptLineQty(sale);
 
   return (
     <article
@@ -168,7 +170,7 @@ export function SaleReceiptDocument({
                 <div className="mt-1 text-[11px] text-black/55">{detail}</div>
               ) : null}
             </td>
-            <td className="py-3 text-center">1</td>
+            <td className="py-3 text-center">{qty}</td>
             <td className="py-3 text-right whitespace-nowrap">
               {formatReceiptMoney(sale.amountRm)}
             </td>

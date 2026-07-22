@@ -1784,15 +1784,13 @@ export function AdminSalesView() {
                                 ? s.productName || "Product"
                                 : s.planTitle,
                             itemName:
-                              s.saleKind === "product"
-                                ? s.quantity
-                                  ? `Qty ${s.quantity}`
-                                  : "Shop product"
-                                : s.itemName,
-                            classCount:
+                              s.saleKind === "product" ? "" : s.itemName,
+                            quantity:
                               s.saleKind === "product"
                                 ? s.quantity ?? 1
-                                : s.classCount,
+                                : 1,
+                            classCount:
+                              s.saleKind === "product" ? 0 : s.classCount,
                             listPriceRm: s.listPriceRm,
                             amountRm: s.amountRm,
                             status: s.status,
