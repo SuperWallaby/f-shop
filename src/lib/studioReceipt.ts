@@ -9,8 +9,8 @@ export const STUDIO_RECEIPT = {
   legalName: "FASEA PILATES STUDIO",
   addressLines: [
     "Pt 30713, Jalan Lapangan Terbang,",
-    "Kampung Wakaf Baru, 21300 Kuala",
-    "Terengganu, Terengganu",
+    "Kampung Wakaf Baru,",
+    "21300 Kuala Terengganu, Terengganu",
   ],
   registrationNo: "SA0635576-P",
   telDisplay: "014-5403560",

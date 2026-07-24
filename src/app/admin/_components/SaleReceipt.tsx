@@ -14,14 +14,24 @@ import {
 
 function FaseaReceiptLogo({ className }: { className?: string }) {
   return (
-    <div className={className}>
+    <div className={className} style={{ flexShrink: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/logo.png"
         alt="Faséa Pilates"
         crossOrigin="anonymous"
         decoding="sync"
-        className="h-20 w-auto object-contain"
+        width={64}
+        height={90}
+        style={{
+          display: "block",
+          width: 64,
+          height: "auto",
+          maxHeight: 90,
+          objectFit: "contain",
+          // Avoid soft CSS scaling artifacts in Safari captures.
+          imageRendering: "auto",
+        }}
       />
     </div>
   );
@@ -186,6 +196,11 @@ async function captureReceiptPng(node: HTMLElement): Promise<string> {
     pixelRatio: 2,
     backgroundColor: "#ffffff",
     fontEmbedCSS,
+    // Prefer solid paints — opacity colors double-draw weirdly in some clones.
+    style: {
+      // Ensure the cloned root doesn't inherit conflicting line-height.
+      lineHeight: "normal",
+    },
   });
 }
 
@@ -206,15 +221,62 @@ export function SaleReceiptDocument({
       className="mx-auto w-full bg-white text-black px-6 py-8"
       style={{ fontFamily: "var(--font-inter), Inter, system-ui, sans-serif" }}
     >
-      <header className="flex items-start justify-between gap-4">
+      <header
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
+      >
         <FaseaReceiptLogo />
-        <div className="text-right text-[10px] leading-relaxed text-black/85 max-w-[200px]">
-          <div className="font-semibold text-xs">{STUDIO_RECEIPT.name}</div>
+        {/*
+          Use explicit px line-height / solid colors — Tailwind opacity + rem
+          line-height often overlaps when html-to-image clones on Safari/iPad.
+        */}
+        <div
+          style={{
+            textAlign: "right",
+            fontSize: 10,
+            lineHeight: "15px",
+            color: "#333333",
+            maxWidth: 200,
+            minWidth: 0,
+            flex: "1 1 auto",
+            letterSpacing: "0px",
+            fontFamily: "Helvetica, Arial, sans-serif",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              lineHeight: "16px",
+              color: "#000000",
+              marginBottom: 4,
+            }}
+          >
+            {STUDIO_RECEIPT.name}
+          </div>
           {STUDIO_RECEIPT.addressLines.map((line) => (
-            <div key={line}>{line}</div>
+            <div
+              key={line}
+              style={{
+                lineHeight: "15px",
+                margin: 0,
+                padding: 0,
+                whiteSpace: "normal",
+              }}
+            >
+              {line}
+            </div>
           ))}
-          <div>({STUDIO_RECEIPT.registrationNo})</div>
-          <div>Tel: {STUDIO_RECEIPT.telDisplay}</div>
+          <div style={{ lineHeight: "15px", marginTop: 2 }}>
+            ({STUDIO_RECEIPT.registrationNo})
+          </div>
+          <div style={{ lineHeight: "15px" }}>
+            Tel: {STUDIO_RECEIPT.telDisplay}
+          </div>
         </div>
       </header>
 
