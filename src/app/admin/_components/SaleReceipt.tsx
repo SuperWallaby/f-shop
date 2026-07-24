@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getFontEmbedCSS, toPng } from "html-to-image";
 import {
   formatReceiptDate,
@@ -55,14 +55,83 @@ async function waitForReceiptFonts() {
   }
 }
 
-function triggerPngDownload(dataUrl: string, filename: string) {
-  const link = document.createElement("a");
-  link.download = filename;
-  link.href = dataUrl;
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+function isIosLikeDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/i.test(ua)) return true;
+  // iPadOS 13+ can report as MacIntel with touch.
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, data] = dataUrl.split(",");
+  if (!header || data == null) {
+    throw new Error("Invalid image data");
+  }
+  const mime = /data:(.*?);/.exec(header)?.[1] ?? "image/png";
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+}
+
+type SaveReceiptResult =
+  | { mode: "shared" }
+  | { mode: "downloaded" }
+  | { mode: "preview"; objectUrl: string };
+
+/**
+ * iPad/iPhone Safari often ignores <a download>. Prefer Web Share (Save Image),
+ * then blob download; fall back to an on-screen image for long-press save.
+ */
+async function saveReceiptImage(
+  dataUrl: string,
+  filename: string,
+): Promise<SaveReceiptResult> {
+  const blob = dataUrlToBlob(dataUrl);
+  const file = new File([blob], filename, { type: "image/png" });
+  const canShareFiles =
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function" &&
+    typeof navigator.canShare === "function" &&
+    navigator.canShare({ files: [file] });
+
+  if (canShareFiles) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: filename.replace(/\.png$/i, ""),
+      });
+      return { mode: "shared" };
+    } catch (e) {
+      // User cancelled the share sheet — treat as intentional, not an error.
+      if (e instanceof DOMException && e.name === "AbortError") {
+        throw e;
+      }
+      // Fall through to download / preview.
+    }
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+
+  // Desktop / most Android: blob + download attribute works.
+  if (!isIosLikeDevice()) {
+    const link = document.createElement("a");
+    link.download = filename;
+    link.href = objectUrl;
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Keep URL alive briefly for the download, then revoke.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    return { mode: "downloaded" };
+  }
+
+  // iOS: show preview so they can long-press → Save to Photos / Share.
+  return { mode: "preview", objectUrl };
 }
 
 async function captureReceiptPng(node: HTMLElement): Promise<string> {
@@ -266,8 +335,21 @@ export function SaleReceiptModal({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickId, setPickId] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [saveLabel, setSaveLabel] = useState("Download");
   const filename = `${sale.receiptNo || "receipt"}.png`;
   const extraCount = includedExtras.length;
+
+  useEffect(() => {
+    if (isIosLikeDevice()) setSaveLabel("Share / Save");
+  }, []);
+
+  const closePreview = useCallback(() => {
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, []);
 
   const downloadReceipt = useCallback(async () => {
     const node = receiptRef.current?.querySelector(
@@ -279,17 +361,28 @@ export function SaleReceiptModal({
     }
     setSaving(true);
     setError(null);
+    closePreview();
     try {
       const dataUrl = await captureReceiptPng(node);
-      triggerPngDownload(dataUrl, filename);
-      setSaved(true);
+      const result = await saveReceiptImage(dataUrl, filename);
+      if (result.mode === "preview") {
+        setPreviewUrl(result.objectUrl);
+        setSaved(false);
+      } else {
+        setSaved(true);
+      }
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        // User dismissed the share sheet — not a failure.
+        setSaved(false);
+        return;
+      }
       setSaved(false);
       setError(e instanceof Error ? e.message : "Failed to save image");
     } finally {
       setSaving(false);
     }
-  }, [filename]);
+  }, [closePreview, filename]);
 
   return (
     <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-4 sm:p-6">
@@ -297,7 +390,10 @@ export function SaleReceiptModal({
         type="button"
         className="absolute inset-0 bg-black/45"
         aria-label="Close receipt"
-        onClick={onClose}
+        onClick={() => {
+          closePreview();
+          onClose();
+        }}
       />
       <div className="relative z-10 my-4 w-full max-w-[420px] rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] shadow-xl">
         <div className="flex items-center justify-between gap-3 border-b border-[#E8DDD4] px-4 py-3">
@@ -307,12 +403,14 @@ export function SaleReceiptModal({
               {saving
                 ? "Preparing image…"
                 : error
-                  ? "Download failed"
-                  : saved
-                    ? `${sale.receiptNo} · saved`
-                    : extraCount > 0
-                      ? `${extraCount + 1} sales on one receipt`
-                      : "Tap Download to save the receipt image"}
+                  ? "Save failed"
+                  : previewUrl
+                    ? "Long-press the image below → Save to Photos"
+                    : saved
+                      ? `${sale.receiptNo} · saved`
+                      : extraCount > 0
+                        ? `${extraCount + 1} sales on one receipt`
+                        : `Tap ${saveLabel} to keep the receipt image`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -322,11 +420,18 @@ export function SaleReceiptModal({
               onClick={() => void downloadReceipt()}
               className="rounded-full bg-[#DFD1C9] px-3 py-1.5 text-xs font-medium hover:brightness-95 disabled:opacity-50 cursor-pointer"
             >
-              {saving ? "Saving…" : saved ? "Download again" : "Download"}
+              {saving
+                ? "Saving…"
+                : saved
+                  ? "Save again"
+                  : saveLabel}
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                closePreview();
+                onClose();
+              }}
               className="rounded-full border border-[#E8DDD4] bg-white px-3 py-1.5 text-xs cursor-pointer"
             >
               Close
@@ -395,6 +500,21 @@ export function SaleReceiptModal({
         ) : null}
         {error ? (
           <div className="px-4 pt-3 text-sm text-red-700">{error}</div>
+        ) : null}
+        {previewUrl ? (
+          <div className="border-b border-[#E8DDD4] px-4 py-3">
+            <p className="mb-2 text-xs text-[#716D64]">
+              iPad/Safari can’t auto-download files. Long-press the image →{" "}
+              <span className="font-medium text-[#444444]">Save to Photos</span>{" "}
+              or Share.
+            </p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt={filename}
+              className="w-full rounded-xl border border-[#E8DDD4] bg-white"
+            />
+          </div>
         ) : null}
         <div ref={receiptRef}>
           <SaleReceiptDocument sale={sale} />
