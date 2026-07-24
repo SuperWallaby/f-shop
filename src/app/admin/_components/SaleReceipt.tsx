@@ -13,16 +13,14 @@ import {
 } from "@/lib/studioReceipt";
 
 function FaseaReceiptLogo({ className }: { className?: string }) {
-  const src =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/logo.png`
-      : "/logo.png";
   return (
     <div className={className}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        src="/logo.png"
         alt="Faséa Pilates"
+        crossOrigin="anonymous"
+        decoding="sync"
         className="h-20 w-auto object-contain"
       />
     </div>
@@ -43,6 +41,45 @@ async function waitForReceiptImages(root: HTMLElement) {
           img.onerror = () => resolve();
         }),
     ),
+  );
+}
+
+/** html-to-image often drops cross-origin / Safari imgs unless inlined as data URLs. */
+async function inlineImagesAsDataUrls(root: HTMLElement) {
+  const imgs = Array.from(root.querySelectorAll("img"));
+  await Promise.all(
+    imgs.map(async (img) => {
+      const src = img.currentSrc || img.getAttribute("src") || "";
+      if (!src || src.startsWith("data:")) return;
+      try {
+        const absolute = new URL(src, window.location.origin).toString();
+        const res = await fetch(absolute, {
+          mode: "cors",
+          credentials: "omit",
+          cache: "force-cache",
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+          reader.readAsDataURL(blob);
+        });
+        img.removeAttribute("crossorigin");
+        img.src = dataUrl;
+        await new Promise<void>((resolve) => {
+          if (img.complete && img.naturalWidth > 0) {
+            resolve();
+            return;
+          }
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      } catch {
+        // Leave original src; capture may still omit the image.
+      }
+    }),
   );
 }
 
@@ -136,6 +173,7 @@ async function saveReceiptImage(
 
 async function captureReceiptPng(node: HTMLElement): Promise<string> {
   await waitForReceiptImages(node);
+  await inlineImagesAsDataUrls(node);
   await waitForReceiptFonts();
   // Give layout/fonts one paint before rasterizing.
   await new Promise<void>((resolve) =>
@@ -143,7 +181,8 @@ async function captureReceiptPng(node: HTMLElement): Promise<string> {
   );
   const fontEmbedCSS = await getFontEmbedCSS(node);
   return toPng(node, {
-    cacheBust: true,
+    // Images are already data URLs; cache-busting can break Safari embeds.
+    cacheBust: false,
     pixelRatio: 2,
     backgroundColor: "#ffffff",
     fontEmbedCSS,
