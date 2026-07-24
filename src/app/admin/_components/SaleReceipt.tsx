@@ -12,25 +12,29 @@ import {
   type ReceiptSaleView,
 } from "@/lib/studioReceipt";
 
+/** Display size on the receipt (CSS px). Asset is ~3× for crisp capture. */
+const RECEIPT_LOGO = {
+  src: "/receipt-logo.png",
+  cssWidth: 64,
+  cssHeight: 90,
+} as const;
+
 function FaseaReceiptLogo({ className }: { className?: string }) {
   return (
-    <div className={className} style={{ flexShrink: 0 }}>
+    <div className={className} style={{ flexShrink: 0, width: RECEIPT_LOGO.cssWidth }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/logo.png"
+        src={RECEIPT_LOGO.src}
         alt="Faséa Pilates"
         crossOrigin="anonymous"
         decoding="sync"
-        width={64}
-        height={90}
+        width={RECEIPT_LOGO.cssWidth}
+        height={RECEIPT_LOGO.cssHeight}
         style={{
           display: "block",
-          width: 64,
-          height: "auto",
-          maxHeight: 90,
+          width: RECEIPT_LOGO.cssWidth,
+          height: RECEIPT_LOGO.cssHeight,
           objectFit: "contain",
-          // Avoid soft CSS scaling artifacts in Safari captures.
-          imageRendering: "auto",
         }}
       />
     </div>
@@ -54,30 +58,98 @@ async function waitForReceiptImages(root: HTMLElement) {
   );
 }
 
-/** html-to-image often drops cross-origin / Safari imgs unless inlined as data URLs. */
-async function inlineImagesAsDataUrls(root: HTMLElement) {
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load ${src}`));
+    img.src = src;
+  });
+}
+
+/**
+ * Downscale with canvas (high quality) to exact capture pixels so Safari
+ * html-to-image doesn't soft-rescale a huge P3 source bitmap.
+ */
+async function crispLogoDataUrl(
+  sourceSrc: string,
+  cssWidth: number,
+  cssHeight: number,
+  pixelRatio: number,
+): Promise<string> {
+  const source = await loadImageElement(sourceSrc);
+  const w = Math.max(1, Math.round(cssWidth * pixelRatio));
+  const h = Math.max(1, Math.round(cssHeight * pixelRatio));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.clearRect(0, 0, w, h);
+  // Contain-fit into the box (same as object-fit: contain).
+  const srcRatio = source.naturalWidth / source.naturalHeight;
+  const boxRatio = w / h;
+  let dw = w;
+  let dh = h;
+  let dx = 0;
+  let dy = 0;
+  if (srcRatio > boxRatio) {
+    dh = Math.round(w / srcRatio);
+    dy = Math.round((h - dh) / 2);
+  } else {
+    dw = Math.round(h * srcRatio);
+    dx = Math.round((w - dw) / 2);
+  }
+  ctx.drawImage(source, dx, dy, dw, dh);
+  return canvas.toDataURL("image/png");
+}
+
+/** html-to-image often drops / softens images unless inlined at capture pixel size. */
+async function inlineImagesAsDataUrls(root: HTMLElement, pixelRatio: number) {
   const imgs = Array.from(root.querySelectorAll("img"));
   await Promise.all(
     imgs.map(async (img) => {
-      const src = img.currentSrc || img.getAttribute("src") || "";
+      const src = img.getAttribute("src") || img.currentSrc || "";
       if (!src || src.startsWith("data:")) return;
       try {
         const absolute = new URL(src, window.location.origin).toString();
-        const res = await fetch(absolute, {
-          mode: "cors",
-          credentials: "omit",
-          cache: "force-cache",
-        });
-        if (!res.ok) return;
-        const blob = await res.blob();
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(reader.error ?? new Error("read failed"));
-          reader.readAsDataURL(blob);
-        });
+        const cssW =
+          img.clientWidth ||
+          Number(img.getAttribute("width")) ||
+          RECEIPT_LOGO.cssWidth;
+        const cssH =
+          img.clientHeight ||
+          Number(img.getAttribute("height")) ||
+          RECEIPT_LOGO.cssHeight;
+        const dataUrl = absolute.includes("receipt-logo") || absolute.includes("logo.png")
+          ? await crispLogoDataUrl(absolute, cssW, cssH, pixelRatio)
+          : await (async () => {
+              const res = await fetch(absolute, {
+                mode: "cors",
+                credentials: "omit",
+                cache: "force-cache",
+              });
+              if (!res.ok) throw new Error("fetch failed");
+              const blob = await res.blob();
+              return new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result));
+                reader.onerror = () =>
+                  reject(reader.error ?? new Error("read failed"));
+                reader.readAsDataURL(blob);
+              });
+            })();
         img.removeAttribute("crossorigin");
+        img.removeAttribute("width");
+        img.removeAttribute("height");
         img.src = dataUrl;
+        // CSS size stays logical; bitmap is already @ pixelRatio for a 1:1 draw.
+        img.style.width = `${cssW}px`;
+        img.style.height = `${cssH}px`;
+        img.style.objectFit = "fill";
         await new Promise<void>((resolve) => {
           if (img.complete && img.naturalWidth > 0) {
             resolve();
@@ -182,8 +254,9 @@ async function saveReceiptImage(
 }
 
 async function captureReceiptPng(node: HTMLElement): Promise<string> {
+  const pixelRatio = 2;
   await waitForReceiptImages(node);
-  await inlineImagesAsDataUrls(node);
+  await inlineImagesAsDataUrls(node, pixelRatio);
   await waitForReceiptFonts();
   // Give layout/fonts one paint before rasterizing.
   await new Promise<void>((resolve) =>
@@ -191,9 +264,9 @@ async function captureReceiptPng(node: HTMLElement): Promise<string> {
   );
   const fontEmbedCSS = await getFontEmbedCSS(node);
   return toPng(node, {
-    // Images are already data URLs; cache-busting can break Safari embeds.
+    // Images are already data URLs at capture pixel size.
     cacheBust: false,
-    pixelRatio: 2,
+    pixelRatio,
     backgroundColor: "#ffffff",
     fontEmbedCSS,
     // Prefer solid paints — opacity colors double-draw weirdly in some clones.
