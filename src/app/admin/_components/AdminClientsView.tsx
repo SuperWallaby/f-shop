@@ -40,6 +40,7 @@ type ClientRow = {
     email: string;
     whatsapp: string;
     studentStatus: "none" | "pending" | "verified" | "rejected";
+    createdAt?: string;
   };
   balance: {
     balance: number;
@@ -1349,6 +1350,7 @@ export function AdminClientsView() {
   const [msg, setMsg] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [sortMode, setSortMode] = useState<"priority" | "newest">("priority");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1377,6 +1379,12 @@ export function AdminClientsView() {
 
   const sortedRows = useMemo(() => {
     return [...rows].sort((a, b) => {
+      if (sortMode === "newest") {
+        const ca = a.client.createdAt ?? "";
+        const cb = b.client.createdAt ?? "";
+        if (ca !== cb) return cb.localeCompare(ca);
+        return (a.client.name || "").localeCompare(b.client.name || "");
+      }
       const pa = pendingCount(a);
       const pb = pendingCount(b);
       if (pa !== pb) return pb - pa;
@@ -1385,7 +1393,7 @@ export function AdminClientsView() {
       if (ea !== eb) return eb - ea;
       return (a.client.name || "").localeCompare(b.client.name || "");
     });
-  }, [rows]);
+  }, [rows, sortMode]);
 
   const selected = useMemo(
     () => sortedRows.find((r) => r.client.id === selectedId) ?? null,
@@ -1454,12 +1462,12 @@ export function AdminClientsView() {
             </div>
           </div>
 
-          <div className="mt-5 flex gap-2">
+          <div className="mt-5 flex flex-wrap gap-2">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search name, email, WhatsApp"
-              className="flex-1 rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+              className="min-w-[12rem] flex-1 rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
               onKeyDown={(e) => {
                 if (e.key === "Enter") void load();
               }}
@@ -1471,6 +1479,32 @@ export function AdminClientsView() {
             >
               Search
             </button>
+            <div className="inline-flex rounded-full border border-[#E8DDD4] bg-white p-1 text-sm">
+              <button
+                type="button"
+                onClick={() => setSortMode("priority")}
+                className={cn(
+                  "rounded-full px-3 py-2 transition cursor-pointer",
+                  sortMode === "priority"
+                    ? "bg-[#DFD1C9] font-medium text-[#444444]"
+                    : "text-[#716D64] hover:bg-[#FAF8F6]",
+                )}
+              >
+                Priority
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortMode("newest")}
+                className={cn(
+                  "rounded-full px-3 py-2 transition cursor-pointer",
+                  sortMode === "newest"
+                    ? "bg-[#DFD1C9] font-medium text-[#444444]"
+                    : "text-[#716D64] hover:bg-[#FAF8F6]",
+                )}
+              >
+                Newest
+              </button>
+            </div>
           </div>
 
           {error ? <div className="mt-4 text-sm text-red-700">{error}</div> : null}

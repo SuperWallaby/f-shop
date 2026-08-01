@@ -11,12 +11,20 @@ import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
 import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
-import { makeCustomerKey, insertBookingConsume } from "@/lib/credits";
+import {
+  backfillBookingConsumesForClient,
+  insertBookingConsume,
+  makeCustomerKey,
+} from "@/lib/credits";
 import { hashPassword } from "@/lib/password";
 import { setClientSessionCookie } from "@/lib/clientSession";
 import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
 import { findClientsByWhatsapp } from "@/lib/clientMerge";
 import { clientWhatsappFields, normalizeWhatsapp } from "@/lib/whatsapp";
+import {
+  resolveOrCreateBookingClient,
+  unlinkedBookingsMatchFilter,
+} from "@/lib/resolveBookingClient";
 
 class HttpError extends Error {
   status: number;
@@ -68,6 +76,7 @@ export async function POST(req: NextRequest) {
       exclusiveLocks,
       clients,
       creditLedger,
+      orders,
     } = await getCollections();
     const now = new Date();
 
@@ -260,9 +269,43 @@ export async function POST(req: NextRequest) {
     const nameTrim = name.trim();
     const emailTrim = email.trim().toLowerCase();
 
-    if (!linkedClientId && emailTrim) {
-      const byEmail = await clients.findOne({ email: emailTrim });
-      if (byEmail?._id) linkedClientId = byEmail._id;
+    let whatsappNormalized = "";
+    if (!linkedClientId) {
+      // WhatsApp first, then email — same phone = same account.
+      const resolved = await resolveOrCreateBookingClient({
+        clients,
+        bookings,
+        creditLedger,
+        orders,
+        name: nameTrim,
+        email: emailTrim,
+        whatsapp,
+        now,
+        createIfMissing: true,
+      });
+      linkedClientId = resolved.clientId;
+      whatsappNormalized = resolved.whatsappNormalized;
+    } else {
+      const waFields = whatsapp.trim()
+        ? clientWhatsappFields(whatsapp.trim())
+        : null;
+      whatsappNormalized = waFields?.whatsapp || whatsapp;
+      const linkFilter = unlinkedBookingsMatchFilter({
+        email: emailTrim,
+        whatsapp: whatsappNormalized,
+      });
+      if (linkFilter) {
+        await bookings.updateMany(linkFilter, {
+          $set: { clientId: linkedClientId },
+        });
+      }
+      await backfillBookingConsumesForClient({
+        bookings,
+        creditLedger,
+        clientId: linkedClientId,
+        now,
+        note: "Linked past booking",
+      });
     }
 
     const bookingDoc: BookingDb = {
@@ -274,7 +317,7 @@ export async function POST(req: NextRequest) {
       ...(linkedClientId ? { clientId: linkedClientId } : {}),
       name: nameTrim,
       email: emailTrim,
-      whatsapp,
+      whatsapp: whatsappNormalized || whatsapp,
       consentWhatsapp: true,
       ...(marketingOptIn
         ? { marketingOptIn: true, marketingOptInAt: now }

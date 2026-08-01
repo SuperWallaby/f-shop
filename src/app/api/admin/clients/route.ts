@@ -1,14 +1,22 @@
 import { NextRequest } from "next/server";
-import { MongoServerError, ObjectId, type Filter } from "mongodb";
-import { getCollections, type BookingDb } from "@/lib/db";
+import { MongoServerError, ObjectId } from "mongodb";
+import { getCollections } from "@/lib/db";
 import {
+  backfillBookingConsumesForClient,
   getCreditBalance,
   makeCustomerKey,
   publicClient,
 } from "@/lib/credits";
-import { findClientsByWhatsapp } from "@/lib/clientMerge";
+import {
+  dedupeClientsByWhatsapp,
+  findClientsByWhatsapp,
+} from "@/lib/clientMerge";
 import { adminRegisterClientSchema } from "@/lib/schemas";
 import { clientWhatsappFields } from "@/lib/whatsapp";
+import {
+  clientBookingHistoryFilter,
+  unlinkedBookingsMatchFilter,
+} from "@/lib/resolveBookingClient";
 import { requireAdmin } from "../../_utils/adminAuth";
 import { jsonError, jsonOk } from "../../_utils/http";
 
@@ -24,6 +32,18 @@ export async function GET(req: NextRequest) {
     const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
     const { clients, creditLedger, orders, bookings, items } =
       await getCollections();
+
+    // Heal +60 / 60 / 0… duplicates whenever admin opens Clients & Credits.
+    try {
+      await dedupeClientsByWhatsapp({
+        clients,
+        creditLedger,
+        orders,
+        bookings,
+      });
+    } catch {
+      // best-effort
+    }
     const filter = q
       ? {
           $or: [
@@ -41,6 +61,34 @@ export async function GET(req: NextRequest) {
       .toArray();
     const rows = await Promise.all(
       docs.map(async (client) => {
+        const clientEmail = (client.email ?? "").trim();
+        const clientWa = (client.whatsapp ?? "").trim();
+        const unlinkedFilter = unlinkedBookingsMatchFilter({
+          email: clientEmail,
+          whatsapp: clientWa,
+        });
+        if (unlinkedFilter) {
+          const needsLink = await bookings.findOne(unlinkedFilter);
+          if (needsLink) {
+            await bookings.updateMany(unlinkedFilter, {
+              $set: { clientId: client._id! },
+            });
+          }
+        }
+        // Heal missing consumes for linked confirmed/no-show bookings (idempotent).
+        await backfillBookingConsumesForClient({
+          bookings,
+          creditLedger,
+          clientId: client._id!,
+          note: "Linked past booking",
+        });
+
+        const bookingFilter = clientBookingHistoryFilter({
+          clientId: client._id!,
+          email: clientEmail,
+          whatsapp: clientWa,
+        });
+
         const [balance, orderDocs, bookingDocs] = await Promise.all([
           getCreditBalance({ creditLedger, clientId: client._id! }),
           orders
@@ -49,7 +97,7 @@ export async function GET(req: NextRequest) {
             .limit(50)
             .toArray(),
           bookings
-            .find({ clientId: client._id! })
+            .find(bookingFilter)
             .sort({ dateKey: -1, startMin: -1 })
             .limit(50)
             .toArray(),
@@ -210,15 +258,27 @@ export async function POST(req: NextRequest) {
 
     const clientId = client._id!;
     let linkedBookings = 0;
+    let backfilledConsumes = 0;
     if (linkPast) {
-      const linkFilter = {
-        email: { $regex: `^${escapeRegex(email)}$`, $options: "i" },
-        $or: [{ clientId: { $exists: false } }, { clientId: null }],
-      } as Filter<BookingDb>;
-      const linkRes = await bookings.updateMany(linkFilter, {
-        $set: { clientId },
+      const linkFilter = unlinkedBookingsMatchFilter({
+        email,
+        whatsapp,
       });
-      linkedBookings = linkRes.modifiedCount;
+      if (linkFilter) {
+        const linkRes = await bookings.updateMany(linkFilter, {
+          $set: { clientId },
+        });
+        linkedBookings = linkRes.modifiedCount;
+      }
+
+      const backfill = await backfillBookingConsumesForClient({
+        bookings,
+        creditLedger,
+        clientId,
+        now,
+        note: "Linked past booking",
+      });
+      backfilledConsumes = backfill.inserted;
     }
 
     const balance = await getCreditBalance({ creditLedger, clientId });
@@ -227,6 +287,7 @@ export async function POST(req: NextRequest) {
       balance,
       created,
       linkedBookings,
+      backfilledConsumes,
     });
   } catch (e) {
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);

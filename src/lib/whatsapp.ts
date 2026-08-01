@@ -32,13 +32,30 @@ export function clientWhatsappFields(input: string): {
   return { whatsapp: `+${whatsappDigits}`, whatsappDigits };
 }
 
-/** Legacy + canonical forms that may already exist in the DB. */
+/**
+ * Legacy + canonical forms that may already exist in the DB.
+ * Same person often typed as +6012… / 6012… / 012… / 006012…
+ */
 export function whatsappStorageVariants(input: string): string[] {
   const digits = whatsappDigitsCanonical(input);
   if (!digits) return [];
-  const variants = new Set<string>([`+${digits}`, digits]);
+  const variants = new Set<string>([
+    `+${digits}`,
+    digits,
+    `00${digits}`,
+  ]);
   if (digits.startsWith("60") && digits.length > 2) {
-    variants.add(`0${digits.slice(2)}`);
+    const local = `0${digits.slice(2)}`;
+    variants.add(local);
+    variants.add(`+${local}`);
+    variants.add(`60${digits.slice(2)}`); // same as digits when already 60…
+  }
+  // Also keep raw digits before MY local rewrite, if input was 0…
+  const rawDigits = String(input ?? "").replace(/[^0-9]/g, "");
+  if (rawDigits && rawDigits !== digits) {
+    variants.add(rawDigits);
+    variants.add(`+${rawDigits}`);
+    variants.add(`00${rawDigits}`);
   }
   return [...variants];
 }

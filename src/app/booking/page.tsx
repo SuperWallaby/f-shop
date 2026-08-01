@@ -145,7 +145,7 @@ function BookingPageInner() {
   const [draftRestored, setDraftRestored] = useState(false);
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
-  const [signUp, setSignUp] = useState(false);
+  const [signUp, setSignUp] = useState(true);
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);

@@ -5,6 +5,7 @@ import { jsonError, jsonOk } from "../../../../_utils/http";
 import { requireAdmin } from "../../../../_utils/adminAuth";
 import { sendBookingCancelledEmail } from "@/lib/email";
 import { releaseExclusiveLocksAfterBookingRemoved } from "@/lib/exclusiveLocks";
+import { insertBookingCancelRefund } from "@/lib/credits";
 import {
   sendAdminWhatsAppNotification,
   sendBookingCancelledByClientWhatsApp,
@@ -19,7 +20,8 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     const bookingObjectId = ObjectId.isValid(id) ? new ObjectId(id) : null;
     if (!bookingObjectId) return jsonError("Invalid booking id", 400);
 
-    const { bookings, timeSlots, exclusiveLocks, items } = await getCollections();
+    const { bookings, timeSlots, exclusiveLocks, items, creditLedger } =
+      await getCollections();
     const now = new Date();
 
     const booking = await bookings.findOne({ _id: bookingObjectId });
@@ -56,6 +58,21 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
           startMin: booking.startMin,
           endMin: booking.endMin,
         });
+      }
+
+      const clientOid = booking.clientId;
+      if (clientOid && booking._id) {
+        try {
+          await insertBookingCancelRefund({
+            creditLedger,
+            clientId: clientOid,
+            bookingId: booking._id,
+            now,
+            note: "Credit restored after admin cancellation",
+          });
+        } catch {
+          // best-effort; booking is already cancelled
+        }
       }
 
       try {
@@ -105,4 +122,3 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);
   }
 }
-

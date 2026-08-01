@@ -145,18 +145,33 @@ export async function mergeClientInto(
     ),
   ]);
 
-  // Also attach bookings that used secondary email but never got clientId
+  // Attach unlinked bookings that used secondary email or WhatsApp variants
   const secEmail = (secondary.email ?? "").trim().toLowerCase();
+  const secWa = secondary.whatsapp || opts?.whatsapp || "";
+  const waVariants = secWa ? whatsappStorageVariants(secWa) : [];
+  const identity: Filter<BookingDb>[] = [];
   if (secEmail) {
+    identity.push({
+      email: {
+        $regex: `^${secEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        $options: "i",
+      },
+    });
+  }
+  if (waVariants.length) {
+    identity.push({ whatsapp: { $in: waVariants } });
+  }
+  if (identity.length) {
     await cols.bookings.updateMany(
       {
-        email: {
-          $regex: `^${secEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-          $options: "i",
-        },
-        $or: [
-          { clientId: { $exists: false } },
-          { clientId: { $eq: null } },
+        $and: [
+          identity.length === 1 ? identity[0]! : { $or: identity },
+          {
+            $or: [
+              { clientId: { $exists: false } },
+              { clientId: { $eq: null } },
+            ],
+          },
         ],
       } as Filter<BookingDb>,
       { $set: { clientId: primaryId } },

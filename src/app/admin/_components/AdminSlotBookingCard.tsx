@@ -158,67 +158,79 @@ export function AdminSlotBookingCard(props: {
           )}
         </div>
 
-        <div className="relative shrink-0" ref={menuRef}>
-          <button
-            type="button"
-            disabled={props.saving}
-            onClick={props.onToggleMenu}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] text-[#716D64] transition hover:bg-white hover:text-[#444444] disabled:opacity-50 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#DFD1C9] focus-visible:ring-offset-1"
-            aria-label="Booking actions"
-            aria-expanded={props.menuOpen}
-          >
-            <EllipsisHorizontalIcon className="h-5 w-5" aria-hidden />
-          </button>
-
-          {props.menuOpen ? (
-            <div className="absolute right-0 top-full z-50 mt-1 min-w-[11.5rem] overflow-hidden rounded-2xl border border-[#E8DDD4] bg-white py-1 shadow-[0_8px_24px_rgba(78,56,48,0.12)]">
-              {b.status === "confirmed" ? (
-                <>
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-2 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] outline-none focus:outline-none focus-visible:bg-[#FAF8F6]"
-                    onClick={() => {
-                      props.onCloseMenu();
-                      props.onReschedule();
-                    }}
-                  >
-                    Reschedule
-                  </button>
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-2 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] outline-none focus:outline-none focus-visible:bg-[#FAF8F6]"
-                    onClick={() => {
-                      props.onCloseMenu();
-                      props.onCancelBooking();
-                    }}
-                  >
-                    Cancel booking
-                  </button>
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-2 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] outline-none focus:outline-none focus-visible:bg-[#FAF8F6]"
-                    onClick={() => {
-                      props.onCloseMenu();
-                      props.onMarkNoShow();
-                    }}
-                  >
-                    Mark no-show
-                  </button>
-                </>
-              ) : b.status === "cancelled" ? (
-                <button
-                  type="button"
-                  className="block w-full px-3 py-2 text-left text-sm text-[#B42318] hover:bg-[#FCE8E6] outline-none focus:outline-none focus-visible:bg-[#FCE8E6]"
-                  onClick={() => {
-                    props.onCloseMenu();
-                    props.onDeleteCancelled();
-                  }}
-                >
-                  Delete booking
-                </button>
-              ) : null}
-            </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {b.status === "confirmed" ? (
+            <button
+              type="button"
+              disabled={props.saving}
+              onClick={props.onMarkNoShow}
+              className="rounded-full border border-[#F1B3B0] bg-[#FCE8E6] px-2.5 py-1 text-[11px] font-medium text-[#B42318] transition hover:brightness-95 disabled:opacity-50 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F1B3B0]"
+            >
+              No-show
+            </button>
           ) : null}
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              disabled={props.saving}
+              onClick={props.onToggleMenu}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] text-[#716D64] transition hover:bg-white hover:text-[#444444] disabled:opacity-50 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#DFD1C9] focus-visible:ring-offset-1"
+              aria-label="Booking actions"
+              aria-expanded={props.menuOpen}
+            >
+              <EllipsisHorizontalIcon className="h-5 w-5" aria-hidden />
+            </button>
+
+            {props.menuOpen ? (
+              <div className="absolute right-0 top-full z-50 mt-1 min-w-[11.5rem] overflow-hidden rounded-2xl border border-[#E8DDD4] bg-white py-1 shadow-[0_8px_24px_rgba(78,56,48,0.12)]">
+                {b.status === "confirmed" ? (
+                  <>
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] outline-none focus:outline-none focus-visible:bg-[#FAF8F6]"
+                      onClick={() => {
+                        props.onCloseMenu();
+                        props.onReschedule();
+                      }}
+                    >
+                      Reschedule
+                    </button>
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] outline-none focus:outline-none focus-visible:bg-[#FAF8F6]"
+                      onClick={() => {
+                        props.onCloseMenu();
+                        props.onCancelBooking();
+                      }}
+                    >
+                      Cancel booking
+                    </button>
+                    <button
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-sm text-[#444444] hover:bg-[#FAF8F6] outline-none focus:outline-none focus-visible:bg-[#FAF8F6]"
+                      onClick={() => {
+                        props.onCloseMenu();
+                        props.onMarkNoShow();
+                      }}
+                    >
+                      Mark no-show
+                    </button>
+                  </>
+                ) : b.status === "cancelled" ? (
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-sm text-[#B42318] hover:bg-[#FCE8E6] outline-none focus:outline-none focus-visible:bg-[#FCE8E6]"
+                    onClick={() => {
+                      props.onCloseMenu();
+                      props.onDeleteCancelled();
+                    }}
+                  >
+                    Delete booking
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

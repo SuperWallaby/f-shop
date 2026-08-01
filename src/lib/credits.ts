@@ -1,5 +1,6 @@
 import { ObjectId, type ClientSession, type Collection } from "mongodb";
 import type {
+  BookingDb,
   ClientDb,
   CreditLedgerDb,
   OrderDb,
@@ -239,6 +240,7 @@ export function publicClient(client: { _id?: ObjectId } & ClientDb) {
     schoolName: client.schoolName ?? "",
     studentId: client.studentId ?? "",
     universityEndYear: client.universityEndYear ?? null,
+    createdAt: client.createdAt?.toISOString?.() ?? "",
   };
 }
 
@@ -440,6 +442,87 @@ export async function insertBookingConsume(args: {
     createdAt: now,
   });
   return { inserted: true as const, id: ins.insertedId };
+}
+
+/** Restore credits after cancel when a consume exists. Idempotent per booking. */
+export async function insertBookingCancelRefund(args: {
+  creditLedger: Collection<CreditLedgerDb>;
+  clientId: ObjectId;
+  bookingId: ObjectId;
+  now?: Date;
+  note?: string;
+}) {
+  const now = args.now ?? new Date();
+  const already = await args.creditLedger.findOne({
+    bookingId: args.bookingId,
+    type: "booking_cancel_refund",
+  });
+  if (already) return { inserted: false as const, id: already._id! };
+
+  const consumed = await args.creditLedger.findOne({
+    bookingId: args.bookingId,
+    type: "booking_consume",
+    amount: { $lt: 0 },
+  });
+  if (!consumed || consumed.amount >= 0) {
+    return { inserted: false as const, id: null };
+  }
+
+  const ins = await args.creditLedger.insertOne({
+    clientId: args.clientId,
+    type: "booking_cancel_refund",
+    amount: -consumed.amount,
+    bookingId: args.bookingId,
+    note: args.note ?? "Credit restored after cancellation",
+    createdAt: now,
+  });
+  return { inserted: true as const, id: ins.insertedId };
+}
+
+/** For confirmed/no-show bookings linked to a client, ensure each has a consume row. */
+export async function backfillBookingConsumesForClient(args: {
+  bookings: Collection<BookingDb>;
+  creditLedger: Collection<CreditLedgerDb>;
+  clientId: ObjectId;
+  now?: Date;
+  note?: string;
+}) {
+  const now = args.now ?? new Date();
+  const rows = await args.bookings
+    .find({
+      clientId: args.clientId,
+      status: { $in: ["confirmed", "no_show"] },
+    })
+    .project({ _id: 1 })
+    .toArray();
+  if (rows.length === 0) return { inserted: 0, checked: 0 };
+
+  const bookingIds = rows.map((r) => r._id!).filter(Boolean);
+  const existing = await args.creditLedger
+    .find({
+      bookingId: { $in: bookingIds },
+      type: "booking_consume",
+      amount: { $lt: 0 },
+    })
+    .project({ bookingId: 1 })
+    .toArray();
+  const hasConsume = new Set(
+    existing.map((e) => e.bookingId?.toHexString()).filter(Boolean),
+  );
+
+  let inserted = 0;
+  for (const bookingId of bookingIds) {
+    if (hasConsume.has(bookingId.toHexString())) continue;
+    const res = await insertBookingConsume({
+      creditLedger: args.creditLedger,
+      clientId: args.clientId,
+      bookingId,
+      now,
+      note: args.note ?? "Linked past booking",
+    });
+    if (res.inserted) inserted += 1;
+  }
+  return { inserted, checked: bookingIds.length };
 }
 
 export function createOrderRef() {

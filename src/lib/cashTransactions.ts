@@ -39,6 +39,12 @@ export const CASH_INCOME_CATEGORIES = [
 export const CASH_EXPENSE_CATEGORIES = [
   "Rent",
   "Utilities",
+  "Electricity & water",
+  "Utility bills",
+  "Transportation",
+  "Food",
+  "Equipment",
+  "Stocks",
   "Supplies",
   "Salary",
   "Marketing",

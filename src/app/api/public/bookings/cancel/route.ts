@@ -11,6 +11,7 @@ import {
   sendBookingCancelledByClientWhatsApp,
 } from "@/lib/twilioWhatsApp";
 import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
+import { insertBookingCancelRefund } from "@/lib/credits";
 
 const MIN_CANCEL_NOTICE_HOURS = 6;
 
@@ -153,27 +154,13 @@ export async function POST(req: NextRequest) {
       const clientOid = booking.clientId;
       if (clientOid && booking._id) {
         try {
-          const already = await creditLedger.findOne({
+          await insertBookingCancelRefund({
+            creditLedger,
+            clientId: clientOid,
             bookingId: booking._id,
-            type: "booking_cancel_refund",
+            now,
+            note: "Credit restored after client cancellation",
           });
-          if (!already) {
-            const consumed = await creditLedger.findOne({
-              bookingId: booking._id,
-              type: "booking_consume",
-              amount: { $lt: 0 },
-            });
-            if (consumed && consumed.amount < 0) {
-              await creditLedger.insertOne({
-                clientId: clientOid,
-                type: "booking_cancel_refund",
-                amount: -consumed.amount,
-                bookingId: booking._id,
-                note: "Credit restored after client cancellation",
-                createdAt: now,
-              });
-            }
-          }
         } catch {
           // best-effort; booking is already cancelled
         }

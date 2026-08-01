@@ -25,6 +25,8 @@ export type SettingsDoc = {
  };
  /** One-time: merge clients that shared +60… / 60… WhatsApp variants. */
  whatsappDedupeV1Done?: boolean;
+ /** Re-run merge with expanded phone variants (+60 / 60 / 0… / 00…). */
+ whatsappDedupeV2Done?: boolean;
  updatedAt: Date;
 };
 
@@ -612,11 +614,11 @@ async function ensureIndexes(db: Db): Promise<void> {
    ),
   ]);
 
-  // One-time: merge +60… / 60… WhatsApp duplicate client accounts.
+  // One-time: merge +60… / 60… / 0… WhatsApp duplicate client accounts.
   try {
    const settings = db.collection<SettingsDoc>("settings");
    const singleton = await settings.findOne({ _id: "singleton" });
-   if (!singleton?.whatsappDedupeV1Done) {
+   if (!singleton?.whatsappDedupeV2Done) {
     const { dedupeClientsByWhatsapp } = await import("@/lib/clientMerge");
     await dedupeClientsByWhatsapp({
      clients,
@@ -629,6 +631,7 @@ async function ensureIndexes(db: Db): Promise<void> {
      {
       $set: {
        whatsappDedupeV1Done: true,
+       whatsappDedupeV2Done: true,
        updatedAt: new Date(),
       },
      },

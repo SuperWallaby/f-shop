@@ -12,6 +12,7 @@ import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
 import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
 import { insertBookingConsume } from "@/lib/credits";
+import { resolveOrCreateBookingClient } from "@/lib/resolveBookingClient";
 
 class HttpError extends Error {
   status: number;
@@ -38,8 +39,15 @@ export async function POST(req: NextRequest) {
     const slotObjectId = ObjectId.isValid(slotId) ? new ObjectId(slotId) : null;
     if (!slotObjectId) return jsonError("Invalid slotId", 400);
 
-    const { timeSlots, bookings, items, exclusiveLocks, clients, creditLedger } =
-      await getCollections();
+    const {
+      timeSlots,
+      bookings,
+      items,
+      exclusiveLocks,
+      clients,
+      creditLedger,
+      orders,
+    } = await getCollections();
     const now = new Date();
 
     const existingSlot = await timeSlots.findOne({ _id: slotObjectId });
@@ -52,10 +60,21 @@ export async function POST(req: NextRequest) {
     const effectiveCapacity = item.capacity;
 
     const emailTrim = email.trim().toLowerCase();
-    const clientByEmail = emailTrim
-      ? await clients.findOne({ email: emailTrim })
-      : null;
-    const linkedClientId = clientByEmail?._id;
+    const nameTrim = name.trim();
+    // Same WhatsApp = same account (phone is the primary identity).
+    const resolved = await resolveOrCreateBookingClient({
+      clients,
+      bookings,
+      creditLedger,
+      orders,
+      name: nameTrim,
+      email: emailTrim,
+      whatsapp,
+      now,
+      createIfMissing: true,
+    });
+    const linkedClientId = resolved.clientId;
+    const whatsappNormalized = resolved.whatsappNormalized || whatsapp;
 
     let insertedBuckets: number[] = [];
     if (exclusiveKey && usesExclusiveTimeBlocking(effectiveCapacity)) {
@@ -118,9 +137,9 @@ export async function POST(req: NextRequest) {
         itemId: item._id,
         exclusiveKey: exclusiveKey || undefined,
         ...(linkedClientId ? { clientId: linkedClientId } : {}),
-        name,
-        email,
-        whatsapp,
+        name: nameTrim || name,
+        email: emailTrim || email,
+        whatsapp: whatsappNormalized,
         status: "confirmed" as const,
         createdAt: now,
         dateKey: updatedSlot.dateKey,
