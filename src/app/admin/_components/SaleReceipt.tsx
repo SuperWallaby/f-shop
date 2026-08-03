@@ -1,17 +1,68 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getFontEmbedCSS, toPng } from "html-to-image";
 import {
   formatReceiptDate,
   formatReceiptMoney,
   formatReceiptPhone,
   receiptDiscountRm,
+  receiptLineSubtotalRm,
   receiptLineUnitPriceRm,
   receiptTableLines,
   STUDIO_RECEIPT,
+  type ReceiptLineView,
   type ReceiptSaleView,
 } from "@/lib/studioReceipt";
+
+type DraftReceiptLine = {
+  key: string;
+  title: string;
+  detail: string;
+  quantity: number;
+  unitPriceRm: number;
+};
+
+function newDraftLineKey() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function draftLinesFromSale(sale: ReceiptSaleView): DraftReceiptLine[] {
+  return receiptTableLines(sale).map((line) => ({
+    key: newDraftLineKey(),
+    title: line.title,
+    detail: line.detail ?? "",
+    quantity: line.quantity,
+    unitPriceRm:
+      Math.round(receiptLineUnitPriceRm(line) * 100) / 100,
+  }));
+}
+
+function receiptSaleFromDraft(
+  base: ReceiptSaleView,
+  draft: DraftReceiptLine[],
+): ReceiptSaleView {
+  const lines: ReceiptLineView[] = draft.map((d) => {
+    const quantity = Math.max(1, Math.floor(Number(d.quantity) || 1));
+    const unitPriceRm = Math.max(0, Number(d.unitPriceRm) || 0);
+    return {
+      title: d.title.trim() || "Item",
+      detail: d.detail.trim() || undefined,
+      quantity,
+      unitPriceRm,
+      amountRm: quantity * unitPriceRm,
+    };
+  });
+  const total = lines.reduce((sum, line) => sum + line.amountRm, 0);
+  return {
+    ...base,
+    lines,
+    listPriceRm: total,
+    amountRm: total,
+  };
+}
 
 /** Display size on the receipt (CSS px). Asset is ~3× for crisp capture. */
 const RECEIPT_LOGO = {
@@ -400,16 +451,15 @@ export function SaleReceiptDocument({
         <thead>
           <tr className="border-b border-black text-left text-[10px] uppercase tracking-wider">
             <th className="pb-2 font-semibold">Description</th>
-            <th className="pb-2 font-semibold text-center w-14">Qty</th>
-            <th className="pb-2 font-semibold text-right w-28">
-              Unit Price / Subtotal
-            </th>
+            <th className="pb-2 font-semibold text-center w-10">Qty</th>
+            <th className="pb-2 font-semibold text-right w-20">Unit Price</th>
+            <th className="pb-2 font-semibold text-right w-20">Subtotal</th>
           </tr>
         </thead>
         <tbody>
           {lines.map((line, idx) => (
             <tr key={`${line.title}-${idx}`} className="align-top">
-              <td className="py-3 pr-3">
+              <td className="py-3 pr-2">
                 <div className="font-medium">{line.title}</div>
                 {line.detail ? (
                   <div className="mt-1 text-[11px] text-black/55">
@@ -420,6 +470,9 @@ export function SaleReceiptDocument({
               <td className="py-3 text-center">{line.quantity}</td>
               <td className="py-3 text-right whitespace-nowrap">
                 {formatReceiptMoney(receiptLineUnitPriceRm(line))}
+              </td>
+              <td className="py-3 text-right whitespace-nowrap">
+                {formatReceiptMoney(receiptLineSubtotalRm(line))}
               </td>
             </tr>
           ))}
@@ -514,8 +567,38 @@ export function SaleReceiptModal({
   const [pickId, setPickId] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saveLabel, setSaveLabel] = useState("Download");
+  const [draftLines, setDraftLines] = useState<DraftReceiptLine[]>(() =>
+    draftLinesFromSale(sale),
+  );
   const filename = `${sale.receiptNo || "receipt"}.png`;
   const extraCount = includedExtras.length;
+
+  const saleSyncKey = useMemo(
+    () =>
+      [
+        sale.id,
+        sale.amountRm,
+        sale.listPriceRm,
+        sale.includedReceiptNos?.join(",") ?? "",
+        (sale.lines ?? [])
+          .map(
+            (l) =>
+              `${l.title}|${l.quantity}|${l.amountRm}|${l.unitPriceRm ?? ""}`,
+          )
+          .join(";"),
+      ].join("::"),
+    [sale],
+  );
+
+  useEffect(() => {
+    setDraftLines(draftLinesFromSale(sale));
+    setSaved(false);
+  }, [saleSyncKey, sale]);
+
+  const displaySale = useMemo(
+    () => receiptSaleFromDraft(sale, draftLines),
+    [sale, draftLines],
+  );
 
   useEffect(() => {
     if (isIosLikeDevice()) setSaveLabel("Share / Save");
@@ -526,6 +609,48 @@ export function SaleReceiptModal({
       if (prev) URL.revokeObjectURL(prev);
       return null;
     });
+  }, []);
+
+  const patchLine = useCallback(
+    (key: string, patch: Partial<DraftReceiptLine>) => {
+      setDraftLines((prev) =>
+        prev.map((line) => (line.key === key ? { ...line, ...patch } : line)),
+      );
+      setSaved(false);
+    },
+    [],
+  );
+
+  const addLine = useCallback(() => {
+    setDraftLines((prev) => [
+      ...prev,
+      {
+        key: newDraftLineKey(),
+        title: "",
+        detail: "",
+        quantity: 1,
+        unitPriceRm: 0,
+      },
+    ]);
+    setSaved(false);
+  }, []);
+
+  const removeLine = useCallback((key: string) => {
+    setDraftLines((prev) => {
+      if (prev.length <= 1) {
+        return [
+          {
+            key: newDraftLineKey(),
+            title: "",
+            detail: "",
+            quantity: 1,
+            unitPriceRm: 0,
+          },
+        ];
+      }
+      return prev.filter((line) => line.key !== key);
+    });
+    setSaved(false);
   }, []);
 
   const downloadReceipt = useCallback(async () => {
@@ -572,7 +697,7 @@ export function SaleReceiptModal({
           onClose();
         }}
       />
-      <div className="relative z-10 my-4 w-full max-w-[420px] rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] shadow-xl">
+      <div className="relative z-10 my-4 w-full max-w-[440px] rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] shadow-xl">
         <div className="flex items-center justify-between gap-3 border-b border-[#E8DDD4] px-4 py-3">
           <div>
             <h3 className="font-serif text-lg font-semibold">Receipt</h3>
@@ -587,7 +712,7 @@ export function SaleReceiptModal({
                       ? `${sale.receiptNo} · saved`
                       : extraCount > 0
                         ? `${extraCount + 1} sales on one receipt`
-                        : `Tap ${saveLabel} to keep the receipt image`}
+                        : `Edit lines below, then ${saveLabel}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -615,6 +740,113 @@ export function SaleReceiptModal({
             </button>
           </div>
         </div>
+
+        <div className="border-b border-[#E8DDD4] px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-[#716D64]">
+              Edit lines — Subtotal / TOTAL update from qty × unit price
+            </p>
+            <button
+              type="button"
+              onClick={addLine}
+              className="shrink-0 rounded-full border border-[#E8DDD4] bg-white px-2.5 py-1 text-[11px] font-medium text-[#444444] hover:bg-[#DFD1C9]/40 cursor-pointer"
+            >
+              + Add line
+            </button>
+          </div>
+          <div className="space-y-2">
+            {draftLines.map((line, index) => {
+              const qty = Math.max(1, Math.floor(Number(line.quantity) || 1));
+              const unit = Math.max(0, Number(line.unitPriceRm) || 0);
+              const lineSub = qty * unit;
+              return (
+                <div
+                  key={line.key}
+                  className="rounded-xl border border-[#E8DDD4] bg-white p-2.5 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium text-[#716D64]">
+                      Line {index + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeLine(line.key)}
+                      className="text-[11px] text-[#B42318] underline cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <input
+                    value={line.title}
+                    onChange={(e) =>
+                      patchLine(line.key, { title: e.target.value })
+                    }
+                    placeholder="Description"
+                    className="w-full rounded-lg border border-[#E8DDD4] px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#DFD1C9]"
+                  />
+                  <input
+                    value={line.detail}
+                    onChange={(e) =>
+                      patchLine(line.key, { detail: e.target.value })
+                    }
+                    placeholder="Detail (optional)"
+                    className="w-full rounded-lg border border-[#E8DDD4] px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#DFD1C9]"
+                  />
+                  <div className="grid grid-cols-[4.5rem_1fr_auto] gap-2 items-end">
+                    <label className="grid gap-0.5">
+                      <span className="text-[10px] text-[#716D64]">Qty</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={line.quantity}
+                        onChange={(e) =>
+                          patchLine(line.key, {
+                            quantity: Math.max(
+                              1,
+                              Math.floor(Number(e.target.value) || 1),
+                            ),
+                          })
+                        }
+                        className="w-full rounded-lg border border-[#E8DDD4] px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#DFD1C9]"
+                      />
+                    </label>
+                    <label className="grid gap-0.5">
+                      <span className="text-[10px] text-[#716D64]">
+                        Unit price (RM)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={line.unitPriceRm}
+                        onChange={(e) =>
+                          patchLine(line.key, {
+                            unitPriceRm: Math.max(
+                              0,
+                              Number(e.target.value) || 0,
+                            ),
+                          })
+                        }
+                        className="w-full rounded-lg border border-[#E8DDD4] px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#DFD1C9]"
+                      />
+                    </label>
+                    <div className="pb-1.5 text-right text-[11px] tabular-nums text-[#444444]">
+                      <div className="text-[10px] text-[#716D64]">Subtotal</div>
+                      {formatReceiptMoney(lineSub)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-xs font-medium text-[#444444] pt-1">
+            <span>Receipt TOTAL</span>
+            <span className="tabular-nums">
+              {formatReceiptMoney(displaySale.amountRm)}
+            </span>
+          </div>
+        </div>
+
         {onAddSale ? (
           <div className="border-b border-[#E8DDD4] px-4 py-3 space-y-2">
             <p className="text-xs text-[#716D64]">
@@ -694,7 +926,7 @@ export function SaleReceiptModal({
           </div>
         ) : null}
         <div ref={receiptRef}>
-          <SaleReceiptDocument sale={sale} />
+          <SaleReceiptDocument sale={displaySale} />
         </div>
       </div>
     </div>

@@ -84,7 +84,7 @@ export type ReceiptLineView = {
   unitPriceRm?: number;
 };
 
-/** Price printed in the Unit Price / Subtotal column (never the line total). */
+/** Unit price for a receipt line. */
 export function receiptLineUnitPriceRm(line: ReceiptLineView): number {
   if (
     typeof line.unitPriceRm === "number" &&
@@ -98,6 +98,25 @@ export function receiptLineUnitPriceRm(line: ReceiptLineView): number {
       ? Math.floor(line.quantity)
       : 1;
   return line.amountRm / qty;
+}
+
+/** Line subtotal = qty × unit price. */
+export function receiptLineSubtotalRm(line: ReceiptLineView): number {
+  const qty =
+    Number.isFinite(line.quantity) && line.quantity > 0
+      ? Math.floor(line.quantity)
+      : 1;
+  if (
+    typeof line.amountRm === "number" &&
+    Number.isFinite(line.amountRm) &&
+    line.amountRm >= 0
+  ) {
+    // Prefer explicit line total when it matches qty × unit (within 1 sen).
+    const unit = receiptLineUnitPriceRm(line);
+    const expected = unit * qty;
+    if (Math.abs(line.amountRm - expected) < 0.015) return line.amountRm;
+  }
+  return receiptLineUnitPriceRm(line) * qty;
 }
 
 export type ReceiptSaleView = {
