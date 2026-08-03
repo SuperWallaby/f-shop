@@ -7,6 +7,7 @@ import {
   formatReceiptMoney,
   formatReceiptPhone,
   receiptDiscountRm,
+  receiptLineUnitPriceRm,
   receiptTableLines,
   STUDIO_RECEIPT,
   type ReceiptSaleView,
@@ -399,8 +400,10 @@ export function SaleReceiptDocument({
         <thead>
           <tr className="border-b border-black text-left text-[10px] uppercase tracking-wider">
             <th className="pb-2 font-semibold">Description</th>
-            <th className="pb-2 font-semibold text-center w-16">Qty</th>
-            <th className="pb-2 font-semibold text-right w-24">Total</th>
+            <th className="pb-2 font-semibold text-center w-14">Qty</th>
+            <th className="pb-2 font-semibold text-right w-28">
+              Unit Price / Subtotal
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -416,7 +419,7 @@ export function SaleReceiptDocument({
               </td>
               <td className="py-3 text-center">{line.quantity}</td>
               <td className="py-3 text-right whitespace-nowrap">
-                {formatReceiptMoney(line.amountRm)}
+                {formatReceiptMoney(receiptLineUnitPriceRm(line))}
               </td>
             </tr>
           ))}

@@ -78,8 +78,27 @@ export type ReceiptLineView = {
   title: string;
   detail?: string;
   quantity: number;
+  /** Line total (qty × unit). Used when summing merged receipts. */
   amountRm: number;
+  /** Unit price shown in the receipt table column. */
+  unitPriceRm?: number;
 };
+
+/** Price printed in the Unit Price / Subtotal column (never the line total). */
+export function receiptLineUnitPriceRm(line: ReceiptLineView): number {
+  if (
+    typeof line.unitPriceRm === "number" &&
+    Number.isFinite(line.unitPriceRm) &&
+    line.unitPriceRm >= 0
+  ) {
+    return line.unitPriceRm;
+  }
+  const qty =
+    Number.isFinite(line.quantity) && line.quantity > 0
+      ? Math.floor(line.quantity)
+      : 1;
+  return line.amountRm / qty;
+}
 
 export type ReceiptSaleView = {
   id: string;
@@ -131,23 +150,34 @@ export function receiptLineDescription(sale: ReceiptSaleView): {
 
 export function receiptTableLines(sale: ReceiptSaleView): ReceiptLineView[] {
   if (sale.lines && sale.lines.length > 0) {
-    return sale.lines.map((line) => ({
-      title: line.title,
-      detail: line.detail,
-      quantity:
+    return sale.lines.map((line) => {
+      const quantity =
         Number.isFinite(line.quantity) && line.quantity > 0
           ? Math.floor(line.quantity)
-          : 1,
-      amountRm: line.amountRm,
-    }));
+          : 1;
+      const amountRm = line.amountRm;
+      const unitPriceRm =
+        typeof line.unitPriceRm === "number" && Number.isFinite(line.unitPriceRm)
+          ? line.unitPriceRm
+          : amountRm / quantity;
+      return {
+        title: line.title,
+        detail: line.detail,
+        quantity,
+        amountRm,
+        unitPriceRm,
+      };
+    });
   }
   const { title, detail } = receiptLineDescription(sale);
+  const quantity = receiptLineQty(sale);
   return [
     {
       title,
       detail: detail || undefined,
-      quantity: receiptLineQty(sale),
+      quantity,
       amountRm: sale.amountRm,
+      unitPriceRm: sale.amountRm / quantity,
     },
   ];
 }

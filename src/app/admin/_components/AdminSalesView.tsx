@@ -197,6 +197,7 @@ function saleToReceiptView(s: SaleRow): ReceiptSaleView {
             title: line.productName,
             quantity: line.quantity,
             amountRm: line.lineAmountRm,
+            unitPriceRm: line.unitPriceRm,
           }))
         : undefined,
   };
