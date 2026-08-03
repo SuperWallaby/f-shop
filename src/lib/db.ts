@@ -334,6 +334,13 @@ export type SaleDb = {
  creditLedgerId?: ObjectId;
  /** Linked package order when sale was also recorded as an order. */
  orderId?: ObjectId;
+ /**
+  * Payers counted in list/amount math (Duet = 2). Split Duet sales share a
+  * saleGroupId with heads: 1 each so two receipts sum to the duo total.
+  */
+ heads?: number;
+ /** Ties split Duet receipts (two payers) to one logical purchase. */
+ saleGroupId?: ObjectId;
  refundedAt?: Date;
  refundAmountRm?: number;
  refundNote?: string;

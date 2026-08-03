@@ -425,6 +425,32 @@ export const adminSaleCreateSchema = z
     priceMode: z.enum(["regular", "student", "first_timer"]).optional(),
     /** Also create a paid package order (plan sales with client+plan only). Credits once. */
     alsoCreateOrder: z.boolean().optional(),
+    /**
+     * Duet: split into two receipts / payers. When set, creates two sales
+     * (each typically per-head amount) linked by saleGroupId.
+     */
+    splitPayers: z
+      .array(
+        z.object({
+          clientId: z.string().min(1).optional(),
+          clientName: z.string().trim().min(1).max(200),
+          clientEmail: z.preprocess(
+            (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+            z.string().trim().email().max(320).optional(),
+          ),
+          clientWhatsapp: z.preprocess(
+            (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+            z.string().trim().max(120).optional(),
+          ),
+          amountRm: z.number().nonnegative(),
+          note: z.preprocess(
+            (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+            z.string().trim().max(2000).optional(),
+          ),
+        }),
+      )
+      .length(2)
+      .optional(),
   })
   .superRefine((d, ctx) => {
     const kind = d.saleKind ?? "plan";
@@ -439,6 +465,22 @@ export const adminSaleCreateSchema = z
         });
       }
     }
+    if (d.splitPayers) {
+      if (kind !== "plan") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["splitPayers"],
+          message: "Split payers is only for plan sales",
+        });
+      }
+      if (!d.planId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["planId"],
+          message: "Plan is required to split Duet receipts",
+        });
+      }
+    }
     if (d.alsoCreateOrder) {
       if (kind !== "plan") {
         ctx.addIssue({
@@ -447,7 +489,7 @@ export const adminSaleCreateSchema = z
           message: "alsoCreateOrder is only for plan sales",
         });
       }
-      if (!d.clientId) {
+      if (!d.splitPayers && !d.clientId) {
         ctx.addIssue({
           code: "custom",
           path: ["clientId"],

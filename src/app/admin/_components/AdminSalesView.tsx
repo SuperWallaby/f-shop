@@ -17,6 +17,7 @@ import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import type { PlanDb } from "@/lib/db";
 import { applyPromotionDiscount } from "@/lib/promotionMath";
 import { findClassTypeIdForPlan } from "@/lib/planCategoryDisplay";
+import { planPayerHeads } from "@/lib/planHeads";
 import { cn } from "@/lib/cn";
 import { Checkbox } from "@/components/Checkbox";
 import { Pill } from "./Pill";
@@ -97,6 +98,8 @@ type SaleRow = {
   productName: string;
   quantity: number | null;
   items?: SaleLineItem[];
+  heads?: number | null;
+  saleGroupId?: string | null;
   promotionName: string;
   classCount: number;
   validityDays: number;
@@ -389,6 +392,12 @@ export function AdminSalesView() {
   const [amountRm, setAmountRm] = useState(0);
   const [amountOverridden, setAmountOverridden] = useState(false);
   const [note, setNote] = useState("");
+  /** Duet: split duo total into two receipts / payers. */
+  const [duetSplitReceipts, setDuetSplitReceipts] = useState(false);
+  const [payer2Name, setPayer2Name] = useState("");
+  const [payer2Client, setPayer2Client] = useState<ClientSuggest | null>(null);
+  const [payer2AmountRm, setPayer2AmountRm] = useState(0);
+  const [payer1AmountRm, setPayer1AmountRm] = useState(0);
   const [newProductName, setNewProductName] = useState("");
   const [newProductPrice, setNewProductPrice] = useState(0);
   const [cashKind, setCashKind] = useState<"income" | "expense">("expense");
@@ -416,6 +425,11 @@ export function AdminSalesView() {
     () => plans.find((p) => p.id === planId) ?? null,
     [plans, planId],
   );
+  const selectedPlanHeads = useMemo(
+    () => (selectedPlan ? planPayerHeads(selectedPlan.category) : 1),
+    [selectedPlan],
+  );
+  const isDuetSale = selectedPlanHeads >= 2;
   const selectedPromo = useMemo(
     () => promos.find((p) => p.id === promotionId) ?? null,
     [promos, promotionId],
@@ -652,19 +666,25 @@ export function AdminSalesView() {
     setPlanId(id);
     if (!id) {
       setItemId("");
+      setDuetSplitReceipts(false);
       return;
     }
     const plan = plans.find((p) => p.id === id);
     if (!plan) return;
     const qty = Math.max(1, planQuantity);
+    const heads = planPayerHeads(plan.category);
     setClassCount(plan.classCount * qty);
     setValidityDays(plan.validityDays);
     let mode = priceMode;
     if (mode === "student" && plan.studentPriceRm == null) mode = "regular";
     if (mode === "first_timer" && plan.firstTimerPriceRm == null) mode = "regular";
     if (mode !== priceMode) setPriceMode(mode);
-    setListPriceRm(planListPrice(plan, mode) * qty);
+    const unit = planListPrice(plan, mode) * qty;
+    setListPriceRm(unit * heads);
     setAmountOverridden(false);
+    if (heads < 2) setDuetSplitReceipts(false);
+    setPayer1AmountRm(unit);
+    setPayer2AmountRm(unit);
     setItemId(
       findClassTypeIdForPlan(
         { category: plan.category, title: plan.title },
@@ -733,10 +753,23 @@ export function AdminSalesView() {
   useEffect(() => {
     if (saleKind !== "plan" || !selectedPlan) return;
     const qty = Math.max(1, planQuantity);
+    const heads = planPayerHeads(selectedPlan.category);
+    const unit = planListPrice(selectedPlan, priceMode) * qty;
     setClassCount(selectedPlan.classCount * qty);
-    setListPriceRm(planListPrice(selectedPlan, priceMode) * qty);
+    setListPriceRm(unit * heads);
     setAmountOverridden(false);
+    setPayer1AmountRm(unit);
+    setPayer2AmountRm(unit);
   }, [priceMode, selectedPlan, saleKind, planQuantity]);
+
+  useEffect(() => {
+    if (!duetSplitReceipts || !isDuetSale) return;
+    // Keep split halves aligned with auto total until manually edited.
+    if (amountOverridden) return;
+    const half = computedAmountRm / 2;
+    setPayer1AmountRm(half);
+    setPayer2AmountRm(half);
+  }, [duetSplitReceipts, isDuetSale, computedAmountRm, amountOverridden]);
 
   useEffect(() => {
     if (saleKind !== "product") return;
@@ -769,12 +802,22 @@ export function AdminSalesView() {
       setError("Add at least one product");
       return;
     }
+    const splitOn = saleKind === "plan" && isDuetSale && duetSplitReceipts;
+    const payer2 = (payer2Client?.name || payer2Name).trim();
+    if (splitOn && !payer2) {
+      setError("Second payer name is required for split Duet receipts");
+      return;
+    }
     const alsoCreateOrder =
       saleKind === "plan" &&
-      Boolean(selectedClient?.id) &&
       Boolean(planId) &&
+      (splitOn
+        ? Boolean(selectedClient?.id) || Boolean(payer2Client?.id)
+        : Boolean(selectedClient?.id)) &&
       window.confirm(
-        "Also add an Order for this client?\n\nCredits are granted only once either way.",
+        splitOn
+          ? "Also add Orders for linked clients?\n\nEach payer with a client account gets their own credits."
+          : "Also add an Order for this client?\n\nCredits are granted only once either way.",
       );
     setSaving(true);
     setError(null);
@@ -806,13 +849,33 @@ export function AdminSalesView() {
           validityDays: saleKind === "product" ? 0 : validityDays,
           listPriceRm,
           computedAmountRm,
-          amountRm,
-          amountOverridden,
+          amountRm: splitOn ? payer1AmountRm : amountRm,
+          amountOverridden: splitOn ? true : amountOverridden,
           note: note.trim() || undefined,
           priceMode: saleKind === "plan" ? priceMode : undefined,
           useStudentPrice:
             saleKind === "plan" ? priceMode === "student" : undefined,
           alsoCreateOrder,
+          ...(splitOn
+            ? {
+                splitPayers: [
+                  {
+                    clientId: selectedClient?.id,
+                    clientName: name,
+                    clientEmail: selectedClient?.email || undefined,
+                    clientWhatsapp: selectedClient?.whatsapp || undefined,
+                    amountRm: payer1AmountRm,
+                  },
+                  {
+                    clientId: payer2Client?.id,
+                    clientName: payer2,
+                    clientEmail: payer2Client?.email || undefined,
+                    clientWhatsapp: payer2Client?.whatsapp || undefined,
+                    amountRm: payer2AmountRm,
+                  },
+                ],
+              }
+            : {}),
         }),
       });
       const json = await res.json();
@@ -832,6 +895,18 @@ export function AdminSalesView() {
       setAmountOverridden(false);
       setNote("");
       setPriceMode("regular");
+      setDuetSplitReceipts(false);
+      setPayer2Name("");
+      setPayer2Client(null);
+      setPayer1AmountRm(0);
+      setPayer2AmountRm(0);
+      const createdList = (json.data?.sales ??
+        (json.data?.sale ? [json.data.sale] : [])) as SaleRow[];
+      // Split Duet = separate receipts (different payers) — open the first;
+      // the other appears in Sales history with its own Receipt button.
+      if (createdList[0]) {
+        setReceiptParts([saleToReceiptView(createdList[0])]);
+      }
       await loadSalesAndStats();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -1855,6 +1930,79 @@ export function AdminSalesView() {
                   className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
                 />
               </label>
+              {isDuetSale ? (
+                <div className="sm:col-span-2 rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] px-4 py-3 grid gap-3">
+                  <div className="text-xs text-[#716D64]">
+                    Duet is priced <span className="font-medium text-[#444444]">/ per head</span>
+                    {" · "}
+                    duo total = unit × 2 (Sales counts both payers). Booking stays one slot.
+                  </div>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={duetSplitReceipts}
+                      onChange={(e) => setDuetSplitReceipts(e.target.checked)}
+                      className="mt-0.5 rounded border-[#E8DDD4]"
+                    />
+                    <span className="text-sm text-[#444444]">
+                      Split into 2 receipts
+                      <span className="block text-xs text-[#716D64] mt-0.5">
+                        Use when each person pays separately (different names OK).
+                      </span>
+                    </span>
+                  </label>
+                  {duetSplitReceipts ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="grid gap-1">
+                        <span className="text-xs text-[#716D64]">
+                          Payer 1 amount (RM)
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={payer1AmountRm}
+                          onChange={(e) =>
+                            setPayer1AmountRm(Number(e.target.value) || 0)
+                          }
+                          className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                        />
+                        <span className="text-[11px] text-[#716D64]">
+                          Name:{" "}
+                          {(selectedClient?.name || clientQuery).trim() || "—"}
+                        </span>
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-xs text-[#716D64]">
+                          Payer 2 name
+                        </span>
+                        <input
+                          value={payer2Client?.name || payer2Name}
+                          onChange={(e) => {
+                            setPayer2Client(null);
+                            setPayer2Name(e.target.value);
+                          }}
+                          placeholder="Second person"
+                          className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                        />
+                        <span className="text-xs text-[#716D64] mt-1">
+                          Payer 2 amount (RM)
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={payer2AmountRm}
+                          onChange={(e) =>
+                            setPayer2AmountRm(Number(e.target.value) || 0)
+                          }
+                          className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <label className="grid gap-1">
                 <span className="text-xs text-[#716D64]">Credits</span>
                 <input
@@ -1880,7 +2028,14 @@ export function AdminSalesView() {
             </>
           )}
           <label className="grid gap-1">
-            <span className="text-xs text-[#716D64]">List price (RM)</span>
+            <span className="text-xs text-[#716D64]">
+              List price (RM)
+              {isDuetSale ? (
+                <span className="ml-1 text-[#716D64]">
+                  · per head × {selectedPlanHeads}
+                </span>
+              ) : null}
+            </span>
             <input
               type="number"
               min={0}
@@ -1893,27 +2048,42 @@ export function AdminSalesView() {
               className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
             />
           </label>
-          <label className="grid gap-1">
-            <span className="text-xs text-[#716D64]">
-              Amount (RM)
-              {amountOverridden ? (
-                <span className="ml-1 text-[#A66A4A]">manual override</span>
-              ) : (
-                <span className="ml-1">auto {money(computedAmountRm)}</span>
-              )}
-            </span>
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              value={amountRm}
-              onChange={(e) => {
-                setAmountRm(Number(e.target.value) || 0);
-                setAmountOverridden(true);
-              }}
-              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
-            />
-          </label>
+          {!(isDuetSale && duetSplitReceipts) ? (
+            <label className="grid gap-1">
+              <span className="text-xs text-[#716D64]">
+                Amount (RM)
+                {isDuetSale ? (
+                  <span className="ml-1 text-[#716D64]">duo total</span>
+                ) : null}
+                {amountOverridden ? (
+                  <span className="ml-1 text-[#A66A4A]">manual override</span>
+                ) : (
+                  <span className="ml-1">auto {money(computedAmountRm)}</span>
+                )}
+              </span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={amountRm}
+                onChange={(e) => {
+                  setAmountRm(Number(e.target.value) || 0);
+                  setAmountOverridden(true);
+                }}
+                className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm"
+              />
+            </label>
+          ) : (
+            <div className="grid gap-1">
+              <span className="text-xs text-[#716D64]">Split total (RM)</span>
+              <div className="rounded-2xl border border-[#E8DDD4] bg-[#FAF8F6] px-4 py-3 text-sm text-[#444444]">
+                {money(payer1AmountRm + payer2AmountRm)}
+                <span className="ml-2 text-xs text-[#716D64]">
+                  ({money(payer1AmountRm)} + {money(payer2AmountRm)})
+                </span>
+              </div>
+            </div>
+          )}
           <label className="grid gap-1 sm:col-span-2">
             <span className="text-xs text-[#716D64]">Note</span>
             <input
@@ -1930,7 +2100,11 @@ export function AdminSalesView() {
           onClick={() => void submitSale()}
           className="mt-4 rounded-full bg-[#DFD1C9] px-6 py-3 text-sm font-medium hover:brightness-95 disabled:opacity-50 cursor-pointer"
         >
-          {saving ? "Saving…" : "Save sale"}
+          {saving
+            ? "Saving…"
+            : isDuetSale && duetSplitReceipts
+              ? "Save 2 receipts"
+              : "Save sale"}
         </button>
       </section>
       </div>

@@ -17,6 +17,7 @@ import {
   resolvePlanListPriceRm,
   type PlanPriceMode,
 } from "@/lib/credits";
+import { planPayerHeads } from "@/lib/planHeads";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { requireAdmin } from "../../_utils/adminAuth";
 import { jsonError, jsonOk } from "../../_utils/http";
@@ -192,7 +193,10 @@ export async function POST(req: NextRequest) {
           const mode: PlanPriceMode =
             d.priceMode ??
             (d.useStudentPrice ? "student" : "regular");
-          listPriceRm = resolvePlanListPriceRm(plan, mode) * quantity;
+          const unit = resolvePlanListPriceRm(plan, mode);
+          const heads = d.splitPayers ? 1 : planPayerHeads(plan.category);
+          // Duet is /per head — full duo sale stores 2×; split sales store 1× each.
+          listPriceRm = unit * quantity * heads;
         }
       }
     }
@@ -229,109 +233,195 @@ export async function POST(req: NextRequest) {
     }
 
     const amountOverridden = Boolean(d.amountOverridden);
-    const amountRm = amountOverridden ? d.amountRm : computedAmountRm;
-    const receiptNo = await allocateSaleReceiptNo(sales, soldAt);
+    const planDoc = planId ? await plans.findOne({ _id: planId }) : null;
+    const duoHeads =
+      saleKind === "plan" && planDoc ? planPayerHeads(planDoc.category) : 1;
 
-    let orderId: ObjectId | undefined;
-    if (alsoCreateOrder && clientId && planId) {
-      const plan = await plans.findOne({ _id: planId });
-      if (!plan) return jsonError("Plan not found", 404);
-      const orderIns = await orders.insertOne({
-        orderRef: createOrderRef(),
-        clientId,
-        planId,
-        planCode: plan.code,
-        planTitle: plan.title,
-        quantity: quantity && quantity > 0 ? quantity : 1,
-        classCount,
-        amountRm,
-        currency: "MYR",
-        status: "paid",
-        whatsappMessage: emptyToUndef(d.note)
-          ? `Admin sale + order. ${d.note}`
-          : "Admin sale linked order.",
-        createdAt: now,
-        paidAt: soldAt,
-        ...(emptyToUndef(d.note) ? { adminNote: d.note!.trim() } : {}),
-      });
-      orderId = orderIns.insertedId;
-    }
-
-    const saleDoc: SaleDb = {
-      soldAt,
-      clientId,
-      clientName,
-      clientEmail,
-      clientWhatsapp,
-      saleKind,
-      itemId,
-      itemName,
-      planId,
-      planTitle,
-      productId,
-      productName,
-      quantity,
-      ...(saleItems ? { items: saleItems } : {}),
-      classCount,
-      validityDays,
-      promotionId,
-      promotionName,
-      listPriceRm,
-      computedAmountRm,
-      amountRm,
-      amountOverridden,
-      currency: "MYR",
-      status: "paid",
-      receiptNo,
-      paymentMethod: "Online transfer",
-      note: emptyToUndef(d.note),
-      orderId,
-      createdAt: now,
-      updatedAt: now,
+    type PayerInput = {
+      clientId?: ObjectId;
+      clientName: string;
+      clientEmail?: string;
+      clientWhatsapp?: string;
+      listPriceRm: number;
+      computedAmountRm: number;
+      amountRm: number;
+      amountOverridden: boolean;
+      note?: string;
+      heads: number;
     };
 
-    const ins = await sales.insertOne(saleDoc);
-    const saleId = ins.insertedId;
-
-    if (orderId) {
-      await orders.updateOne(
-        { _id: orderId },
-        { $set: { saleId } },
-      );
-    }
-
-    let creditLedgerId: ObjectId | undefined;
-    if (saleKind === "plan" && clientId && classCount > 0) {
-      const expiresAt = new Date(
-        soldAt.getTime() + validityDays * 24 * 60 * 60 * 1000,
-      );
-      const ledgerIns = await creditLedger.insertOne({
+    const payers: PayerInput[] = [];
+    let splitSaleGroupId: ObjectId | undefined;
+    if (d.splitPayers && saleKind === "plan") {
+      if (duoHeads < 2) {
+        return jsonError("Split receipts are only for Duet plans", 400);
+      }
+      splitSaleGroupId = new ObjectId();
+      const mode: PlanPriceMode =
+        d.priceMode ?? (d.useStudentPrice ? "student" : "regular");
+      const qty = quantity && quantity > 0 ? quantity : 1;
+      const unitList = planDoc
+        ? resolvePlanListPriceRm(planDoc, mode) * qty
+        : listPriceRm;
+      let unitComputed = unitList;
+      if (promotionId) {
+        const promo = await promotions.findOne({ _id: promotionId });
+        if (promo) unitComputed = applyPromotionDiscount(unitList, promo);
+      }
+      for (const payer of d.splitPayers) {
+        let pClientId: ObjectId | undefined;
+        let pName = payer.clientName.trim();
+        let pEmail = emptyToUndef(payer.clientEmail);
+        let pWa = emptyToUndef(payer.clientWhatsapp);
+        const pClientIdRaw = emptyToUndef(payer.clientId);
+        if (pClientIdRaw) {
+          if (!ObjectId.isValid(pClientIdRaw)) {
+            return jsonError("Invalid split clientId", 400);
+          }
+          pClientId = new ObjectId(pClientIdRaw);
+          const c = await clients.findOne({ _id: pClientId });
+          if (!c) return jsonError(`Client not found: ${pName}`, 404);
+          pName = pName || c.name || c.email;
+          pEmail = pEmail || c.email || undefined;
+          pWa = pWa || c.whatsapp || undefined;
+        }
+        payers.push({
+          clientId: pClientId,
+          clientName: pName,
+          clientEmail: pEmail,
+          clientWhatsapp: pWa,
+          listPriceRm: unitList,
+          computedAmountRm: unitComputed,
+          amountRm: payer.amountRm,
+          amountOverridden: true,
+          note: emptyToUndef(payer.note) || emptyToUndef(d.note),
+          heads: 1,
+        });
+      }
+    } else {
+      const amountRm = amountOverridden ? d.amountRm : computedAmountRm;
+      payers.push({
         clientId,
-        type: "purchase_grant",
-        amount: classCount,
-        expiresAt,
-        expiryApproved: false,
-        planId,
-        saleId,
-        ...(orderId ? { orderId } : {}),
-        note:
-          emptyToUndef(d.note) ||
-          `Sale: ${planTitle || clientName} (${amountRm} MYR)`,
-        createdAt: now,
+        clientName,
+        clientEmail,
+        clientWhatsapp,
+        listPriceRm,
+        computedAmountRm,
+        amountRm,
+        amountOverridden,
+        note: emptyToUndef(d.note),
+        heads: saleKind === "plan" ? duoHeads : 1,
       });
-      creditLedgerId = ledgerIns.insertedId;
-      await sales.updateOne(
-        { _id: saleId },
-        { $set: { creditLedgerId, updatedAt: now } },
-      );
     }
 
-    const created = await sales.findOne({ _id: saleId });
-    if (!created) return jsonError("Insert failed", 500);
+    const createdSales = [];
+    let anyCredits = false;
+    let anyOrder = false;
+
+    for (const payer of payers) {
+      const receiptNo = await allocateSaleReceiptNo(sales, soldAt);
+      let orderId: ObjectId | undefined;
+      if (alsoCreateOrder && payer.clientId && planId && planDoc) {
+        const orderIns = await orders.insertOne({
+          orderRef: createOrderRef(),
+          clientId: payer.clientId,
+          planId,
+          planCode: planDoc.code,
+          planTitle: planDoc.title,
+          quantity: quantity && quantity > 0 ? quantity : 1,
+          classCount,
+          amountRm: payer.amountRm,
+          currency: "MYR",
+          status: "paid",
+          whatsappMessage: payer.note
+            ? `Admin sale + order. ${payer.note}`
+            : "Admin sale linked order.",
+          createdAt: now,
+          paidAt: soldAt,
+          ...(payer.note ? { adminNote: payer.note } : {}),
+        });
+        orderId = orderIns.insertedId;
+        anyOrder = true;
+      }
+
+      const saleDoc: SaleDb = {
+        soldAt,
+        clientId: payer.clientId,
+        clientName: payer.clientName,
+        clientEmail: payer.clientEmail,
+        clientWhatsapp: payer.clientWhatsapp,
+        saleKind,
+        itemId,
+        itemName,
+        planId,
+        planTitle,
+        productId,
+        productName,
+        quantity,
+        ...(saleItems ? { items: saleItems } : {}),
+        classCount,
+        validityDays,
+        promotionId,
+        promotionName,
+        listPriceRm: payer.listPriceRm,
+        computedAmountRm: payer.computedAmountRm,
+        amountRm: payer.amountRm,
+        amountOverridden: payer.amountOverridden,
+        currency: "MYR",
+        status: "paid",
+        receiptNo,
+        paymentMethod: "Online transfer",
+        note: payer.note,
+        orderId,
+        heads: payer.heads,
+        ...(splitSaleGroupId ? { saleGroupId: splitSaleGroupId } : {}),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const ins = await sales.insertOne(saleDoc);
+      const saleId = ins.insertedId;
+
+      if (orderId) {
+        await orders.updateOne({ _id: orderId }, { $set: { saleId } });
+      }
+
+      if (saleKind === "plan" && payer.clientId && classCount > 0) {
+        const expiresAt = new Date(
+          soldAt.getTime() + validityDays * 24 * 60 * 60 * 1000,
+        );
+        const ledgerIns = await creditLedger.insertOne({
+          clientId: payer.clientId,
+          type: "purchase_grant",
+          amount: classCount,
+          expiresAt,
+          expiryApproved: false,
+          planId,
+          saleId,
+          ...(orderId ? { orderId } : {}),
+          note:
+            payer.note ||
+            `Sale: ${planTitle || payer.clientName} (${payer.amountRm} MYR)`,
+          createdAt: now,
+        });
+        await sales.updateOne(
+          { _id: saleId },
+          { $set: { creditLedgerId: ledgerIns.insertedId, updatedAt: now } },
+        );
+        anyCredits = true;
+      }
+
+      const created = await sales.findOne({ _id: saleId });
+      if (created) createdSales.push(serializeSale(created));
+    }
+
+    if (createdSales.length === 0) return jsonError("Insert failed", 500);
     return jsonOk({
-      sale: serializeSale(created),
-      creditsGranted: Boolean(creditLedgerId),
-      orderCreated: Boolean(orderId),
+      sale: createdSales[0],
+      sales: createdSales,
+      creditsGranted: anyCredits,
+      orderCreated: anyOrder,
+      split: Boolean(splitSaleGroupId),
     });
   } catch (e) {
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);

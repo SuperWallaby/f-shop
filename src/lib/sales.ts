@@ -153,6 +153,8 @@ export function serializeSale(doc: SaleDb & { _id?: ObjectId }) {
     note: doc.note ?? "",
     creditLedgerId: doc.creditLedgerId?.toHexString() ?? null,
     orderId: doc.orderId?.toHexString() ?? null,
+    heads: doc.heads ?? null,
+    saleGroupId: doc.saleGroupId?.toHexString() ?? null,
     refundedAt: doc.refundedAt?.toISOString() ?? null,
     refundAmountRm: doc.refundAmountRm ?? null,
     refundNote: doc.refundNote ?? "",
