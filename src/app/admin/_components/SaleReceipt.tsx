@@ -30,19 +30,30 @@ function newDraftLineKey() {
 }
 
 function draftLinesFromSale(sale: ReceiptSaleView): DraftReceiptLine[] {
-  return receiptTableLines(sale).map((line) => ({
+  const lines = receiptTableLines(sale);
+  const lineSum =
+    Math.round(
+      lines.reduce((sum, line) => sum + receiptLineSubtotalRm(line), 0) * 100,
+    ) / 100;
+  const list =
+    sale.listPriceRm > 0.009 ? sale.listPriceRm : lineSum;
+  // Lines often store the paid amount; scale up to list subtotal so Discount stays editable.
+  const scale =
+    lineSum > 0.009 && list > lineSum + 0.009 ? list / lineSum : 1;
+  return lines.map((line) => ({
     key: newDraftLineKey(),
     title: line.title,
     detail: line.detail ?? "",
     quantity: line.quantity,
     unitPriceRm:
-      Math.round(receiptLineUnitPriceRm(line) * 100) / 100,
+      Math.round(receiptLineUnitPriceRm(line) * scale * 100) / 100,
   }));
 }
 
 function receiptSaleFromDraft(
   base: ReceiptSaleView,
   draft: DraftReceiptLine[],
+  discountRm: number,
 ): ReceiptSaleView {
   const lines: ReceiptLineView[] = draft.map((d) => {
     const quantity = Math.max(1, Math.floor(Number(d.quantity) || 1));
@@ -55,12 +66,17 @@ function receiptSaleFromDraft(
       amountRm: quantity * unitPriceRm,
     };
   });
-  const total = lines.reduce((sum, line) => sum + line.amountRm, 0);
+  const subtotal =
+    Math.round(lines.reduce((sum, line) => sum + line.amountRm, 0) * 100) / 100;
+  const discount = Math.max(
+    0,
+    Math.min(subtotal, Math.round((Number(discountRm) || 0) * 100) / 100),
+  );
   return {
     ...base,
     lines,
-    listPriceRm: total,
-    amountRm: total,
+    listPriceRm: subtotal,
+    amountRm: Math.round((subtotal - discount) * 100) / 100,
   };
 }
 
@@ -570,6 +586,9 @@ export function SaleReceiptModal({
   const [draftLines, setDraftLines] = useState<DraftReceiptLine[]>(() =>
     draftLinesFromSale(sale),
   );
+  const [draftDiscountRm, setDraftDiscountRm] = useState(
+    () => receiptDiscountRm(sale) ?? 0,
+  );
   const filename = `${sale.receiptNo || "receipt"}.png`;
   const extraCount = includedExtras.length;
 
@@ -592,12 +611,13 @@ export function SaleReceiptModal({
 
   useEffect(() => {
     setDraftLines(draftLinesFromSale(sale));
+    setDraftDiscountRm(receiptDiscountRm(sale) ?? 0);
     setSaved(false);
   }, [saleSyncKey, sale]);
 
   const displaySale = useMemo(
-    () => receiptSaleFromDraft(sale, draftLines),
-    [sale, draftLines],
+    () => receiptSaleFromDraft(sale, draftLines, draftDiscountRm),
+    [sale, draftLines, draftDiscountRm],
   );
 
   useEffect(() => {
@@ -744,7 +764,7 @@ export function SaleReceiptModal({
         <div className="border-b border-[#E8DDD4] px-4 py-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs text-[#716D64]">
-              Edit lines — Subtotal / TOTAL update from qty × unit price
+              Edit lines & discount — TOTAL = subtotal − discount
             </p>
             <button
               type="button"
@@ -839,11 +859,35 @@ export function SaleReceiptModal({
               );
             })}
           </div>
-          <div className="flex justify-between text-xs font-medium text-[#444444] pt-1">
-            <span>Receipt TOTAL</span>
-            <span className="tabular-nums">
-              {formatReceiptMoney(displaySale.amountRm)}
-            </span>
+          <div className="rounded-xl border border-[#E8DDD4] bg-white p-2.5 space-y-2">
+            <div className="flex justify-between text-xs text-[#444444]">
+              <span className="text-[#716D64]">Subtotal</span>
+              <span className="tabular-nums font-medium">
+                {formatReceiptMoney(displaySale.listPriceRm)}
+              </span>
+            </div>
+            <label className="grid gap-0.5">
+              <span className="text-[10px] text-[#716D64]">Discount (RM)</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={draftDiscountRm}
+                onChange={(e) => {
+                  setDraftDiscountRm(
+                    Math.max(0, Number(e.target.value) || 0),
+                  );
+                  setSaved(false);
+                }}
+                className="w-full rounded-lg border border-[#E8DDD4] px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[#DFD1C9]"
+              />
+            </label>
+            <div className="flex justify-between text-xs font-medium text-[#444444] pt-1 border-t border-[#E8DDD4]">
+              <span>Receipt TOTAL</span>
+              <span className="tabular-nums">
+                {formatReceiptMoney(displaySale.amountRm)}
+              </span>
+            </div>
           </div>
         </div>
 
