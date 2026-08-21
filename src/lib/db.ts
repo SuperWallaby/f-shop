@@ -171,7 +171,7 @@ export type ClientDb = {
  _id?: ObjectId;
  customerKey: string;
  name: string;
- email?: string;
+ email: string;
  whatsapp: string;
  /** Canonical digits (MY 0… → 60…); unique sparse index prevents dup accounts. */
  whatsappDigits?: string;
