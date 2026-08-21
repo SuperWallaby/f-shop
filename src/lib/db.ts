@@ -27,6 +27,8 @@ export type SettingsDoc = {
  whatsappDedupeV1Done?: boolean;
  /** Re-run merge with expanded phone variants (+60 / 60 / 0… / 00…). */
  whatsappDedupeV2Done?: boolean;
+ /** Unique client email index is sparse so phone-only accounts are allowed. */
+ emailIndexSparseV1?: boolean;
  updatedAt: Date;
 };
 
@@ -169,7 +171,7 @@ export type ClientDb = {
  _id?: ObjectId;
  customerKey: string;
  name: string;
- email: string;
+ email?: string;
  whatsapp: string;
  /** Canonical digits (MY 0… → 60…); unique sparse index prevents dup accounts. */
  whatsappDigits?: string;
@@ -573,7 +575,6 @@ async function ensureIndexes(db: Db): Promise<void> {
     { settingsId: 1, createdAt: -1 },
     { name: "settings_id_createdAt" }
    ),
-   clients.createIndex({ email: 1 }, { unique: true, name: "uniq_client_email" }),
    clients.createIndex({ customerKey: 1 }, { unique: true, name: "uniq_client_customerKey" }),
    clients.createIndex(
     { whatsappDigits: 1 },
@@ -620,6 +621,27 @@ async function ensureIndexes(db: Db): Promise<void> {
     { sparse: true, name: "ledger_expiresAt" },
    ),
   ]);
+
+  // Unique email must be sparse so phone-only accounts (no email field) are allowed.
+  try {
+    const indexes = await clients.indexes();
+    const current = indexes.find((idx) => idx.name === "uniq_client_email");
+    if (!current?.sparse) {
+      if (current) await clients.dropIndex("uniq_client_email");
+      await clients.createIndex(
+        { email: 1 },
+        { unique: true, sparse: true, name: "uniq_client_email" },
+      );
+    }
+    const settings = db.collection<SettingsDoc>("settings");
+    await settings.updateOne(
+      { _id: "singleton" },
+      { $set: { emailIndexSparseV1: true, updatedAt: new Date() } },
+      { upsert: true },
+    );
+  } catch (e) {
+    console.error("[db] sparse email index migration failed", e);
+  }
 
   // One-time: merge +60… / 60… / 0… WhatsApp duplicate client accounts.
   try {
