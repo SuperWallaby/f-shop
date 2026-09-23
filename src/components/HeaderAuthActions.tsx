@@ -116,10 +116,7 @@ export function HeaderAuthActions() {
   if (me === null) {
     return (
       <span
-        className={cn(
-          SIGN_IN_SHELL,
-          "border border-[#E8DDD4] bg-white/60 text-transparent select-none",
-        )}
+        className={cn(SIGN_IN_SHELL, "bg-transparent text-[#716D64] select-none")}
         aria-hidden
       >
         Sign in
