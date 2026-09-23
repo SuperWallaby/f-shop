@@ -31,10 +31,10 @@ import { normalizeHexColor } from "@/lib/itemColor";
 import { BookingGuestPanel } from "./_components/BookingGuestPanel";
 import type { BookingGuestAuthedClient } from "./_components/BookingGuestPanel";
 import type { PublicPlanDto } from "@/lib/planDto";
+import { planDisplayTitle } from "@/lib/planDto";
 import {
   matchPlanCategoryForClassName,
   PLAN_CATEGORY_DISPLAY_ORDER,
-  planPurchaseGroupHeading,
 } from "@/lib/planCategoryDisplay";
 import {
   buildBookingDraft,
@@ -674,22 +674,29 @@ function BookingPageInner() {
     const preferredPlanCategory = matchPlanCategoryForClassName(bookedClassName);
     const sortedPlanOptions = (() => {
       const list = planOptions.slice();
+      const relevant =
+        preferredPlanCategory != null
+          ? list.filter((p) => p.category === preferredPlanCategory)
+          : list;
+      const pool = relevant.length > 0 ? relevant : list;
       const catRank = (category: PublicPlanDto["category"]) => {
-        if (preferredPlanCategory && category === preferredPlanCategory) return -1;
+        if (preferredPlanCategory && category === preferredPlanCategory)
+          return -1;
         const idx = PLAN_CATEGORY_DISPLAY_ORDER.indexOf(category);
         return idx >= 0 ? idx : 999;
       };
-      list.sort(
+      pool.sort(
         (a, b) =>
           catRank(a.category) - catRank(b.category) ||
           a.sortOrder - b.sortOrder ||
           a.title.localeCompare(b.title),
       );
-      return list;
+      return pool;
     })();
 
     const planInterestLabel = (() => {
       if (!needsPlanHint || !selectedPlanInterest) return null;
+      if (selectedPlanInterest === "__have_plan__") return null;
       if (selectedPlanInterest === "__consult__") {
         return "I'll decide after a consultation";
       }
@@ -698,12 +705,25 @@ function BookingPageInner() {
       }
       const plan = planOptions.find((p) => p.id === selectedPlanInterest);
       if (!plan) return null;
-      const group = planPurchaseGroupHeading(plan.category);
-      return `${group} · ${plan.title} (RM ${plan.priceRm})`;
+      return `${planDisplayTitle(plan)} (RM ${plan.priceRm})`;
     })();
 
     // Replace wasap.my with official WhatsApp deep link (wa.me)
     const phone = "60145403560"; // country code + number, NO "+" and NO spaces
+    const planHintLines =
+      needsPlanHint && selectedPlanInterest === "__have_plan__"
+        ? ["", "I already have a plan."]
+        : needsPlanHint
+          ? [
+              "",
+              "I currently have no credits.",
+              ...(planInterestLabel
+                ? [`Plan interest: ${planInterestLabel}`]
+                : []),
+            ]
+          : planInterestLabel
+            ? [`Plan interest: ${planInterestLabel}`]
+            : [];
     const wasapMessage =
       bookedParts && bookedClassName
         ? [
@@ -712,22 +732,12 @@ function BookingPageInner() {
             `Date: ${bookedParts.dateLabel}`,
             `Time: ${bookedParts.timeLabel}`,
             `Booking Code: ${successBookingCode}`,
-            ...(needsPlanHint
-              ? ["", "I currently have no credits."]
-              : []),
-            ...(planInterestLabel
-              ? [`Plan interest: ${planInterestLabel}`]
-              : []),
+            ...planHintLines,
           ].join("\n")
         : [
             "Booking Done",
             `Booking Code: ${successBookingCode}`,
-            ...(needsPlanHint
-              ? ["", "I currently have no credits."]
-              : []),
-            ...(planInterestLabel
-              ? [`Plan interest: ${planInterestLabel}`]
-              : []),
+            ...planHintLines,
           ].join("\n");
 
     const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(wasapMessage)}`;
@@ -812,29 +822,89 @@ function BookingPageInner() {
             </div>
 
             {needsPlanHint ? (
-              <div className="mt-6 min-w-0">
-                <label className="grid gap-2 min-w-0">
-                  <span className="text-sm font-semibold text-[#444444]">
-                    Select your pilates plan.
-                  </span>
-                  <select
-                    value={selectedPlanInterest}
-                    onChange={(e) => setSelectedPlanInterest(e.target.value)}
-                    className="w-full max-w-full min-w-0 box-border rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
-                  >
-                    <option value="">Choose a plan…</option>
-                    {sortedPlanOptions.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {planPurchaseGroupHeading(p.category)} · {p.title} — RM{" "}
-                        {p.priceRm}
-                      </option>
-                    ))}
-                    <option value="__consult__">
-                      {"I'll decide after a consultation"}
-                    </option>
-                    <option value="__event_promo__">Event / promotion</option>
-                  </select>
-                </label>
+              <div className="mt-6 min-w-0 space-y-3">
+                <div className="text-sm font-semibold text-[#444444]">
+                  Select your pilates plan
+                </div>
+                <div className="grid gap-2" role="radiogroup" aria-label="Pilates plan">
+                  {(
+                    [
+                      {
+                        value: "__have_plan__",
+                        label: "I already have a plan",
+                        price: null as string | null,
+                      },
+                      ...sortedPlanOptions.map((p) => ({
+                        value: p.id,
+                        label: planDisplayTitle(p),
+                        price: `RM ${p.priceRm}`,
+                      })),
+                      {
+                        value: "__consult__",
+                        label: "I'll decide after a consultation",
+                        price: null,
+                      },
+                      {
+                        value: "__event_promo__",
+                        label: "Event / promotion",
+                        price: null,
+                      },
+                    ] as Array<{
+                      value: string;
+                      label: string;
+                      price: string | null;
+                    }>
+                  ).map((opt) => {
+                    const selected = selectedPlanInterest === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setSelectedPlanInterest(opt.value)}
+                        className={cn(
+                          "w-full rounded-2xl border px-4 py-3 text-left transition cursor-pointer",
+                          "flex items-center gap-3",
+                          selected
+                            ? "border-[#A66A4A] bg-[#F3ECE6] ring-1 ring-[#A66A4A]/40"
+                            : "border-[#E8DDD4] bg-white hover:bg-[#FAF8F6]",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center",
+                            selected
+                              ? "border-[#A66A4A]"
+                              : "border-[#C9BDB3]",
+                          )}
+                          aria-hidden
+                        >
+                          {selected ? (
+                            <span className="h-2.5 w-2.5 rounded-full bg-[#A66A4A]" />
+                          ) : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={cn(
+                              "block text-sm",
+                              selected
+                                ? "font-semibold text-[#444444]"
+                                : "font-medium text-[#444444]",
+                            )}
+                          >
+                            {opt.label}
+                          </span>
+                        </span>
+                        {opt.price ? (
+                          <span className="shrink-0 text-sm font-semibold text-[#716D64]">
+                            {opt.price}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
 
@@ -1285,6 +1355,37 @@ function BookingPageInner() {
               submitting={submitting}
               submitError={submitError}
               onSubmit={() => void submitBooking()}
+              onClientRefresh={async () => {
+                try {
+                  const res = await fetch("/api/public/client/me", {
+                    credentials: "include",
+                    cache: "no-store",
+                  });
+                  const json = await res.json();
+                  if (!res.ok || !json?.ok || !json.data?.authed) {
+                    setAuthedClient(null);
+                    return;
+                  }
+                  const c = json.data.client as {
+                    name?: string;
+                    email?: string;
+                    whatsapp?: string;
+                  };
+                  const next: BookingGuestAuthedClient = {
+                    name: (c?.name ?? "").trim(),
+                    email: (c?.email ?? "").trim(),
+                    whatsapp: (c?.whatsapp ?? "").trim(),
+                  };
+                  setAuthedClient(next);
+                  if (next.email) setEmail(next.email);
+                  if (next.whatsapp) setWhatsapp(next.whatsapp);
+                  setSignUp(false);
+                  setPassword("");
+                  setSubmitError(null);
+                } catch {
+                  setAuthedClient(null);
+                }
+              }}
             />
           </section>
         </div>
