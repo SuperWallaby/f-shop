@@ -191,7 +191,7 @@ export function BookingGuestPanel({
                   maxLength={4}
                 />
                 <span className="text-[11px] text-[#716D64]">
-                  Choose any 4 digits. Stored securely (encrypted hash).
+                  Choose any 4 digits.
                 </span>
               </label>
             ) : null}
