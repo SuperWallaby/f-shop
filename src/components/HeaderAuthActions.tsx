@@ -81,8 +81,30 @@ export function HeaderAuthActions() {
     return avatarColor(me.client.id || me.client.email || me.client.name);
   }, [me]);
 
-  if (me === null || !me.authed || !me.client) {
-    return null;
+  if (me === null) {
+    return (
+      <span
+        className="inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm text-[#716D64]"
+        aria-hidden
+      >
+        …
+      </span>
+    );
+  }
+
+  if (!me.authed || !me.client) {
+    return (
+      <Link
+        href="/booking/account"
+        className={cn(
+          "inline-flex h-9 items-center justify-center rounded-full px-4",
+          "border border-[#E8DDD4] bg-white/90 text-sm font-medium text-[#444444]",
+          "shadow-sm hover:brightness-95 transition cursor-pointer",
+        )}
+      >
+        Sign in
+      </Link>
+    );
   }
 
   return (

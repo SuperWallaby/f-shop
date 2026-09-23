@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/cn";
+import { ClientPhoneAuthPanel } from "./ClientPhoneAuthPanel";
 
 export type BookingGuestAuthedClient = {
   name: string;
@@ -23,6 +26,8 @@ type Props = {
   submitting: boolean;
   submitError: string | null;
   onSubmit: () => void;
+  /** Refresh session after phone+PIN sign-in. */
+  onClientRefresh?: () => void | Promise<void>;
 };
 
 export function BookingGuestPanel({
@@ -39,7 +44,9 @@ export function BookingGuestPanel({
   submitting,
   submitError,
   onSubmit,
+  onClientRefresh,
 }: Props) {
+  const [showSignIn, setShowSignIn] = useState(false);
   const loggedIn = Boolean(authedClient);
   const displayEmail = loggedIn ? authedClient!.email : email;
   const displayWhatsapp = loggedIn ? authedClient!.whatsapp : whatsapp;
@@ -53,9 +60,51 @@ export function BookingGuestPanel({
     pinOk &&
     !submitting;
 
+  const accountExistsHint =
+    !!submitError &&
+    /already exists|sign in instead|already registered/i.test(submitError);
+
+  if (!loggedIn && showSignIn) {
+    return (
+      <div className="space-y-3">
+        <ClientPhoneAuthPanel
+          onAuthed={async () => {
+            setShowSignIn(false);
+            await onClientRefresh?.();
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setShowSignIn(false)}
+          className="w-full text-center text-sm text-[#716D64] underline"
+        >
+          Book as guest instead
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-6 shadow-sm">
-      <h2 className="font-serif text-xl font-semibold mb-4">Your details</h2>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <h2 className="font-serif text-xl font-semibold">Your details</h2>
+        {!loggedIn ? (
+          <button
+            type="button"
+            onClick={() => setShowSignIn(true)}
+            className="rounded-full border border-[#E8DDD4] bg-white px-4 py-2 text-sm font-medium text-[#444444] hover:shadow-sm"
+          >
+            Sign in
+          </button>
+        ) : (
+          <Link
+            href="/booking/account"
+            className="text-sm text-[#716D64] underline"
+          >
+            My account
+          </Link>
+        )}
+      </div>
       <div className="grid gap-3">
         {loggedIn ? (
           <div className="rounded-2xl border border-[#E8DDD4] bg-white/80 px-4 py-4 space-y-2">
@@ -119,7 +168,7 @@ export function BookingGuestPanel({
                 className="mt-1 rounded border-[#E8DDD4]"
               />
               <span className="text-sm leading-snug text-[#444444]">
-                Sign Up
+                Sign Up (create PIN while booking)
               </span>
             </label>
 
@@ -150,7 +199,21 @@ export function BookingGuestPanel({
         )}
 
         {submitError ? (
-          <div className="text-sm text-red-700">{submitError}</div>
+          <div className="space-y-2">
+            <div className="text-sm text-red-700">{submitError}</div>
+            {accountExistsHint && !loggedIn ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onSignUpChange(false);
+                  setShowSignIn(true);
+                }}
+                className="text-sm font-medium text-[#A66A4A] underline"
+              >
+                Sign in with phone + PIN instead
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <button
@@ -171,7 +234,7 @@ export function BookingGuestPanel({
         </button>
         <div className="text-xs text-[#716D64]">
           After submit, you&apos;ll see confirmation. Booking updates may be
-          sent via WhatsApp and email.
+          sent by email.
         </div>
       </div>
     </div>

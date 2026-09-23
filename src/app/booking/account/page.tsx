@@ -9,6 +9,7 @@ import { CreditExpiryBannerStack } from "@/components/CreditExpiryBannerStack";
 import { usePlanPurchase } from "@/hooks/usePlanPurchase";
 import { CompleteNameGate } from "../_components/CompleteNameGate";
 import { AccountBookingHistory } from "../_components/AccountBookingHistory";
+import { ClientPhoneAuthPanel } from "../_components/ClientPhoneAuthPanel";
 import { clientNeedsName } from "@/lib/clientNeedsName";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
 import MagnifyingGlassIcon from "@heroicons/react/24/outline/MagnifyingGlassIcon";
@@ -72,7 +73,7 @@ export default function BookingAccountPage() {
   async function signOut() {
     if (
       !window.confirm(
-        "Sign out of this device? You can sign in again with the same email anytime.",
+        "Sign out of this device? You can sign in again with phone + PIN anytime.",
       )
     ) {
       return;
@@ -107,18 +108,13 @@ export default function BookingAccountPage() {
             <ArrowLeftIcon className="h-4 w-4" />
             Back to booking
           </Link>
-          <div className="rounded-3xl border border-fasea-border bg-white/70 p-8 shadow-sm">
-            <h1 className="font-serif text-2xl font-bold">My account</h1>
-            <p className="mt-2 text-sm text-fasea-secondary">
-              Sign in on the booking page to manage plans.
-            </p>
-            <Link
-              href="/booking"
-              className="mt-6 inline-flex rounded-full bg-fasea-tonal px-6 py-3 text-sm font-medium text-fasea-tertiary hover:brightness-95"
-            >
-              Go to booking
+          <ClientPhoneAuthPanel onAuthed={() => void refreshClient()} />
+          <p className="text-center text-xs text-fasea-secondary">
+            Prefer guest booking?{" "}
+            <Link href="/booking" className="underline">
+              Continue without signing in
             </Link>
-          </div>
+          </p>
         </main>
       </div>
     );
