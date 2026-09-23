@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -9,6 +9,13 @@ type Props = {
   className?: string;
   /** Compact styling for embedding under guest booking details. */
   compact?: boolean;
+  /** Hide the panel's own Back control when the parent renders one. */
+  hideInternalBack?: boolean;
+  /** Lets a parent swap “Back to booking” ↔ “Back” and step the flow. */
+  onStepBackChange?: (state: {
+    canStepBack: boolean;
+    stepBack: () => void;
+  }) => void;
 };
 
 type Step = "phone" | "pin";
@@ -17,7 +24,13 @@ type Step = "phone" | "pin";
  * Phone + 4-digit PIN auth (same as the mobile app).
  * Lookup → existing PIN = login; no PIN = create account.
  */
-export function ClientPhoneAuthPanel({ onAuthed, className, compact }: Props) {
+export function ClientPhoneAuthPanel({
+  onAuthed,
+  className,
+  compact,
+  hideInternalBack,
+  onStepBackChange,
+}: Props) {
   const [step, setStep] = useState<Step>("phone");
   const [countryDial, setCountryDial] = useState("60");
   const [phoneLocal, setPhoneLocal] = useState("");
@@ -33,6 +46,29 @@ export function ClientPhoneAuthPanel({ onAuthed, className, compact }: Props) {
     if (local.startsWith("0")) local = local.slice(1);
     return `+${countryDial}${local}`;
   }
+
+  function back() {
+    setError(null);
+    setInfo(null);
+    if (finding) {
+      setFinding(false);
+      return;
+    }
+    if (step === "pin") {
+      setStep("phone");
+      setPin("");
+      setAccountHasPin(false);
+    }
+  }
+
+  useEffect(() => {
+    onStepBackChange?.({
+      canStepBack: step === "pin" || finding,
+      stepBack: back,
+    });
+    // Parents only need fresh canStepBack when step/finding change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, finding, onStepBackChange]);
 
   async function continueFromPhone() {
     const local = phoneLocal.replace(/[^0-9]/g, "");
@@ -130,20 +166,6 @@ export function ClientPhoneAuthPanel({ onAuthed, className, compact }: Props) {
     }
   }
 
-  function back() {
-    setError(null);
-    setInfo(null);
-    if (finding) {
-      setFinding(false);
-      return;
-    }
-    if (step === "pin") {
-      setStep("phone");
-      setPin("");
-      setAccountHasPin(false);
-    }
-  }
-
   const headline = finding
     ? "Find password"
     : step === "phone"
@@ -157,10 +179,12 @@ export function ClientPhoneAuthPanel({ onAuthed, className, compact }: Props) {
     : step === "phone"
       ? compact
         ? null
-        : "Use your WhatsApp number and 4-digit PIN (same as the app)."
+        : "Use your WhatsApp number"
       : accountHasPin
         ? "Enter the 4-digit PIN for this phone number."
         : "No account found for this number yet. Set a 4-digit PIN to create one.";
+
+  const showInternalBack = !hideInternalBack && (step === "pin" || finding);
 
   return (
     <div
@@ -172,7 +196,7 @@ export function ClientPhoneAuthPanel({ onAuthed, className, compact }: Props) {
     >
       <div className="flex items-start justify-between gap-3">
         <h2 className="font-serif text-xl font-semibold">{headline}</h2>
-        {step === "pin" || finding ? (
+        {showInternalBack ? (
           <button
             type="button"
             onClick={back}

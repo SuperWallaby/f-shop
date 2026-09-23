@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { DateTime } from "luxon";
 import SiteHeader from "@/components/SiteHeader";
@@ -46,6 +46,15 @@ export default function BookingAccountPage() {
   const [loading, setLoading] = useState(true);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [clientMe, setClientMe] = useState<ClientMe>({ authed: false });
+  const [authCanStepBack, setAuthCanStepBack] = useState(false);
+  const authStepBackRef = useRef<(() => void) | null>(null);
+  const onAuthStepBackChange = useCallback(
+    (state: { canStepBack: boolean; stepBack: () => void }) => {
+      setAuthCanStepBack(state.canStepBack);
+      authStepBackRef.current = state.stepBack;
+    },
+    [],
+  );
   const planPurchase = usePlanPurchase({
     enabled: clientMe.authed && !clientNeedsName(clientMe),
   });
@@ -104,14 +113,29 @@ export default function BookingAccountPage() {
       <div className="min-h-screen bg-fasea-canvas text-fasea-tertiary px-6 py-24">
         <SiteHeader />
         <main className="max-w-md mx-auto mt-16 space-y-4">
-          <Link
-            href="/booking"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-fasea-border bg-white/80 text-sm hover:shadow-sm transition"
-          >
-            <ArrowLeftIcon className="h-4 w-4" />
-            Back to booking
-          </Link>
-          <ClientPhoneAuthPanel onAuthed={() => void refreshClient()} />
+          {authCanStepBack ? (
+            <button
+              type="button"
+              onClick={() => authStepBackRef.current?.()}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-fasea-border bg-white/80 text-sm hover:shadow-sm transition"
+            >
+              <ArrowLeftIcon className="h-4 w-4" />
+              Back
+            </button>
+          ) : (
+            <Link
+              href="/booking"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-fasea-border bg-white/80 text-sm hover:shadow-sm transition"
+            >
+              <ArrowLeftIcon className="h-4 w-4" />
+              Back to booking
+            </Link>
+          )}
+          <ClientPhoneAuthPanel
+            hideInternalBack
+            onStepBackChange={onAuthStepBackChange}
+            onAuthed={() => void refreshClient()}
+          />
           <p className="text-center text-xs text-fasea-secondary">
             Prefer guest booking?{" "}
             <Link href="/booking" className="underline">
