@@ -150,7 +150,17 @@ export function ClientPhoneAuthPanel({ onAuthed, className, compact }: Props) {
       ? "Sign in"
       : accountHasPin
         ? "Enter your PIN"
-        : "Set a 4-digit PIN";
+        : "Create your account";
+
+  const subtitle = finding
+    ? "We’ll send a temporary PIN to this WhatsApp number."
+    : step === "phone"
+      ? compact
+        ? null
+        : "Use your WhatsApp number and 4-digit PIN (same as the app)."
+      : accountHasPin
+        ? "Enter the 4-digit PIN for this phone number."
+        : "No account found for this number yet. Set a 4-digit PIN to create one.";
 
   return (
     <div
@@ -173,10 +183,8 @@ export function ClientPhoneAuthPanel({ onAuthed, className, compact }: Props) {
           </button>
         ) : null}
       </div>
-      {!compact && step === "phone" && !finding ? (
-        <p className="mt-1 text-sm text-[#716D64]">
-          Use your WhatsApp number and 4-digit PIN (same as the app).
-        </p>
+      {subtitle ? (
+        <p className="mt-1 text-sm text-[#716D64]">{subtitle}</p>
       ) : null}
 
       <div className="mt-4 grid gap-3">
