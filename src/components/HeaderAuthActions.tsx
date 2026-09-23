@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
+import {
+  CLIENT_AUTH_CHANGED_EVENT,
+} from "@/lib/clientAuthEvents";
 
 type ClientMe = {
   authed: boolean;
@@ -44,32 +47,61 @@ function avatarColor(seed: string): string {
   return `hsl(${h} ${s}% ${l}%)`;
 }
 
+/** Same footprint for loading + Sign in to avoid header layout shift. */
+const SIGN_IN_SHELL =
+  "inline-flex h-9 min-w-[4.75rem] items-center justify-center rounded-full px-4 text-sm font-medium";
+
 export function HeaderAuthActions() {
   const [me, setMe] = useState<ClientMe | null>(null);
 
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/public/client/me", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (res.ok && json?.ok) {
+        setMe(json.data as ClientMe);
+      } else {
+        setMe({ authed: false });
+      }
+    } catch {
+      setMe({ authed: false });
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+    async function loadOnce() {
       try {
         const res = await fetch("/api/public/client/me", {
           credentials: "include",
           cache: "no-store",
         });
         const json = await res.json();
-        if (!cancelled && res.ok && json?.ok) {
+        if (cancelled) return;
+        if (res.ok && json?.ok) {
           setMe(json.data as ClientMe);
-        } else if (!cancelled) {
+        } else {
           setMe({ authed: false });
         }
       } catch {
         if (!cancelled) setMe({ authed: false });
       }
     }
-    void load();
+    void loadOnce();
+    const onAuthChanged = () => {
+      void load();
+    };
+    window.addEventListener(CLIENT_AUTH_CHANGED_EVENT, onAuthChanged);
+    window.addEventListener("focus", onAuthChanged);
     return () => {
       cancelled = true;
+      window.removeEventListener(CLIENT_AUTH_CHANGED_EVENT, onAuthChanged);
+      window.removeEventListener("focus", onAuthChanged);
     };
-  }, []);
+  }, [load]);
 
   const initials = useMemo(() => {
     if (!me?.authed || !me.client) return "";
@@ -84,10 +116,13 @@ export function HeaderAuthActions() {
   if (me === null) {
     return (
       <span
-        className="inline-flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm text-[#716D64]"
+        className={cn(
+          SIGN_IN_SHELL,
+          "border border-[#E8DDD4] bg-white/60 text-transparent select-none",
+        )}
         aria-hidden
       >
-        …
+        Sign in
       </span>
     );
   }
@@ -97,8 +132,8 @@ export function HeaderAuthActions() {
       <Link
         href="/booking/account"
         className={cn(
-          "inline-flex h-9 items-center justify-center rounded-full px-4",
-          "border border-[#E8DDD4] bg-white/90 text-sm font-medium text-[#444444]",
+          SIGN_IN_SHELL,
+          "border border-[#E8DDD4] bg-white/90 text-[#444444]",
           "shadow-sm hover:brightness-95 transition cursor-pointer",
         )}
       >

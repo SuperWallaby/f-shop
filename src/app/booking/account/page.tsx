@@ -11,6 +11,7 @@ import { CompleteNameGate } from "../_components/CompleteNameGate";
 import { AccountBookingHistory } from "../_components/AccountBookingHistory";
 import { ClientPhoneAuthPanel } from "../_components/ClientPhoneAuthPanel";
 import { clientNeedsName } from "@/lib/clientNeedsName";
+import { notifyClientAuthChanged } from "@/lib/clientAuthEvents";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
 import MagnifyingGlassIcon from "@heroicons/react/24/outline/MagnifyingGlassIcon";
 
@@ -61,6 +62,7 @@ export default function BookingAccountPage() {
       // keep session on network errors
     } finally {
       setLoading(false);
+      notifyClientAuthChanged();
     }
   };
 
@@ -82,6 +84,7 @@ export default function BookingAccountPage() {
     try {
       await fetch("/api/public/client/logout", { method: "POST" });
       setClientMe({ authed: false });
+      notifyClientAuthChanged();
     } finally {
       setLogoutLoading(false);
     }

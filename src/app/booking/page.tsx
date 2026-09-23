@@ -30,6 +30,7 @@ import {
 import { normalizeHexColor } from "@/lib/itemColor";
 import { BookingGuestPanel } from "./_components/BookingGuestPanel";
 import type { BookingGuestAuthedClient } from "./_components/BookingGuestPanel";
+import { notifyClientAuthChanged } from "@/lib/clientAuthEvents";
 import type { PublicPlanDto } from "@/lib/planDto";
 import { planDisplayTitle } from "@/lib/planDto";
 import {
@@ -1364,6 +1365,7 @@ function BookingPageInner() {
                   const json = await res.json();
                   if (!res.ok || !json?.ok || !json.data?.authed) {
                     setAuthedClient(null);
+                    notifyClientAuthChanged();
                     return;
                   }
                   const c = json.data.client as {
@@ -1382,8 +1384,10 @@ function BookingPageInner() {
                   setSignUp(false);
                   setPassword("");
                   setSubmitError(null);
+                  notifyClientAuthChanged();
                 } catch {
                   setAuthedClient(null);
+                  notifyClientAuthChanged();
                 }
               }}
             />
