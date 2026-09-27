@@ -7,10 +7,12 @@ import Link from "next/link";
 import { DateTime } from "luxon";
 import ArrowLeftIcon from "@heroicons/react/24/outline/ArrowLeftIcon";
 import MagnifyingGlassIcon from "@heroicons/react/24/outline/MagnifyingGlassIcon";
+import CalendarDaysIcon from "@heroicons/react/24/outline/CalendarDaysIcon";
+import { CancelBookingActions } from "../_components/CancelBookingActions";
 
 type LookupItem = {
   code: string;
-  status: "confirmed" | "cancelled" | "no_show";
+  status: "pending" | "confirmed" | "cancelled" | "no_show";
   dateKey: string;
   startMin: number;
   endMin: number;
@@ -23,6 +25,11 @@ function formatLocalTimeRange(startUtc: string, endUtc: string): string {
   const start = DateTime.fromISO(startUtc, { zone: "utc" }).toLocal();
   const end = DateTime.fromISO(endUtc, { zone: "utc" }).toLocal();
   return `${start.toFormat("h:mm a")} – ${end.toFormat("h:mm a")}`;
+}
+
+function formatBookingDate(dateKey: string): string {
+  const date = DateTime.fromISO(dateKey);
+  return date.isValid ? date.toFormat("ccc, LLL d, yyyy") : dateKey;
 }
 
 export default function BookingCheckPage() {
@@ -289,42 +296,47 @@ export default function BookingCheckPage() {
                   key={`${b.code}-${b.dateKey}-${b.startMin}`}
                   className="rounded-3xl border border-fasea-border bg-white/80 px-5 py-4"
                 >
-                  <div className="flex items-baseline gap-3 flex-wrap">
-                    <div className="text-xs font-mono text-fasea-secondary">#{b.code}</div>
-                    <div className="font-serif text-lg font-semibold">
-                      {b.dateKey} · {formatLocalTimeRange(b.startUtc, b.endUtc)}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[11px] font-mono uppercase tracking-wide text-fasea-secondary">
+                      Booking #{b.code}
                     </div>
                     <span
                       className={cn(
                         "text-[11px] px-2 py-1 rounded-full",
-                        b.status === "confirmed"
+                        b.status === "pending"
+                          ? "bg-[#FFF7E6] text-[#8A5A00]"
+                          : b.status === "confirmed"
                           ? "bg-fasea-tonal text-fasea-tertiary"
                           : "bg-[#F3ECE6] text-fasea-secondary"
                       )}
                     >
-                      {b.status === "confirmed" ? "booked" : "cancelled"}
+                      {b.status === "pending"
+                        ? "pending studio confirmation"
+                        : b.status === "confirmed"
+                          ? "confirmed"
+                          : b.status === "no_show"
+                            ? "no-show"
+                            : "cancelled"}
                     </span>
                   </div>
-                  <div className="text-sm text-[#5C574F] mt-1">
+                  <div className="mt-3 font-serif text-xl font-semibold text-[#444444]">
                     {b.className}
                   </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[#716D64]">
+                    <CalendarDaysIcon className="h-4 w-4" aria-hidden />
+                    <span>{formatBookingDate(b.dateKey)}</span>
+                    <span aria-hidden>·</span>
+                    <span>{formatLocalTimeRange(b.startUtc, b.endUtc)}</span>
+                  </div>
                   {b.status === "confirmed" && (
-                    <button
-                      type="button"
-                      disabled={Boolean(cancellingCode) || loading}
-                      onClick={() => cancelBooking(b.code)}
-                      className="mt-3 px-4 py-2 rounded-full border border-fasea-border bg-[#F3ECE6] text-sm hover:brightness-95 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        {cancellingCode === b.code ? (
-                          <span
-                            className="h-3.5 w-3.5 rounded-full border-2 border-fasea-secondary/30 border-t-fasea-secondary animate-spin"
-                            aria-hidden
-                          />
-                        ) : null}
-                        {cancellingCode === b.code ? "Cancelling…" : "Cancel booking"}
-                      </span>
-                    </button>
+                    <CancelBookingActions
+                      code={b.code}
+                      className={b.className}
+                      whenLabel={`${formatBookingDate(b.dateKey)} · ${formatLocalTimeRange(b.startUtc, b.endUtc)}`}
+                      startUtc={b.startUtc}
+                      cancelling={cancellingCode === b.code}
+                      onCancel={() => cancelBooking(b.code)}
+                    />
                   )}
                 </div>
               ))}

@@ -27,8 +27,6 @@ export type SettingsDoc = {
  whatsappDedupeV1Done?: boolean;
  /** Re-run merge with expanded phone variants (+60 / 60 / 0… / 00…). */
  whatsappDedupeV2Done?: boolean;
- /** Unique client email index is sparse so phone-only accounts are allowed. */
- emailIndexSparseV1?: boolean;
  updatedAt: Date;
 };
 
@@ -97,8 +95,14 @@ export type BookingDb = {
  adminNote?: string;
  // Admin-only: mark bookings you want to pay attention to (star/pin).
  starred?: boolean;
- status: "confirmed" | "cancelled" | "no_show";
+ status: "pending" | "confirmed" | "cancelled" | "no_show";
  createdAt: Date;
+ /** Set when the customer opens the last-step WhatsApp CTA. */
+ dmOpenedAt?: Date;
+ /** Set when an admin confirms a pending booking after the conversation. */
+ confirmedAt?: Date;
+ /** Set after the delayed unfinished-booking email is sent. */
+ pendingReminderEmailSentAt?: Date;
  cancelledAt?: Date;
  noShowAt?: Date;
  reminderSentAt?: Date;
@@ -171,7 +175,8 @@ export type ClientDb = {
  _id?: ObjectId;
  customerKey: string;
  name: string;
- email: string;
+ /** Omitted for phone-only accounts. Unique sparse index ignores missing values. */
+ email?: string;
  whatsapp: string;
  /** Canonical digits (MY 0… → 60…); unique sparse index prevents dup accounts. */
  whatsappDigits?: string;
@@ -188,8 +193,18 @@ export type ClientDb = {
   appleSub?: string;
   /** scrypt-hashed 4-digit PIN for email password login */
   passwordHash?: string;
+  /** Set after a PIN reset until the client chooses a new PIN. */
+  mustChangePassword?: boolean;
   /** App push notifications (promotions / events). Booking alerts always sent when device registered. */
   pushMarketingOptIn?: boolean;
+};
+
+export type AuthRateLimitDb = {
+  _id: string;
+  failures: number;
+  nextAllowedAt: Date;
+  expiresAt: Date;
+  updatedAt: Date;
 };
 
 export type PushTokenDb = {
@@ -428,6 +443,7 @@ export async function getCollections(db?: Db): Promise<{
   shopProducts: Collection<ShopProductDb>;
   sales: Collection<SaleDb>;
   cashTransactions: Collection<CashTransactionDb>;
+  authRateLimits: Collection<AuthRateLimitDb>;
 }> {
   const resolvedDb = db ?? (await getDb());
   return {
@@ -451,6 +467,7 @@ export async function getCollections(db?: Db): Promise<{
   shopProducts: resolvedDb.collection<ShopProductDb>("shopProducts"),
   sales: resolvedDb.collection<SaleDb>("sales"),
   cashTransactions: resolvedDb.collection<CashTransactionDb>("cashTransactions"),
+  authRateLimits: resolvedDb.collection<AuthRateLimitDb>("authRateLimits"),
  };
 }
 
@@ -475,6 +492,7 @@ async function ensureIndexes(db: Db): Promise<void> {
   const shopProducts = db.collection<ShopProductDb>("shopProducts");
   const sales = db.collection<SaleDb>("sales");
   const cashTransactions = db.collection<CashTransactionDb>("cashTransactions");
+  const authRateLimits = db.collection<AuthRateLimitDb>("authRateLimits");
   // const settings = db.collection<SettingsDoc>("settings"); // _id index exists by default
 
  try {
@@ -575,6 +593,10 @@ async function ensureIndexes(db: Db): Promise<void> {
     { settingsId: 1, createdAt: -1 },
     { name: "settings_id_createdAt" }
    ),
+   clients.createIndex(
+    { email: 1 },
+    { unique: true, sparse: true, name: "uniq_client_email" },
+   ),
    clients.createIndex({ customerKey: 1 }, { unique: true, name: "uniq_client_customerKey" }),
    clients.createIndex(
     { whatsappDigits: 1 },
@@ -615,33 +637,16 @@ async function ensureIndexes(db: Db): Promise<void> {
     { kind: 1, occurredAt: -1 },
     { name: "cash_kind_occurredAt" },
    ),
+   authRateLimits.createIndex(
+    { expiresAt: 1 },
+    { expireAfterSeconds: 0, name: "auth_rate_limit_expiresAt" },
+   ),
    creditLedger.createIndex({ saleId: 1 }, { sparse: true, name: "ledger_saleId" }),
    creditLedger.createIndex(
     { expiresAt: 1 },
     { sparse: true, name: "ledger_expiresAt" },
    ),
   ]);
-
-  // Unique email must be sparse so phone-only accounts (no email field) are allowed.
-  try {
-    const indexes = await clients.indexes();
-    const current = indexes.find((idx) => idx.name === "uniq_client_email");
-    if (!current?.sparse) {
-      if (current) await clients.dropIndex("uniq_client_email");
-      await clients.createIndex(
-        { email: 1 },
-        { unique: true, sparse: true, name: "uniq_client_email" },
-      );
-    }
-    const settings = db.collection<SettingsDoc>("settings");
-    await settings.updateOne(
-      { _id: "singleton" },
-      { $set: { emailIndexSparseV1: true, updatedAt: new Date() } },
-      { upsert: true },
-    );
-  } catch (e) {
-    console.error("[db] sparse email index migration failed", e);
-  }
 
   // One-time: merge +60… / 60… / 0… WhatsApp duplicate client accounts.
   try {

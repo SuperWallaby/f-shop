@@ -11,6 +11,8 @@ import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
 import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
+import { sendBookingConfirmedPush } from "@/lib/pushNotifications";
+import { formatKlParts } from "@/lib/bookingMessages";
 import { insertBookingConsume } from "@/lib/credits";
 import { resolveOrCreateBookingClient } from "@/lib/resolveBookingClient";
 
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
     if (exclusiveKey && usesExclusiveTimeBlocking(effectiveCapacity)) {
       const conflict = await bookings.findOne(
         {
-          status: "confirmed",
+          status: { $in: ["pending", "confirmed"] },
           exclusiveKey,
           dateKey: existingSlot.dateKey,
           itemId: { $ne: item._id },
@@ -197,8 +199,14 @@ export async function POST(req: NextRequest) {
         // ignore
       }
 
-      // WhatsApp best-effort
+      // WhatsApp + push best-effort
       try {
+        const parts = formatKlParts({
+          dateKey: updatedSlot.dateKey,
+          startMin: updatedSlot.startMin,
+          endMin: updatedSlot.endMin,
+          tz: BUSINESS_TIME_ZONE,
+        });
         await Promise.all([
           sendBookingConfirmedWhatsApp({
             to: whatsapp,
@@ -221,6 +229,13 @@ export async function POST(req: NextRequest) {
             startMin: updatedSlot.startMin,
             endMin: updatedSlot.endMin,
             businessTimeZone: BUSINESS_TIME_ZONE,
+          }).catch(() => {}),
+          sendBookingConfirmedPush({
+            clientId: linkedClientId,
+            className: item.name,
+            bookingCode: bookingDoc.code ?? "",
+            dateLabel: parts.dateLabel,
+            timeLabel: parts.timeLabel,
           }).catch(() => {}),
         ]);
       } catch {

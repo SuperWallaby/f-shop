@@ -3,12 +3,21 @@ import { MongoServerError } from "mongodb";
 import { getCollections } from "@/lib/db";
 import { clientAuthSignupSchema } from "@/lib/schemas";
 import { getCreditBalance, makeCustomerKey, publicClient } from "@/lib/credits";
-import { findClientsByWhatsapp } from "@/lib/clientMerge";
+import { findClientsByWhatsapp, pickPrimaryClient } from "@/lib/clientMerge";
 import { setClientSessionCookie } from "@/lib/clientSession";
 import { hashPassword } from "@/lib/password";
 import { clientWhatsappFields } from "@/lib/whatsapp";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
 
+function exactEmailRegex(email: string): RegExp {
+  return new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+}
+
+/**
+ * Create / complete account: WhatsApp is primary identity.
+ * Phone + 4-digit PIN. Email/name optional (collected later if missing).
+ * Guest/legacy rows without a PIN can set one here (same UX as new signup).
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
@@ -17,66 +26,48 @@ export async function POST(req: NextRequest) {
       return jsonError("Invalid body", 400, parsed.error.flatten());
     }
 
-    const email = parsed.data.email.trim().toLowerCase();
-    const nameTrim = (parsed.data.name ?? "").trim();
-    const whatsappRaw = (parsed.data.whatsapp ?? "").trim();
-    const waFields = whatsappRaw ? clientWhatsappFields(whatsappRaw) : null;
-    const whatsapp = waFields?.whatsapp ?? "";
+    const email = parsed.data.email?.trim().toLowerCase();
+    const nameTrim = parsed.data.name?.trim() ?? "";
+    const waFields = clientWhatsappFields(parsed.data.whatsapp);
+    if (!waFields) {
+      return jsonError("Valid WhatsApp / phone number is required", 400);
+    }
+    const whatsapp = waFields.whatsapp;
     const passwordHash = await hashPassword(parsed.data.password);
     const now = new Date();
 
     const { clients, creditLedger } = await getCollections();
-    const existing = await clients.findOne({ email });
 
-    if (existing?.passwordHash) {
+    const waMatches = await findClientsByWhatsapp(clients, whatsapp);
+    const byPhone = waMatches.length ? pickPrimaryClient(waMatches) : null;
+
+    // Existing account already has a PIN — must sign in / find password.
+    if (byPhone?.passwordHash) {
       return jsonError(
-        "An account with this email already exists. Please sign in.",
+        "This phone number already has an account. Please sign in or use Find password.",
         409,
+        { code: "whatsapp_taken" },
       );
     }
 
-    if (whatsapp) {
-      const waMatches = await findClientsByWhatsapp(clients, whatsapp);
-      const other = waMatches.find(
-        (c) => !existing?._id || !c._id.equals(existing._id),
-      );
-      if (other) {
-        return jsonError(
-          "This WhatsApp number is already registered to another account. Please sign in or recover that account.",
-          409,
-          {
-            code: "whatsapp_taken",
-            existingClient: {
-              id: other._id.toHexString(),
-              name: other.name,
-              email: other.email,
-              whatsapp: other.whatsapp,
-            },
-          },
-        );
-      }
-    }
-
-    if (existing) {
+    // Guest / admin-created row with no PIN: attach PIN and continue (like signup).
+    if (byPhone && !byPhone.passwordHash) {
       await clients.updateOne(
-        { _id: existing._id },
+        { _id: byPhone._id },
         {
           $set: {
             passwordHash,
-            ...(nameTrim ? { name: nameTrim } : {}),
-            ...(waFields
-              ? {
-                  whatsapp: waFields.whatsapp,
-                  whatsappDigits: waFields.whatsappDigits,
-                }
-              : {}),
+            whatsapp,
+            whatsappDigits: waFields.whatsappDigits,
             updatedAt: now,
             lastLoginAt: now,
+            ...(nameTrim && !(byPhone.name ?? "").trim() ? { name: nameTrim } : {}),
+            ...(email && !(byPhone.email ?? "").trim() ? { email } : {}),
           },
         },
       );
-      const refreshed = await clients.findOne({ _id: existing._id });
-      if (!refreshed) return jsonError("Client not found", 404);
+      const refreshed = await clients.findOne({ _id: byPhone._id });
+      if (!refreshed) return jsonError("Could not update account", 500);
       const balance = await getCreditBalance({
         creditLedger,
         clientId: refreshed._id!,
@@ -92,13 +83,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const byEmail = email
+      ? await clients.findOne({ email: exactEmailRegex(email) })
+      : null;
+    if (byEmail) {
+      return jsonError(
+        "This email is already registered to another phone number.",
+        409,
+        { code: "email_taken" },
+      );
+    }
+
     try {
       const ins = await clients.insertOne({
-        customerKey: makeCustomerKey({ email }),
+        customerKey: makeCustomerKey({ email, whatsapp }),
         name: nameTrim,
-        email,
+        ...(email ? { email } : {}),
         whatsapp,
-        ...(waFields ? { whatsappDigits: waFields.whatsappDigits } : {}),
+        whatsappDigits: waFields.whatsappDigits,
         passwordHash,
         studentStatus: "none" as const,
         createdAt: now,
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
         const msg = String(e.message ?? "");
         if (msg.includes("whatsappDigits")) {
           return jsonError(
-            "This WhatsApp number is already registered. Please sign in or recover that account.",
+            "This phone number is already registered. Please sign in.",
             409,
             { code: "whatsapp_taken" },
           );

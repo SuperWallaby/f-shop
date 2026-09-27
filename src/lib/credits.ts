@@ -230,11 +230,12 @@ export function publicClient(client: { _id?: ObjectId } & ClientDb) {
   return {
     id: client._id?.toHexString() ?? "",
     name: client.name,
-    email: client.email,
+    email: client.email ?? "",
     whatsapp: client.whatsapp,
     studentStatus: client.studentStatus,
     hasPassword: Boolean(client.passwordHash),
-    pushMarketingOptIn: client.pushMarketingOptIn ?? true,
+    mustChangePassword: Boolean(client.mustChangePassword),
+    pushMarketingOptIn: client.pushMarketingOptIn ?? false,
     studentName: client.studentName ?? "",
     studentAge: client.studentAge ?? null,
     schoolName: client.schoolName ?? "",
@@ -541,6 +542,7 @@ export function buildPaymentWhatsappMessage(args: {
   client: ClientDb;
   plan: PlanDb;
   order: Pick<OrderDb, "orderRef" | "amountRm">;
+  firstPurchaseLikely?: boolean;
 }) {
   return [
     "Hi Fasea, I would like to make payment for this package.",
@@ -549,6 +551,12 @@ export function buildPaymentWhatsappMessage(args: {
     `Plan: ${args.plan.title}`,
     `Amount: RM ${args.order.amountRm}`,
     `Credits: ${args.plan.classCount}`,
+    ...(args.firstPurchaseLikely
+      ? [
+          "",
+          "System note: This appears to be the customer's first purchase. Please confirm first-time discount eligibility.",
+        ]
+      : []),
   ].join("\n");
 }
 

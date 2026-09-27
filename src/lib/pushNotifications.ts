@@ -1,3 +1,4 @@
+import { ObjectId } from "mongodb";
 import {
   cert,
   getApp,
@@ -7,6 +8,10 @@ import {
   type ServiceAccount,
 } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
+import {
+  deleteInvalidPushTokens,
+  listPushTokensForClient,
+} from "@/lib/pushTokens";
 
 type PushPayload = {
   title: string;
@@ -35,10 +40,14 @@ export function isPushConfigured(): boolean {
 export async function sendPushToTokens(
   tokens: string[],
   payload: PushPayload,
-): Promise<{ sent: number; failed: number }> {
+): Promise<{ sent: number; failed: number; invalidTokens: string[] }> {
   const unique = [...new Set(tokens.map((t) => t.trim()).filter(Boolean))];
-  if (unique.length === 0) return { sent: 0, failed: 0 };
-  if (!ensureFirebaseAdmin()) return { sent: 0, failed: unique.length };
+  if (unique.length === 0) {
+    return { sent: 0, failed: 0, invalidTokens: [] };
+  }
+  if (!ensureFirebaseAdmin()) {
+    return { sent: 0, failed: unique.length, invalidTokens: [] };
+  }
 
   const res = await getMessaging().sendEachForMulticast({
     tokens: unique,
@@ -58,25 +67,127 @@ export async function sendPushToTokens(
     },
   });
 
+  const invalidTokenCodes = new Set([
+    "messaging/invalid-registration-token",
+    "messaging/registration-token-not-registered",
+  ]);
+  const invalidTokens = res.responses.flatMap((response, index) =>
+    !response.success &&
+    response.error?.code &&
+    invalidTokenCodes.has(response.error.code)
+      ? [unique[index]!]
+      : [],
+  );
   return {
     sent: res.successCount,
     failed: res.failureCount,
+    invalidTokens,
   };
 }
 
+/** Best-effort push to a client's registered devices. */
+export async function notifyClientPush(
+  clientId: ObjectId | null | undefined,
+  payload: PushPayload,
+): Promise<{ sent: number; failed: number }> {
+  if (!clientId) return { sent: 0, failed: 0 };
+  try {
+    const tokens = await listPushTokensForClient(clientId);
+    if (!tokens.length) return { sent: 0, failed: 0 };
+    const result = await sendPushToTokens(tokens, payload);
+    if (result.invalidTokens.length) {
+      await deleteInvalidPushTokens(result.invalidTokens);
+    }
+    return { sent: result.sent, failed: result.failed };
+  } catch {
+    return { sent: 0, failed: 0 };
+  }
+}
+
 export async function sendBookingConfirmedPush(args: {
-  tokens: string[];
+  tokens?: string[];
+  clientId?: ObjectId | null;
   className: string;
   bookingCode: string;
   dateLabel: string;
   timeLabel: string;
 }) {
-  return sendPushToTokens(args.tokens, {
+  const payload: PushPayload = {
     title: "Booking confirmed",
     body: `${args.className} · ${args.dateLabel} ${args.timeLabel}`,
     data: {
       type: "booking_confirmed",
       code: args.bookingCode,
+    },
+  };
+  if (args.clientId) return notifyClientPush(args.clientId, payload);
+  return sendPushToTokens(args.tokens ?? [], payload);
+}
+
+export async function sendBookingCancelledPush(args: {
+  clientId?: ObjectId | null;
+  className: string;
+  bookingCode?: string;
+  dateLabel: string;
+  timeLabel: string;
+}) {
+  return notifyClientPush(args.clientId, {
+    title: "Booking cancelled",
+    body: `${args.className} · ${args.dateLabel} ${args.timeLabel}`,
+    data: {
+      type: "booking_cancelled",
+      code: args.bookingCode ?? "",
+    },
+  });
+}
+
+export async function sendBookingRescheduledPush(args: {
+  clientId?: ObjectId | null;
+  className: string;
+  bookingCode?: string;
+  dateLabel: string;
+  timeLabel: string;
+}) {
+  return notifyClientPush(args.clientId, {
+    title: "Booking updated",
+    body: `New time: ${args.className} · ${args.dateLabel} ${args.timeLabel}`,
+    data: {
+      type: "booking_rescheduled",
+      code: args.bookingCode ?? "",
+    },
+  });
+}
+
+export async function sendClassCancelledPush(args: {
+  clientId?: ObjectId | null;
+  className: string;
+  bookingCode?: string;
+  dateLabel: string;
+  timeLabel: string;
+}) {
+  return notifyClientPush(args.clientId, {
+    title: "Class cancelled",
+    body: `${args.className} on ${args.dateLabel} at ${args.timeLabel} was cancelled`,
+    data: {
+      type: "class_cancelled",
+      code: args.bookingCode ?? "",
+    },
+  });
+}
+
+export async function sendClassChangedPush(args: {
+  clientId?: ObjectId | null;
+  className: string;
+  bookingCode?: string;
+  dateLabel: string;
+  timeLabel: string;
+}) {
+  return notifyClientPush(args.clientId, {
+    title: "Class time updated",
+    body: `${args.className} is now ${args.dateLabel} ${args.timeLabel}`,
+    data: {
+      type: "class_changed",
+      code: args.bookingCode ?? "",
     },
   });
 }

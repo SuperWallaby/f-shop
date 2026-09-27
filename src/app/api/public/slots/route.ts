@@ -61,7 +61,11 @@ export async function GET(req: NextRequest) {
     if (exclusiveKeys.length > 0) {
       const bs = await bookings
         .find(
-          { dateKey, status: "confirmed", exclusiveKey: { $in: exclusiveKeys } },
+          {
+            dateKey,
+            status: { $in: ["pending", "confirmed"] },
+            exclusiveKey: { $in: exclusiveKeys },
+          },
           { projection: { _id: 0, exclusiveKey: 1, itemId: 1, startMin: 1, endMin: 1 } }
         )
         .toArray();

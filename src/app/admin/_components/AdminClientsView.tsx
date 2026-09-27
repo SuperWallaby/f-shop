@@ -151,7 +151,9 @@ function BookingStatusPill({ status }: { status: string }) {
           ? "Cancelled"
           : status;
   const cls =
-    status === "confirmed"
+    status === "pending"
+      ? "bg-[#FFF7E6] text-[#8A5A00] border-[#F2D3A2]"
+      : status === "confirmed"
       ? "bg-[#E8F5EE] text-[#1F6B3C] border-[#B8DCC6]"
       : status === "cancelled"
         ? "bg-[#F5F5F4] text-[#716D64] border-[#E8DDD4]"

@@ -98,7 +98,7 @@ export async function POST(
       const saleDoc: SaleDb = {
         soldAt: businessAt,
         clientId,
-        clientName: client.name || client.email,
+        clientName: client.name || client.email || "",
         clientEmail: client.email || undefined,
         clientWhatsapp: client.whatsapp || undefined,
         saleKind: "plan",

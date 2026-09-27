@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { DateTime } from "luxon";
 import { cn } from "@/lib/cn";
+import { CancelBookingActions } from "./CancelBookingActions";
+import { CANCEL_NOTICE_HOURS } from "@/lib/cancelPolicy";
 
 type BookingRow = {
   id: string;
   code: string;
-  status: "confirmed" | "cancelled" | "no_show";
+  status: "pending" | "confirmed" | "cancelled" | "no_show";
   dateKey: string;
   className: string;
   startUtc: string;
@@ -24,6 +26,7 @@ function formatWhen(startUtc: string, endUtc: string): string {
 }
 
 function statusLabel(status: BookingRow["status"]): string {
+  if (status === "pending") return "Pending";
   if (status === "confirmed") return "Booked";
   if (status === "cancelled") return "Cancelled";
   return "No-show";
@@ -61,13 +64,6 @@ export function AccountBookingHistory() {
   }, [load]);
 
   async function requestCancel(b: BookingRow) {
-    if (
-      !window.confirm(
-        `Cancel booking #${b.code}?\n${b.className}\n${formatWhen(b.startUtc, b.endUtc)}\n\nCancellations are allowed up to 6 hours before the session.`,
-      )
-    ) {
-      return;
-    }
     setCancellingCode(b.code);
     setError(null);
     try {
@@ -95,8 +91,9 @@ export function AccountBookingHistory() {
         <div>
           <h2 className="font-serif text-xl font-semibold">Booking history</h2>
           <p className="mt-1 text-sm text-fasea-secondary">
-            Upcoming and past sessions. You can cancel at least 6 hours before
-            start.
+            Upcoming and past sessions. You can cancel here until{" "}
+            {CANCEL_NOTICE_HOURS} hours before class. Inside that window,
+            message us on WhatsApp and pay the late fee.
           </p>
         </div>
         <button
@@ -134,7 +131,9 @@ export function AccountBookingHistory() {
                     <span
                       className={cn(
                         "text-[11px] px-2.5 py-1 rounded-full font-medium whitespace-nowrap",
-                        b.status === "confirmed"
+                        b.status === "pending"
+                          ? "bg-[#FFF7E6] text-[#8A5A00]"
+                          : b.status === "confirmed"
                           ? "bg-[#2F6B4F] text-white"
                           : b.status === "cancelled"
                             ? "bg-[#A66A4A] text-white"
@@ -151,27 +150,17 @@ export function AccountBookingHistory() {
                     {formatWhen(b.startUtc, b.endUtc)}
                   </div>
                 </div>
-                {b.status === "confirmed" ? (
-                  <div className="shrink-0 text-right">
-                    <button
-                      type="button"
-                      disabled={!b.canCancel || cancellingCode === b.code}
-                      title={b.cancelBlockedReason ?? undefined}
-                      onClick={() => void requestCancel(b)}
-                      className="text-xs underline text-[#A66A4A] hover:text-[#444444] disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      {cancellingCode === b.code
-                        ? "Cancelling…"
-                        : "Request cancel"}
-                    </button>
-                    {!b.canCancel && b.cancelBlockedReason ? (
-                      <div className="mt-1 max-w-[11rem] text-[10px] leading-snug text-fasea-secondary">
-                        Within 6h of start
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
               </div>
+              {b.status === "confirmed" ? (
+                <CancelBookingActions
+                  code={b.code}
+                  className={b.className || "Class"}
+                  whenLabel={formatWhen(b.startUtc, b.endUtc)}
+                  startUtc={b.startUtc}
+                  cancelling={cancellingCode === b.code}
+                  onCancel={() => requestCancel(b)}
+                />
+              ) : null}
             </li>
           ))}
         </ul>

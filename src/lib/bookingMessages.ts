@@ -37,7 +37,8 @@ export function buildCustomerBookingConfirmationMessage(args: {
     `Please bring grip socks, wear comfortable attire, and bring a water bottle.\n` +
     `Kindly arrive 10–15 minutes earlier before class.\n\n` +
     `✨ Cancellation & No-Show Policy:\n` +
-    `• Free cancellation or reschedule at least 12 hours before class\n` +
+    `• Free cancellation at least 10 hours before class\n` +
+    `• Reschedule at least 6 hours before class\n` +
     `• Group class: RM10 (late cancellation / no-show)\n` +
     `• Private session: RM20 (late cancellation / no-show)\n` +
     `• Fee applies when the slot remains unused\n\n` +

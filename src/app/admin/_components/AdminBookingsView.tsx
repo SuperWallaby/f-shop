@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { DateTime } from "luxon";
 import EllipsisHorizontalIcon from "@heroicons/react/20/solid/EllipsisHorizontalIcon";
 import { cn } from "@/lib/cn";
@@ -14,11 +21,10 @@ import {
 } from "./AdminRescheduleBookingModal";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 
-export function AdminBookingsView() {
-  const [q, setQ] = useState("");
+export function AdminBookingsView(props: { initialQuery?: string } = {}) {
+  const [q, setQ] = useState(props.initialQuery ?? "");
   const [dateKey, setDateKey] = useState("");
   const [detachedOnly, setDetachedOnly] = useState(false);
-  const [starredOnly, setStarredOnly] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
   const [sortMode, setSortMode] = useState<"latest_booking" | "closest_class">(
     "latest_booking"
@@ -30,6 +36,10 @@ export function AdminBookingsView() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const PAGE_SIZE = 30;
@@ -39,7 +49,6 @@ export function AdminBookingsView() {
   const qRef = useRef(q);
   const dateKeyRef = useRef(dateKey);
   const detachedOnlyRef = useRef(detachedOnly);
-  const starredOnlyRef = useRef(starredOnly);
   const todayOnlyRef = useRef(todayOnly);
   const sortModeRef = useRef(sortMode);
   const nextCursorRef = useRef(nextCursor);
@@ -49,7 +58,6 @@ export function AdminBookingsView() {
   useEffect(() => void (qRef.current = q), [q]);
   useEffect(() => void (dateKeyRef.current = dateKey), [dateKey]);
   useEffect(() => void (detachedOnlyRef.current = detachedOnly), [detachedOnly]);
-  useEffect(() => void (starredOnlyRef.current = starredOnly), [starredOnly]);
   useEffect(() => void (todayOnlyRef.current = todayOnly), [todayOnly]);
   useEffect(() => void (sortModeRef.current = sortMode), [sortMode]);
   useEffect(() => void (nextCursorRef.current = nextCursor), [nextCursor]);
@@ -68,16 +76,12 @@ export function AdminBookingsView() {
       q.trim().length > 0 ||
       dateKey.trim().length > 0 ||
       detachedOnly ||
-      starredOnly ||
       todayOnly
     );
-  }, [q, dateKey, detachedOnly, starredOnly, todayOnly]);
+  }, [q, dateKey, detachedOnly, todayOnly]);
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
-      // Always keep starred items on top
-      if (a.starred !== b.starred) return Number(b.starred) - Number(a.starred);
-
       if (sortMode === "latest_booking") {
         const ta = Number.isFinite(Date.parse(a.createdAt)) ? Date.parse(a.createdAt) : 0;
         const tb = Number.isFinite(Date.parse(b.createdAt)) ? Date.parse(b.createdAt) : 0;
@@ -107,7 +111,6 @@ export function AdminBookingsView() {
     q?: string;
     dateKey?: string;
     detachedOnly?: boolean;
-    starredOnly?: boolean;
     todayOnly?: boolean;
     sortMode?: typeof sortMode;
     cursor?: string;
@@ -116,13 +119,11 @@ export function AdminBookingsView() {
     const qv = (opts?.q ?? qRef.current).trim();
     const dkv = (opts?.dateKey ?? dateKeyRef.current).trim();
     const detachedV = opts?.detachedOnly ?? detachedOnlyRef.current;
-    const starredV = opts?.starredOnly ?? starredOnlyRef.current;
     const todayV = opts?.todayOnly ?? todayOnlyRef.current;
     const sortV = opts?.sortMode ?? sortModeRef.current;
     if (qv) params.set("q", qv);
     if (dkv) params.set("dateKey", dkv);
     if (detachedV) params.set("detached", "true");
-    if (starredV) params.set("starred", "true");
     if (todayV) params.set("todayOnly", "true");
     params.set("sort", sortV);
     params.set("limit", String(PAGE_SIZE));
@@ -134,7 +135,6 @@ export function AdminBookingsView() {
     q?: string;
     dateKey?: string;
     detachedOnly?: boolean;
-    starredOnly?: boolean;
     todayOnly?: boolean;
     sortMode?: typeof sortMode;
     cursor?: string;
@@ -169,7 +169,6 @@ export function AdminBookingsView() {
     q?: string;
     dateKey?: string;
     detachedOnly?: boolean;
-    starredOnly?: boolean;
     todayOnly?: boolean;
     sortMode?: typeof sortMode;
   }) {
@@ -189,18 +188,34 @@ export function AdminBookingsView() {
   useEffect(() => {
     if (!openMenuId) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) {
+      const target = e.target as Element | null;
+      const clickedTrigger = target?.closest(
+        `[data-booking-menu-trigger="${openMenuId}"]`,
+      );
+      if (!menuRef.current?.contains(e.target as Node) && !clickedTrigger) {
         setOpenMenuId(null);
+        setMenuPosition(null);
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpenMenuId(null);
+      if (e.key === "Escape") {
+        setOpenMenuId(null);
+        setMenuPosition(null);
+      }
+    };
+    const closeOnViewportMove = () => {
+      setOpenMenuId(null);
+      setMenuPosition(null);
     };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", closeOnViewportMove);
+    window.addEventListener("scroll", closeOnViewportMove, true);
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", closeOnViewportMove);
+      window.removeEventListener("scroll", closeOnViewportMove, true);
     };
   }, [openMenuId]);
 
@@ -265,6 +280,21 @@ export function AdminBookingsView() {
     }
   }
 
+  async function confirmPendingBookingFromList(bookingId: string) {
+    const ok = window.confirm(
+      "Confirm this pending booking after checking the conversation?",
+    );
+    if (!ok) return;
+    const res = await fetch(
+      `/api/admin/bookings/${encodeURIComponent(bookingId)}/confirm`,
+      { method: "POST" },
+    );
+    const json = await res.json();
+    if (!res.ok || !json?.ok) {
+      throw new Error(json?.error?.message ?? "Failed to confirm booking");
+    }
+  }
+
   async function deleteCancelledBookingFromList(bookingId: string) {
     const ok = window.confirm("Delete this cancelled booking? This cannot be undone.");
     if (!ok) return;
@@ -302,22 +332,35 @@ export function AdminBookingsView() {
     setItems((prev) => prev.map((b) => (b.id === bookingId ? { ...b, adminNote: note } : b)));
   }
 
-  async function setStarred(bookingId: string, next: boolean) {
-    // optimistic UI
-    setItems((prev) => prev.map((b) => (b.id === bookingId ? { ...b, starred: next } : b)));
-    try {
-      const res = await fetch(`/api/admin/bookings/${encodeURIComponent(bookingId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ starred: next }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json?.ok) throw new Error(json?.error?.message ?? "Failed to update star");
-    } catch (e) {
-      // rollback on failure
-      setItems((prev) => prev.map((b) => (b.id === bookingId ? { ...b, starred: !next } : b)));
-      throw e;
+  function toggleBookingMenu(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    booking: BookingListItem,
+  ) {
+    if (openMenuId === booking.id) {
+      setOpenMenuId(null);
+      setMenuPosition(null);
+      return;
     }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 184;
+    const menuHeight =
+      booking.status === "confirmed"
+        ? booking.detached
+          ? 96
+          : 136
+        : booking.status === "pending"
+          ? 96
+          : 52;
+    const top =
+      rect.bottom + 4 + menuHeight > window.innerHeight - 8
+        ? Math.max(8, rect.top - menuHeight - 4)
+        : rect.bottom + 4;
+    const left = Math.max(
+      8,
+      Math.min(rect.left, window.innerWidth - menuWidth - 8),
+    );
+    setMenuPosition({ top, left });
+    setOpenMenuId(booking.id);
   }
 
   return (
@@ -352,7 +395,6 @@ export function AdminBookingsView() {
                   q,
                   dateKey,
                   detachedOnly,
-                  starredOnly,
                   todayOnly,
                   sortMode,
                 });
@@ -389,7 +431,6 @@ export function AdminBookingsView() {
               q,
               dateKey,
               detachedOnly,
-              starredOnly,
               todayOnly,
               sortMode,
             })
@@ -405,14 +446,12 @@ export function AdminBookingsView() {
               setQ("");
               setDateKey("");
               setDetachedOnly(false);
-              setStarredOnly(false);
               setTodayOnly(false);
               setSortMode("latest_booking");
               search({
                 q: "",
                 dateKey: "",
                 detachedOnly: false,
-                starredOnly: false,
                 todayOnly: false,
                 sortMode: "latest_booking",
               });
@@ -429,11 +468,6 @@ export function AdminBookingsView() {
           checked={detachedOnly}
           onCheckedChange={setDetachedOnly}
           label="Unassigned"
-        />
-        <Switch
-          checked={starredOnly}
-          onCheckedChange={setStarredOnly}
-          label="Starred"
         />
         <Switch
           checked={todayOnly}
@@ -459,14 +493,13 @@ export function AdminBookingsView() {
           <table className="min-w-[1080px] w-full text-sm text-left">
             <thead>
               <tr className="border-b border-[#E8DDD4] bg-[#FAF8F6]/80 text-[11px] font-medium uppercase tracking-wide text-[#716D64]">
-                <th className="px-3 py-2.5 font-medium w-10" />
+                <th className="px-3 py-2.5 font-medium w-20">Actions</th>
                 <th className="px-3 py-2.5 font-medium">When</th>
                 <th className="px-3 py-2.5 font-medium">Code</th>
                 <th className="px-3 py-2.5 font-medium">Client</th>
                 <th className="px-3 py-2.5 font-medium">Class</th>
                 <th className="px-3 py-2.5 font-medium">Status</th>
                 <th className="px-3 py-2.5 font-medium min-w-[200px]">Memo</th>
-                <th className="px-3 py-2.5 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -478,7 +511,9 @@ export function AdminBookingsView() {
                 );
                 const rel = when.isValid ? when.toRelative({ base: now }) : null;
                 const statusLabel =
-                  b.status === "confirmed"
+                  b.status === "pending"
+                    ? "pending"
+                    : b.status === "confirmed"
                     ? "booked"
                     : b.status === "no_show"
                       ? "no-show"
@@ -490,31 +525,28 @@ export function AdminBookingsView() {
                     className={cn(
                       "border-b border-[#E8DDD4]/60 last:border-0 align-top",
                       isPast && "opacity-70",
-                      b.starred && "bg-[#FAF8F6]/80",
                     )}
                   >
-                    <td className="px-2 py-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStarred(b.id, !b.starred).catch((err) =>
-                            setError(
-                              err instanceof Error
-                                ? err.message
-                                : "Failed to update star",
-                            ),
-                          );
-                        }}
-                        className={cn(
-                          "inline-flex h-9 w-9 items-center justify-center rounded-full text-base cursor-pointer",
-                          b.starred
-                            ? "text-[#A66A4A]"
-                            : "text-[#C4BBB3] hover:text-[#716D64]",
-                        )}
-                        aria-label={b.starred ? "Unstar" : "Star"}
-                      >
-                        ★
-                      </button>
+                    <td className="px-3 py-3">
+                      {b.status === "pending" ||
+                      b.status === "confirmed" ||
+                      b.status === "cancelled" ? (
+                        <button
+                          type="button"
+                          data-booking-menu-trigger={b.id}
+                          onClick={(event) => toggleBookingMenu(event, b)}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#E8DDD4] bg-white text-[#716D64] hover:bg-[#FAF8F6] hover:text-[#444444] cursor-pointer"
+                          aria-label="Booking actions"
+                          aria-expanded={openMenuId === b.id}
+                        >
+                          <EllipsisHorizontalIcon
+                            className="h-5 w-5"
+                            aria-hidden
+                          />
+                        </button>
+                      ) : (
+                        <span className="text-xs text-[#716D64]">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap">
                       <div className="font-medium text-[#444444]">
@@ -561,7 +593,9 @@ export function AdminBookingsView() {
                         <span
                           className={cn(
                             "text-[10px] px-2 py-0.5 rounded-full border",
-                            b.status === "confirmed"
+                            b.status === "pending"
+                              ? "bg-[#FFF7E6] text-[#8A5A00] border-[#F2D3A2]"
+                              : b.status === "confirmed"
                               ? "bg-[#E8F5EE] text-[#1F6B3C] border-[#B8DCC6]"
                               : b.status === "no_show"
                                 ? "bg-[#FCE8E6] text-[#B42318] border-[#F1B3B0]"
@@ -603,25 +637,72 @@ export function AdminBookingsView() {
                         }}
                       />
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      {(b.status === "confirmed" || b.status === "cancelled") ? (
-                        <div className="relative inline-flex justify-end" ref={openMenuId === b.id ? menuRef : undefined}>
+                    <td className="hidden">
+                      {(b.status === "pending" ||
+                        b.status === "confirmed" ||
+                        b.status === "cancelled") ? (
+                        <div className="relative inline-flex justify-end">
                           <button
                             type="button"
-                            onClick={() =>
-                              setOpenMenuId((prev) =>
-                                prev === b.id ? null : b.id,
-                              )
-                            }
+                            data-booking-menu-trigger={b.id}
+                            onClick={(event) => toggleBookingMenu(event, b)}
                             className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[#E8DDD4] bg-white text-[#716D64] hover:bg-[#FAF8F6] hover:text-[#444444] cursor-pointer"
                             aria-label="Booking actions"
                             aria-expanded={openMenuId === b.id}
                           >
                             <EllipsisHorizontalIcon className="h-5 w-5" aria-hidden />
                           </button>
-                          {openMenuId === b.id ? (
-                            <div className="absolute right-0 top-full z-50 mt-1 min-w-[11.5rem] overflow-hidden rounded-2xl border border-[#E8DDD4] bg-white py-1 shadow-[0_8px_24px_rgba(78,56,48,0.12)]">
-                              {b.status === "confirmed" ? (
+                          {openMenuId === b.id && menuPosition
+                            ? createPortal(
+                            <div
+                              ref={menuRef}
+                              className="fixed z-[100] overflow-hidden rounded-2xl border border-[#E8DDD4] bg-white py-1 shadow-[0_8px_24px_rgba(78,56,48,0.18)]"
+                              style={{
+                                top: menuPosition.top,
+                                left: menuPosition.left,
+                                width: 184,
+                              }}
+                            >
+                              {b.status === "pending" ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="block w-full px-3 py-2.5 text-left text-sm font-medium text-[#2F6B4F] hover:bg-[#EDF7F0] cursor-pointer"
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      confirmPendingBookingFromList(b.id)
+                                        .then(() => search())
+                                        .catch((err) =>
+                                          setError(
+                                            err instanceof Error
+                                              ? err.message
+                                              : "Failed to confirm booking",
+                                          ),
+                                        );
+                                    }}
+                                  >
+                                    Confirm booking
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="block w-full px-3 py-2.5 text-left text-sm text-[#B42318] hover:bg-[#FCE8E6] cursor-pointer"
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      cancelBookingFromList(b.id)
+                                        .then(() => search())
+                                        .catch((err) =>
+                                          setError(
+                                            err instanceof Error
+                                              ? err.message
+                                              : "Failed to release spot",
+                                          ),
+                                        );
+                                    }}
+                                  >
+                                    Release spot
+                                  </button>
+                                </>
+                              ) : b.status === "confirmed" ? (
                                 <>
                                   <button
                                     type="button"
@@ -692,8 +773,10 @@ export function AdminBookingsView() {
                                   Delete booking
                                 </button>
                               )}
-                            </div>
-                          ) : null}
+                            </div>,
+                              document.body,
+                            )
+                            : null}
                         </div>
                       ) : (
                         <span className="text-xs text-[#716D64]">—</span>

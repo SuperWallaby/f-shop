@@ -3,14 +3,12 @@ import { MongoServerError, ObjectId } from "mongodb";
 import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "../../_utils/http";
 import { createBookingSchema } from "@/lib/schemas";
-import { sendBookingCreatedEmail } from "@/lib/email";
 import type { BookingDb } from "@/lib/db";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { getBookingRulesFromSettings, isSlotBookableByRules } from "@/lib/bookingRules";
 import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
-import { sendAdminWhatsAppNotification, sendBookingConfirmedWhatsApp } from "@/lib/twilioWhatsApp";
 import {
   backfillBookingConsumesForClient,
   insertBookingConsume,
@@ -18,7 +16,10 @@ import {
 } from "@/lib/credits";
 import { hashPassword } from "@/lib/password";
 import { setClientSessionCookie } from "@/lib/clientSession";
-import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
+import {
+  getClientIdFromRequest,
+  guardClientAccessIfAuthenticated,
+} from "@/app/api/_utils/clientAuth";
 import { findClientsByWhatsapp } from "@/lib/clientMerge";
 import { clientWhatsappFields, normalizeWhatsapp } from "@/lib/whatsapp";
 import {
@@ -36,8 +37,15 @@ class HttpError extends Error {
   }
 }
 
+function exactEmailRegex(email: string): RegExp {
+  return new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+}
+
 export async function POST(req: NextRequest) {
   try {
+    const forcedChange = await guardClientAccessIfAuthenticated(req);
+    if (forcedChange) return forcedChange;
+
     const body = await req.json().catch(() => null);
     const parsed = createBookingSchema.safeParse(body);
     if (!parsed.success) {
@@ -89,7 +97,9 @@ export async function POST(req: NextRequest) {
       const nameTrim = name.trim();
       const waFields = clientWhatsappFields(whatsapp);
       const waNorm = waFields?.whatsapp ?? normalizeWhatsapp(whatsapp);
-      const existing = await clients.findOne({ email: emailLower });
+      const existing = await clients.findOne({
+        email: exactEmailRegex(emailLower),
+      });
       if (existing?.passwordHash) {
         return jsonError(
           "An account with this email already exists. Sign in instead, or book as a guest.",
@@ -118,6 +128,10 @@ export async function POST(req: NextRequest) {
               passwordHash,
               name: nameTrim || existing.name,
               whatsapp: waNorm,
+              customerKey: makeCustomerKey({
+                email: emailLower,
+                whatsapp: waNorm,
+              }),
               ...(waFields
                 ? { whatsappDigits: waFields.whatsappDigits }
                 : {}),
@@ -130,7 +144,10 @@ export async function POST(req: NextRequest) {
       } else {
         try {
           const ins = await clients.insertOne({
-            customerKey: makeCustomerKey({ email: emailLower }),
+            customerKey: makeCustomerKey({
+              email: emailLower,
+              whatsapp: waNorm,
+            }),
             name: nameTrim,
             email: emailLower,
             whatsapp: waNorm,
@@ -188,7 +205,7 @@ export async function POST(req: NextRequest) {
       // Back-compat + correctness: enforce overlap-based exclusivity even if locks are not yet seeded.
       const conflict = await bookings.findOne(
         {
-          status: "confirmed",
+          status: { $in: ["pending", "confirmed"] },
           exclusiveKey,
           dateKey: existingSlot.dateKey,
           itemId: { $ne: itemRef._id },
@@ -322,7 +339,7 @@ export async function POST(req: NextRequest) {
       ...(marketingOptIn
         ? { marketingOptIn: true, marketingOptInAt: now }
         : {}),
-      status: "confirmed" as const,
+      status: "pending" as const,
       createdAt: now,
       dateKey: slotRef.dateKey,
       startMin: slotRef.startMin,
@@ -368,6 +385,9 @@ export async function POST(req: NextRequest) {
           clientId: linkedClientId,
           bookingId: result.insertedId,
           now,
+          // A pending booking holds the seat, so reserve its credit too.
+          // Releasing the booking restores it through booking_cancel_refund.
+          note: "Credit reserved for pending booking",
         });
       } catch (ledgerErr) {
         await bookings.deleteOne({ _id: result.insertedId });
@@ -376,55 +396,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    try {
-      await sendBookingCreatedEmail({
-        to: emailTrim,
-        name: nameTrim,
-        classTypeName: itemRef.name,
-        whatsapp,
-        bookingCode: bookingDoc.code,
-        dateKey: slotRef.dateKey,
-        startMin: slotRef.startMin,
-        endMin: slotRef.endMin,
-        businessTimeZone: BUSINESS_TIME_ZONE,
-      });
-    } catch {
-      // ignore
-    }
-
-    try {
-      await Promise.all([
-        sendBookingConfirmedWhatsApp({
-          to: whatsapp,
-          name: nameTrim,
-          classTypeName: itemRef.name,
-          bookingCode: bookingDoc.code,
-          dateKey: slotRef.dateKey,
-          startMin: slotRef.startMin,
-          endMin: slotRef.endMin,
-          businessTimeZone: BUSINESS_TIME_ZONE,
-        }).catch(() => {}),
-        sendAdminWhatsAppNotification({
-          kind: "booking_confirmed",
-          name: nameTrim,
-          email: emailTrim,
-          whatsapp,
-          bookingCode: bookingDoc.code,
-          classTypeName: itemRef.name,
-          dateKey: slotRef.dateKey,
-          startMin: slotRef.startMin,
-          endMin: slotRef.endMin,
-          businessTimeZone: BUSINESS_TIME_ZONE,
-        }).catch(() => {}),
-      ]);
-    } catch {
-      // ignore
-    }
-
     const payload = jsonOk({
       bookingId: result.insertedId.toHexString(),
       bookingCode: bookingDoc.code,
       slotId: slotRef._id.toHexString(),
+      status: "pending",
       signedUp: Boolean(signupClientId),
     });
     if (signupClientId) {

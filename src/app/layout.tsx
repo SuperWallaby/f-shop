@@ -4,6 +4,7 @@ import { Playfair_Display } from "next/font/google";
 import Script from "next/script";
 import PromotionModal from "@/components/PromotionModal";
 import KBeautyFloatingBadge from "@/components/KBeautyFloatingBadge";
+import PendingBookingToast from "@/components/PendingBookingToast";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -31,6 +32,7 @@ export default function RootLayout({
     >
       <body className="antialiased" suppressHydrationWarning>
         {children}
+        <PendingBookingToast />
         <PromotionModal />
         <KBeautyFloatingBadge />
       </body>

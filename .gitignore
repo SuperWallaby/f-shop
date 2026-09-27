@@ -17,6 +17,10 @@
 /.next/
 /out/
 
+# Flutter local artifacts. Vercel only reads the root ignore file.
+/apps/mobile/build/
+/apps/mobile/.dart_tool/
+
 # production
 /build
 

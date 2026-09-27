@@ -4,6 +4,7 @@ This repo already exposes job endpoints:
 
 - `POST /api/admin/jobs/auto-cancel?horizonHours=48`
 - `POST /api/admin/jobs/reminders`
+- `POST /api/admin/jobs/pending-booking-reminders`
 
 This Cloudflare Worker triggers those endpoints on schedules (UTC).
 
@@ -18,6 +19,8 @@ There are **two places** you must configure values:
 
 - **Vercel (your Next.js app envs)**: the API endpoints validate `x-job-secret`.
   - `AUTO_CANCEL_JOB_SECRET`
+  - `PENDING_BOOKING_REMINDER_MINUTES` (optional, defaults to `30`)
+  - `PUBLIC_SITE_URL` (optional, defaults to `https://fasea.studio`)
 
 - **Cloudflare Worker secrets**: the Worker needs these to call Vercel.
   - `TARGET_BASE_URL` (your Vercel URL)
@@ -59,6 +62,6 @@ npm run dev:worker
 
 Configured in `wrangler.toml`:
 
-- Auto-cancel: every 10 minutes (`*/10 * * * *`)
+- Auto-cancel and unfinished-booking email reminders: every 10 minutes (`*/10 * * * *`)
 - Reminders: 01:00 UTC daily (`0 1 * * *`) → **09:00 KL (UTC+8)**
 

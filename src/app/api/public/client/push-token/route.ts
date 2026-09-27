@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
 import { pushTokenRegisterSchema } from "@/lib/schemas";
-import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
+import { requireClientReady } from "@/app/api/_utils/clientAuth";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
 import { deletePushToken, upsertPushToken } from "@/lib/pushTokens";
 
 export async function POST(req: NextRequest) {
-  const clientId = getClientIdFromRequest(req);
-  if (!clientId) return jsonError("Client login required", 401);
+  const { clientId, response } = await requireClientReady(req);
+  if (response || !clientId) return response;
 
   try {
     const body = await req.json().catch(() => null);
@@ -27,8 +27,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const clientId = getClientIdFromRequest(req);
-  if (!clientId) return jsonError("Client login required", 401);
+  const { clientId, response } = await requireClientReady(req);
+  if (response || !clientId) return response;
 
   try {
     const body = await req.json().catch(() => ({}));

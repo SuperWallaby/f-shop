@@ -98,7 +98,7 @@ export async function DELETE(
     if (!client) return jsonError("Client not found", 404);
 
     const typed = parsed.data.confirmEmail.trim().toLowerCase();
-    if (typed !== client.email.trim().toLowerCase()) {
+    if (typed !== (client.email ?? "").trim().toLowerCase()) {
       return jsonError("Confirmation email does not match this client", 400);
     }
 

@@ -2,12 +2,12 @@ import { NextRequest } from "next/server";
 import { getCollections } from "@/lib/db";
 import { pushPreferencesSchema } from "@/lib/schemas";
 import { getCreditBalance, publicClient } from "@/lib/credits";
-import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
+import { requireClientReady } from "@/app/api/_utils/clientAuth";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
 
 export async function PATCH(req: NextRequest) {
-  const clientId = getClientIdFromRequest(req);
-  if (!clientId) return jsonError("Client login required", 401);
+  const { clientId, response } = await requireClientReady(req);
+  if (response || !clientId) return response;
 
   try {
     const body = await req.json().catch(() => null);

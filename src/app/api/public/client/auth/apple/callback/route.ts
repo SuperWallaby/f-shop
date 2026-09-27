@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonError } from "@/app/api/_utils/http";
 import { MongoServerError } from "mongodb";
 import * as jose from "jose";
 import { getCollections } from "@/lib/db";
@@ -12,6 +13,7 @@ import {
   readOAuthReturnTo,
 } from "@/lib/oauthReturn";
 
+const phonePinOnlyAuth = (): boolean => true;
 const STATE_COOKIE = "apple_oauth_state";
 
 const APPLE_JWKS = jose.createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
@@ -201,6 +203,9 @@ async function handleAppleCallback(req: NextRequest, form: Record<string, string
 }
 
 export async function GET(req: NextRequest) {
+  if (phonePinOnlyAuth()) {
+    return jsonError("Apple sign-in is no longer available. Use phone and PIN.", 410);
+  }
   try {
     return await handleAppleCallback(req, {});
   } catch {
@@ -211,6 +216,9 @@ export async function GET(req: NextRequest) {
 
 /** Apple may POST (form_post) if response_mode changes in Developer settings. */
 export async function POST(req: NextRequest) {
+  if (phonePinOnlyAuth()) {
+    return jsonError("Apple sign-in is no longer available. Use phone and PIN.", 410);
+  }
   try {
     const ct = req.headers.get("content-type") ?? "";
     if (!ct.includes("application/x-www-form-urlencoded")) {

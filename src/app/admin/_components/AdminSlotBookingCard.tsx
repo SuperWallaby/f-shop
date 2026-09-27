@@ -14,6 +14,13 @@ const fieldClass =
   "w-full rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]";
 
 function statusBadge(status: SlotBooking["status"]) {
+  if (status === "pending") {
+    return (
+      <span className="inline-flex rounded-full border border-[#F2D3A2] bg-[#FFF7E6] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#8A5A00]">
+        Pending
+      </span>
+    );
+  }
   if (status === "confirmed") {
     return (
       <span className="inline-flex rounded-full bg-[#DFD1C9] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#444444]">

@@ -23,10 +23,7 @@ import MagnifyingGlassIcon from "@heroicons/react/24/outline/MagnifyingGlassIcon
 import ChevronDownIcon from "@heroicons/react/24/outline/ChevronDownIcon";
 import InformationCircleIcon from "@heroicons/react/24/outline/InformationCircleIcon";
 import { FaWhatsapp } from "react-icons/fa";
-import {
-  buildCustomerBookingConfirmationMessage,
-  formatKlParts,
-} from "@/lib/bookingMessages";
+import { formatKlParts } from "@/lib/bookingMessages";
 import { normalizeHexColor } from "@/lib/itemColor";
 import { BookingGuestPanel } from "./_components/BookingGuestPanel";
 import type { BookingGuestAuthedClient } from "./_components/BookingGuestPanel";
@@ -47,6 +44,7 @@ import {
   readLastClassTypeId,
   writeLastClassTypeId,
 } from "./_lib/lastClassType";
+import { rememberPendingBookingCode } from "@/lib/pendingBookingReminder";
 
 type SlotDto = {
   id: string;
@@ -103,6 +101,26 @@ function formatLocalTimeRange(startUtc: string, endUtc: string): string {
   return `${start.toFormat("h:mm a")} – ${end.toFormat("h:mm a")}`;
 }
 
+/** Dev-only sample slot so /booking?preview=done can show the WhatsApp screen. */
+function previewBookingSlot(): SlotDto {
+  const dateKey =
+    DateTime.now().setZone(BUSINESS_TIME_ZONE).toISODate() ?? "2026-09-28";
+  return {
+    id: "preview-slot",
+    itemName: "Group Mat Class",
+    dateKey,
+    startMin: 10 * 60,
+    endMin: 11 * 60,
+    capacity: 6,
+    bookedCount: 1,
+    available: 5,
+    bookable: true,
+    isFull: false,
+    startUtc: "",
+    endUtc: "",
+  };
+}
+
 function tintHexColor(hex: string, mixWithWhite = 0.35): string | null {
   const n = normalizeHexColor(hex);
   if (!n) return null;
@@ -121,6 +139,11 @@ function BookingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryItemId = searchParams.get("itemId");
+  const resumeParam = searchParams.get("resume")?.trim() ?? "";
+  const resumeCode = /^\d{6}$/.test(resumeParam) ? resumeParam : "";
+  const previewDone =
+    process.env.NODE_ENV === "development" &&
+    searchParams.get("preview") === "done";
 
   const [items, setItems] = useState<PublicItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -137,33 +160,85 @@ function BookingPageInner() {
     () => new Set(),
   );
   const [loadingCalendar, setLoadingCalendar] = useState(true);
-  const [allSlots, setAllSlots] = useState<SlotDto[]>([]);
+  const [allSlots, setAllSlots] = useState<SlotDto[]>(() =>
+    previewDone ? [previewBookingSlot()] : [],
+  );
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
 
-  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(
+    previewDone ? "preview-slot" : null,
+  );
   const pendingSlotIdRef = useRef<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(previewDone ? "guest@fasea.test" : "");
+  const [bookerName, setBookerName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [signUp, setSignUp] = useState(true);
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successBookingCode, setSuccessBookingCode] = useState<string | null>(
-    null,
+    previewDone ? "AB12CD" : null,
   );
   const [signedUpOnBook, setSignedUpOnBook] = useState(false);
-  const [needsPlanHint, setNeedsPlanHint] = useState(false);
+  const [needsPlanHint, setNeedsPlanHint] = useState(previewDone);
   const [planOptions, setPlanOptions] = useState<PublicPlanDto[]>([]);
   const [selectedPlanInterest, setSelectedPlanInterest] = useState("");
+  const [planHighlight, setPlanHighlight] = useState(false);
+  const [planToast, setPlanToast] = useState(false);
+  const [planToastLeaving, setPlanToastLeaving] = useState(false);
+  const [planToastKey, setPlanToastKey] = useState(0);
+  const planSectionRef = useRef<HTMLDivElement | null>(null);
+  const planToastTimer = useRef<number | null>(null);
+  const planToastExitTimer = useRef<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [openPrepareInfo, setOpenPrepareInfo] = useState(false);
   const [openNeedToKnow, setOpenNeedToKnow] = useState(false);
+  const [resumingBooking, setResumingBooking] = useState(Boolean(resumeCode));
   const [authedClient, setAuthedClient] =
     useState<BookingGuestAuthedClient | null>(null);
 
+  const clearPlanToastTimers = useCallback(() => {
+    if (planToastTimer.current) window.clearTimeout(planToastTimer.current);
+    if (planToastExitTimer.current) window.clearTimeout(planToastExitTimer.current);
+    planToastTimer.current = null;
+    planToastExitTimer.current = null;
+  }, []);
+
+  const dismissPlanToast = useCallback(() => {
+    setPlanToastLeaving(true);
+    if (planToastTimer.current) window.clearTimeout(planToastTimer.current);
+    planToastTimer.current = null;
+    if (planToastExitTimer.current) window.clearTimeout(planToastExitTimer.current);
+    planToastExitTimer.current = window.setTimeout(() => {
+      setPlanToast(false);
+      setPlanToastLeaving(false);
+      planToastExitTimer.current = null;
+    }, 280);
+  }, []);
+
+  const showPlanToast = useCallback(() => {
+    clearPlanToastTimers();
+    setPlanToastKey((key) => key + 1);
+    setPlanToastLeaving(false);
+    setPlanToast(true);
+    planToastTimer.current = window.setTimeout(() => {
+      dismissPlanToast();
+    }, 2400);
+  }, [clearPlanToastTimers, dismissPlanToast]);
+
   useEffect(() => {
+    return () => {
+      clearPlanToastTimers();
+    };
+  }, [clearPlanToastTimers]);
+
+  useEffect(() => {
+    if (previewDone || resumeCode) {
+      setDraftRestored(true);
+      return;
+    }
     const draft = readBookingDraft();
     if (draft?.itemId) setSelectedItemId(draft.itemId);
     if (draft?.dateKey) {
@@ -180,7 +255,77 @@ function BookingPageInner() {
     if (draft?.whatsapp) setWhatsapp(draft.whatsapp);
     else if (draft?.whatsappOverride) setWhatsapp(draft.whatsappOverride);
     setDraftRestored(true);
-  }, []);
+  }, [previewDone, resumeCode, setCalendarMonth]);
+
+  useEffect(() => {
+    if (!resumeCode || previewDone) return;
+    let cancelled = false;
+    async function resumePendingBooking() {
+      setResumingBooking(true);
+      setSubmitError(null);
+      try {
+        const res = await fetch("/api/public/bookings/pending-reminders", {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codes: [resumeCode] }),
+        });
+        const json = await res.json();
+        const pending = json?.data?.items?.find(
+          (item: { code?: string }) => item.code === resumeCode,
+        ) as
+          | {
+              code: string;
+              className: string;
+              dateKey: string;
+              startMin: number;
+              endMin: number;
+            }
+          | undefined;
+        if (!res.ok || !json?.ok || !pending) {
+          throw new Error(
+            "This pending booking is no longer available. It may already be confirmed, released, or past.",
+          );
+        }
+        if (cancelled) return;
+        const resumeSlot: SlotDto = {
+          id: `resume-${pending.code}`,
+          itemName: pending.className,
+          dateKey: pending.dateKey,
+          startMin: pending.startMin,
+          endMin: pending.endMin,
+          capacity: 1,
+          bookedCount: 1,
+          available: 0,
+          bookable: false,
+          isFull: true,
+          startUtc: "",
+          endUtc: "",
+        };
+        rememberPendingBookingCode(pending.code);
+        setAllSlots([resumeSlot]);
+        setSelectedSlotId(resumeSlot.id);
+        setSelectedDay(dateKeyToLocalDate(pending.dateKey));
+        setBookerName("Guest");
+        setNeedsPlanHint(false);
+        setSuccessBookingCode(pending.code);
+      } catch (e) {
+        if (!cancelled) {
+          setSubmitError(
+            e instanceof Error ? e.message : "Could not resume this booking.",
+          );
+          router.replace("/booking", { scroll: false });
+        }
+      } finally {
+        if (!cancelled) setResumingBooking(false);
+      }
+    }
+    void resumePendingBooking();
+    return () => {
+      cancelled = true;
+    };
+  }, [previewDone, resumeCode, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -338,15 +483,15 @@ function BookingPageInner() {
   useEffect(() => {
     if (!draftRestored) return;
     if (successBookingCode) {
-      clearBookingDraft();
+      if (!previewDone) clearBookingDraft();
       return;
     }
     persistBookingDraft();
-  }, [draftRestored, persistBookingDraft, successBookingCode]);
+  }, [draftRestored, persistBookingDraft, previewDone, successBookingCode]);
 
   // Keep URL in sync with selected item (only after a date is selected)
   useEffect(() => {
-    if (!dateKey) return;
+    if (previewDone || resumeCode || !dateKey) return;
     const normalizedQuery = queryItemId ?? "";
     if (normalizedQuery === selectedItemId) return;
     if (!selectedItemId) {
@@ -356,7 +501,7 @@ function BookingPageInner() {
     router.replace(`/booking?itemId=${encodeURIComponent(selectedItemId)}`, {
       scroll: false,
     });
-  }, [dateKey, queryItemId, router, selectedItemId]);
+  }, [dateKey, previewDone, queryItemId, resumeCode, router, selectedItemId]);
 
   const slots = useMemo(() => {
     if (!selectedItemId) return [];
@@ -448,6 +593,10 @@ function BookingPageInner() {
   useEffect(() => {
     let cancelled = false;
     async function loadAvailableDates() {
+      if (previewDone || resumeCode) {
+        setLoadingCalendar(false);
+        return;
+      }
       setLoadingCalendar(true);
       try {
         const m = DateTime.fromObject(
@@ -497,13 +646,12 @@ function BookingPageInner() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month]);
+  }, [month, previewDone, resumeCode]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!dateKey) return;
+      if (previewDone || resumeCode || !dateKey) return;
       setLoadingSlots(true);
       setSlotsError(null);
       setSelectedSlotId(null);
@@ -545,7 +693,7 @@ function BookingPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [dateKey]);
+  }, [dateKey, previewDone, resumeCode]);
 
   useEffect(() => {}, [selectedDay, dateKey]);
 
@@ -578,6 +726,7 @@ function BookingPageInner() {
       (authedClient?.name || "").trim() ||
       trimmedEmail.split("@")[0]?.trim().replace(/[._+-]+/g, " ") ||
       "Guest";
+    setBookerName(guestName);
 
     setSubmitting(true);
     setSubmitError(null);
@@ -631,7 +780,9 @@ function BookingPageInner() {
         planHint = didSignUp || !loggedIn;
       }
       setNeedsPlanHint(planHint);
-      setSuccessBookingCode(json.data.bookingCode);
+      const bookingCode = String(json.data.bookingCode ?? "");
+      rememberPendingBookingCode(bookingCode);
+      setSuccessBookingCode(bookingCode);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Booking failed");
     } finally {
@@ -639,8 +790,24 @@ function BookingPageInner() {
     }
   }
 
+  if (resumingBooking) {
+    return (
+      <div className="min-h-screen bg-[#FAF8F6] text-[#444444] px-6 py-24">
+        <SiteHeader />
+        <main className="max-w-2xl mx-auto mt-16">
+          <div className="rounded-3xl border border-[#E8DDD4] bg-white/70 p-8 text-sm text-[#716D64] shadow-sm">
+            Loading your pending booking…
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const guestName =
-    email.trim().split("@")[0]?.trim().replace(/[._+-]+/g, " ") || "Guest";
+    (authedClient?.name || "").trim() ||
+    bookerName.trim() ||
+    email.trim().split("@")[0]?.trim().replace(/[._+-]+/g, " ") ||
+    "Guest";
 
   if (successBookingCode) {
     const bookedSlot = selectedSlotId
@@ -659,18 +826,36 @@ function BookingPageInner() {
             tz: BUSINESS_TIME_ZONE,
           })
         : null;
-    const confirmationText =
-      bookedSlot && bookedClassName
-        ? buildCustomerBookingConfirmationMessage({
-            name: guestName || "Pilates Girls",
-            classTypeName: bookedClassName,
-            bookingCode: successBookingCode,
-            dateKey: bookedSlot.dateKey,
-            startMin: bookedSlot.startMin,
-            endMin: bookedSlot.endMin,
-            tz: BUSINESS_TIME_ZONE,
-          })
-        : "";
+    const lastStepText =
+      bookedSlot && bookedClassName && bookedParts
+        ? [
+            `Hi ${guestName || "Pilates Girls"} 🤍`,
+            `Your class is not confirmed yet.`,
+            `Send the WhatsApp message. The studio will confirm your pending booking after the conversation.`,
+            ``,
+            `Class Type: ${bookedClassName}`,
+            `🗓 Date: ${bookedParts.dateLabel}`,
+            `⏰ Time: ${bookedParts.timeLabel}`,
+            `Booking Code: ${successBookingCode}`,
+            ``,
+            `After we receive your message, please bring grip socks, wear comfortable attire, and bring a water bottle.`,
+            `Kindly arrive 10–15 minutes earlier before class.`,
+            ``,
+            `✨ Cancellation & No-Show Policy:`,
+            `• Free cancellation at least 10 hours before class`,
+            `• Inside 10 hours, cancel on WhatsApp and pay the late fee`,
+            `• Reschedule at least 6 hours before class`,
+            `• Group class: RM10 (late cancellation / no-show)`,
+            `• Private session: RM20 (late cancellation / no-show)`,
+            `• Fee applies when the slot remains unused`,
+          ].join("\n")
+        : [
+            `Hi ${guestName || "Pilates Girls"} 🤍`,
+            `Your class is not confirmed yet.`,
+            `Send the WhatsApp message. The studio will confirm your pending booking after the conversation.`,
+            ``,
+            `Booking Code: ${successBookingCode}`,
+          ].join("\n");
 
     const preferredPlanCategory = matchPlanCategoryForClassName(bookedClassName);
     const sortedPlanOptions = (() => {
@@ -728,7 +913,7 @@ function BookingPageInner() {
     const wasapMessage =
       bookedParts && bookedClassName
         ? [
-            "Booking Done",
+            "Please complete my booking",
             `Class: ${bookedClassName}`,
             `Date: ${bookedParts.dateLabel}`,
             `Time: ${bookedParts.timeLabel}`,
@@ -736,12 +921,13 @@ function BookingPageInner() {
             ...planHintLines,
           ].join("\n")
         : [
-            "Booking Done",
+            "Please complete my booking",
             `Booking Code: ${successBookingCode}`,
             ...planHintLines,
           ].join("\n");
 
     const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(wasapMessage)}`;
+    const waCtaReady = !(needsPlanHint && !selectedPlanInterest);
 
     // Optional: keep a clean visible href (no prefilled text)
     const waPrettyHref = `https://wa.me/${phone}`;
@@ -750,12 +936,14 @@ function BookingPageInner() {
       <div className="min-h-screen bg-[#FAF8F6] text-[#444444] px-6 py-24">
         <SiteHeader />
         <main className="max-w-2xl mx-auto mt-16">
-          <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-8 shadow-sm overflow-hidden">
-            <h1 className="font-serif text-3xl font-bold mb-3">
-              Booking is ready
-            </h1>
+          <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-8 shadow-sm">
+            <h1 className="font-serif text-3xl font-bold mb-3">Last Step</h1>
             <p className="text-[#5C574F] mb-6">
-              Please click the button below and complete your booking.
+              Your booking is{" "}
+              <strong className="font-bold" style={{ color: "#C62828" }}>
+                not complete
+              </strong>{" "}
+              until you send the WhatsApp message and the studio confirms it.
             </p>
             {signedUpOnBook ? (
               <div className="mb-6 rounded-2xl border border-[#E8DDD4] bg-white px-5 py-4 text-sm text-[#444444]">
@@ -823,8 +1011,25 @@ function BookingPageInner() {
             </div>
 
             {needsPlanHint ? (
-              <div className="mt-6 min-w-0 space-y-3">
-                <div className="text-sm font-semibold text-[#444444]">
+              <div
+                ref={planSectionRef}
+                className={cn(
+                  "mt-6 min-w-0 space-y-3 rounded-3xl transition",
+                  planHighlight && "px-3 py-3",
+                )}
+                style={
+                  planHighlight
+                    ? {
+                        backgroundColor: "#FFF4F2",
+                        boxShadow: "0 0 0 2px #C62828",
+                      }
+                    : undefined
+                }
+              >
+                <div
+                  className="text-sm font-semibold"
+                  style={{ color: planHighlight ? "#C62828" : "#444444" }}
+                >
                   Select your pilates plan
                 </div>
                 <div className="grid gap-2" role="radiogroup" aria-label="Pilates plan">
@@ -863,7 +1068,11 @@ function BookingPageInner() {
                         type="button"
                         role="radio"
                         aria-checked={selected}
-                        onClick={() => setSelectedPlanInterest(opt.value)}
+                        onClick={() => {
+                          setSelectedPlanInterest(opt.value);
+                          setPlanHighlight(false);
+                          dismissPlanToast();
+                        }}
                         className={cn(
                           "w-full rounded-2xl border px-4 py-3 text-left transition cursor-pointer",
                           "flex items-center gap-3",
@@ -909,38 +1118,112 @@ function BookingPageInner() {
               </div>
             ) : null}
 
-            <a
-              href={waPrettyHref}
-              target="_blank"
-              rel="noreferrer"
-              aria-disabled={needsPlanHint && !selectedPlanInterest}
-              onClick={(e) => {
-                e.preventDefault();
-                if (needsPlanHint && !selectedPlanInterest) return;
-                // Keep the visible/hover URL clean, but open the full prefilled message.
-                window.open(waUrl, "_blank", "noopener,noreferrer");
-              }}
-              className={cn(
-                "mt-6 w-full rounded-2xl px-6 py-4",
-                "bg-[#25D366] text-black",
-                "inline-flex items-center justify-center gap-3",
-                "text-base sm:text-lg font-semibold",
-                "shadow-sm transition hover:brightness-95",
-                needsPlanHint &&
-                  !selectedPlanInterest &&
-                  "opacity-50 pointer-events-none cursor-not-allowed",
-              )}
-            >
-              <FaWhatsapp className="h-6 w-6" aria-hidden />
-              Complete Booking.
-            </a>
+            <style>{`
+              @keyframes fasea-wa-bubble {
+                0%, 100% { transform: translate(-50%, 0); }
+                50% { transform: translate(-50%, -5px); }
+              }
+              .fasea-wa-bubble { animation: fasea-wa-bubble 1.8s ease-in-out infinite; }
+              @keyframes fasea-plan-toast-in {
+                from { opacity: 0; transform: translateY(-12px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+              @keyframes fasea-plan-toast-out {
+                from { opacity: 1; transform: translateY(0); }
+                to { opacity: 0; transform: translateY(-12px); }
+              }
+              .fasea-plan-toast-in { animation: fasea-plan-toast-in 0.32s ease-out both; }
+              .fasea-plan-toast-out { animation: fasea-plan-toast-out 0.28s ease-in both; }
+            `}</style>
+            <div className="relative mt-6">
+              <div
+                className="fasea-wa-bubble pointer-events-none absolute left-1/2 z-10"
+                style={{ bottom: "calc(100% - 10px)" }}
+              >
+                <div
+                  className="rounded-2xl text-sm font-semibold text-white"
+                  style={{
+                    backgroundColor: "#444444",
+                    padding: "7px 14px",
+                    lineHeight: "18px",
+                  }}
+                >
+                  Click
+                </div>
+                <span
+                  aria-hidden
+                  className="absolute left-1/2 top-full -translate-x-1/2"
+                  style={{
+                    borderLeft: "7px solid transparent",
+                    borderRight: "7px solid transparent",
+                    borderTop: "6px solid #444444",
+                  }}
+                />
+              </div>
+              <a
+                href={waPrettyHref}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (!waCtaReady) {
+                    setPlanHighlight(true);
+                    showPlanToast();
+                    planSectionRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    });
+                    return;
+                  }
+                  void fetch("/api/public/bookings/dm-opened", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ code: successBookingCode }),
+                    keepalive: true,
+                  }).catch(() => {});
+                  // Keep the visible/hover URL clean, but open the full prefilled message.
+                  window.open(waUrl, "_blank", "noopener,noreferrer");
+                }}
+                className={cn(
+                  "w-full rounded-2xl px-6 py-4",
+                  "bg-[#25D366] text-black",
+                  "inline-flex items-center justify-center gap-3",
+                  "text-base sm:text-lg font-semibold",
+                  "hover:brightness-95 cursor-pointer",
+                )}
+              >
+                <FaWhatsapp className="h-6 w-6" aria-hidden />
+                Complete Booking.
+              </a>
+            </div>
+
+            {planToast ? (
+              <div
+                className="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4"
+                style={{ top: 88 }}
+                role="status"
+                aria-live="polite"
+              >
+                <div
+                  key={planToastKey}
+                  className={
+                    planToastLeaving
+                      ? "fasea-plan-toast-out rounded-2xl px-4 py-3 text-sm font-medium text-white shadow-lg"
+                      : "fasea-plan-toast-in rounded-2xl px-4 py-3 text-sm font-medium text-white shadow-lg"
+                  }
+                  style={{ backgroundColor: "#444444" }}
+                >
+                  Select your pilates plan
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-6 rounded-2xl border border-[#E8DDD4] bg-white/70 px-5 py-4">
               <div className="text-xs text-[#716D64] font-medium mb-2">
-                Before you come
+                Pending studio confirmation
               </div>
               <pre className="whitespace-pre-wrap leading-loose text-sm text-[#444444]">
-                {confirmationText}
+                {lastStepText}
               </pre>
             </div>
             <div className="flex items-center justify-between gap-2">
@@ -1103,8 +1386,9 @@ function BookingPageInner() {
                 {openNeedToKnow ? (
                   <div className="mt-2 pl-5 text-xs text-[#716D64] leading-relaxed space-y-1">
                     <div>
-                      ⏳ Cancellation and Refundable can be made 12 hours before
-                      the class
+                      ⏳ Bookings and free cancellation close 10 hours before
+                      the class. Inside 10 hours, cancel on WhatsApp and pay
+                      the late fee.
                     </div>
                     <div>⏰ Please come 15 minutes early</div>
                     <div>‼️ No Show/Late Cancellation Fee</div>

@@ -38,7 +38,9 @@ export async function GET(req: NextRequest) {
         .find({ dateKey, itemId: item._id, cancelled: false })
         .sort({ startMin: 1 })
         .toArray(),
-      bookings.find({ dateKey, status: "confirmed" }).toArray(),
+      bookings
+        .find({ dateKey, status: { $in: ["pending", "confirmed"] } })
+        .toArray(),
     ]);
 
     const exclusiveBookingsByKey = new Map<
@@ -65,8 +67,7 @@ export async function GET(req: NextRequest) {
         const confirmedOnSlot = dayBookings.filter(
           (b) =>
             !b._id!.equals(bookingObjectId) &&
-            b.slotId?.toHexString() === slotId &&
-            b.status === "confirmed"
+            b.slotId?.toHexString() === slotId
         ).length;
         const occupied = confirmedOnSlot;
         const isBlockedByExclusive = isSlotBlockedByExclusiveOverlap({

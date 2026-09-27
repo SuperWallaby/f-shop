@@ -181,7 +181,9 @@ export function AdminCalendarView() {
           if (calendarFilterItemId && s.itemId !== calendarFilterItemId)
             return false;
           if (calendarBookedOnly) {
-            const confirmed = s.bookings?.some((b) => b.status === "confirmed");
+            const confirmed = s.bookings?.some(
+              (b) => b.status === "pending" || b.status === "confirmed",
+            );
             return Boolean(confirmed);
           }
           return true;
@@ -205,7 +207,9 @@ export function AdminCalendarView() {
       return;
     }
     if (calendarBookedOnly) {
-      const confirmed = s.bookings?.some((b) => b.status === "confirmed");
+      const confirmed = s.bookings?.some(
+        (b) => b.status === "pending" || b.status === "confirmed",
+      );
       if (!confirmed) setSelected(null);
     }
   }, [calendarBookedOnly, calendarFilterItemId, selected]);
@@ -842,7 +846,10 @@ export function AdminCalendarView() {
             const hasSlots = slots.length > 0;
             const bookingCount = slots.reduce(
               (acc, s) =>
-                acc + s.bookings.filter((b) => b.status === "confirmed").length,
+                acc +
+                s.bookings.filter(
+                  (b) => b.status === "pending" || b.status === "confirmed",
+                ).length,
               0,
             );
             const selectedDay = d.dateKey === mobileDateKey;
@@ -908,7 +915,7 @@ export function AdminCalendarView() {
             ) : (
               (dayMap.get(mobileDateKey)?.slots ?? []).map((s) => {
                 const confirmed = s.bookings.filter(
-                  (b) => b.status === "confirmed",
+                  (b) => b.status === "pending" || b.status === "confirmed",
                 );
                 const isSelected = selectedSlotIds.has(s.id);
                 return (
@@ -1042,7 +1049,8 @@ export function AdminCalendarView() {
                   <>
                     {visibleSlots.map((s) => {
                       const confirmed = s.bookings.filter(
-                        (b) => b.status === "confirmed",
+                        (b) =>
+                          b.status === "pending" || b.status === "confirmed",
                       );
                       const tone = s.cancelled
                         ? "bg-[#F3ECE6] text-[#716D64]"
@@ -1201,7 +1209,8 @@ export function AdminCalendarView() {
                 ) : (
                   (dayMap.get(dayModalDateKey)?.slots ?? []).map((s) => {
                     const confirmed = s.bookings.filter(
-                      (b) => b.status === "confirmed",
+                      (b) =>
+                        b.status === "pending" || b.status === "confirmed",
                     );
                     return (
                       <button

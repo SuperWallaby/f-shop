@@ -12,6 +12,8 @@ import {
 } from "@/lib/exclusiveLocks";
 import { usesExclusiveTimeBlocking } from "@/lib/exclusiveBooking";
 import { sendAdminWhatsAppNotification } from "@/lib/twilioWhatsApp";
+import { sendBookingRescheduledPush } from "@/lib/pushNotifications";
+import { formatKlParts } from "@/lib/bookingMessages";
 
 const rescheduleSchema = z.object({
   slotId: z.string().min(1),
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (exclusiveKey && usesExclusiveTimeBlocking(item.capacity)) {
       const conflict = await bookings.findOne(
         {
-          status: "confirmed",
+          status: { $in: ["pending", "confirmed"] },
           exclusiveKey,
           dateKey: targetSlot.dateKey,
           itemId: { $ne: item._id },
@@ -183,19 +185,35 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       }
 
       try {
-        await sendAdminWhatsAppNotification({
-          kind: "booking_rescheduled",
-          name: booking.name,
-          email: booking.email,
-          whatsapp: booking.whatsapp,
-          bookingCode: booking.code,
-          classTypeName: item.name,
+        const tz = booking.businessTimeZone || BUSINESS_TIME_ZONE;
+        const parts = formatKlParts({
           dateKey: updatedSlot.dateKey,
           startMin: updatedSlot.startMin,
           endMin: updatedSlot.endMin,
-          businessTimeZone: booking.businessTimeZone || BUSINESS_TIME_ZONE,
-          extra: `Previous: ${oldDateKey} ${oldStartMin}-${oldEndMin}`,
+          tz,
         });
+        await Promise.all([
+          sendAdminWhatsAppNotification({
+            kind: "booking_rescheduled",
+            name: booking.name,
+            email: booking.email,
+            whatsapp: booking.whatsapp,
+            bookingCode: booking.code,
+            classTypeName: item.name,
+            dateKey: updatedSlot.dateKey,
+            startMin: updatedSlot.startMin,
+            endMin: updatedSlot.endMin,
+            businessTimeZone: tz,
+            extra: `Previous: ${oldDateKey} ${oldStartMin}-${oldEndMin}`,
+          }).catch(() => {}),
+          sendBookingRescheduledPush({
+            clientId: booking.clientId,
+            className: item.name,
+            bookingCode: booking.code,
+            dateLabel: parts.dateLabel,
+            timeLabel: parts.timeLabel,
+          }).catch(() => {}),
+        ]);
       } catch {
         // ignore
       }

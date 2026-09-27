@@ -70,6 +70,79 @@ export async function sendTwilioWhatsApp(args: {
   return { sid };
 }
 
+/** Plain SMS (not WhatsApp). Requires an SMS-capable Twilio sender. */
+export async function sendTwilioSms(args: {
+  to: string;
+  body: string;
+}): Promise<{ sid: string }> {
+  const accountSid = requireEnv("TWILIO_ACCOUNT_SID");
+  const authToken = requireEnv("TWILIO_AUTH_TOKEN");
+  const from = requireEnv("TWILIO_SMS_FROM");
+  const baseUrl =
+    optionalEnv("TWILIO_API_BASE_URL") ?? "https://api.twilio.com";
+
+  const url = `${baseUrl}/2010-04-01/Accounts/${encodeURIComponent(
+    accountSid,
+  )}/Messages.json`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(
+        `${accountSid}:${authToken}`,
+        "utf8",
+      ).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: formEncode({
+      From: from,
+      To: args.to,
+      Body: args.body,
+    }),
+  });
+
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(
+      (json && typeof json === "object" && "message" in json
+        ? String((json as { message?: unknown }).message)
+        : null) ?? `Twilio SMS error (${res.status})`,
+    );
+  }
+
+  const sid =
+    (json && typeof json === "object" && "sid" in json
+      ? String((json as { sid?: unknown }).sid)
+      : "") || "";
+  return { sid };
+}
+
+/** Temp PIN for password reset — SMS first, WhatsApp only when SMS is unavailable. */
+export async function sendTempPasswordMessage(args: {
+  to: string;
+  tempPin: string;
+}): Promise<{ channel: "sms" | "whatsapp" }> {
+  const body =
+    `Faséa temporary password: ${args.tempPin}\n` +
+    `Sign in with this 4-digit code, then set a new password.`;
+  const smsFrom = optionalEnv("TWILIO_SMS_FROM");
+  if (smsFrom) {
+    try {
+      await sendTwilioSms({ to: args.to, body });
+      return { channel: "sms" };
+    } catch (smsError) {
+      try {
+        await sendTwilioWhatsApp({ to: args.to, body });
+        return { channel: "whatsapp" };
+      } catch {
+        throw smsError;
+      }
+    }
+  }
+  await sendTwilioWhatsApp({ to: args.to, body });
+  return { channel: "whatsapp" };
+}
+
 export async function sendTwilioWhatsAppTemplate(args: {
   to: string; // E.164, without whatsapp:
   contentSid: string; // HX...
@@ -128,6 +201,44 @@ function getContentSid(name: string): string | undefined {
     return undefined;
   }
   return sid;
+}
+
+/**
+ * Twilio Content Template draft only. This is intentionally not sent by the
+ * pending reminder job until the template is approved and explicitly enabled.
+ */
+export const PENDING_BOOKING_REMINDER_WHATSAPP_TEMPLATE = {
+  envName: "TWILIO_CONTENT_SID_PENDING_BOOKING_REMINDER_EN",
+  friendlyName: "pending_booking_reminder_en",
+  language: "en",
+  category: "UTILITY",
+  body:
+    "Hi {{1}}, you have an unfinished Faséa booking for {{2}} on {{3}}. Complete it here: https://fasea.studio/booking?resume={{4}}. Your booking remains pending until the studio confirms it.",
+  variables: {
+    "1": "Customer name",
+    "2": "Class name",
+    "3": "Class date and time",
+    "4": "Six-digit booking code",
+  },
+} as const;
+
+export function pendingBookingReminderTemplatePayload(args: {
+  name: string;
+  classTypeName: string;
+  dateTimeLabel: string;
+  bookingCode: string;
+}) {
+  return {
+    contentSid: getContentSid(
+      PENDING_BOOKING_REMINDER_WHATSAPP_TEMPLATE.envName,
+    ),
+    contentVariables: {
+      "1": args.name || "there",
+      "2": args.classTypeName,
+      "3": args.dateTimeLabel,
+      "4": args.bookingCode,
+    },
+  };
 }
 
 export async function sendBookingConfirmedWhatsApp(args: {

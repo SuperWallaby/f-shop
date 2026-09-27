@@ -106,7 +106,12 @@ export async function releaseExclusiveLocksAfterBookingRemoved(args: {
 
   const remaining = await bookings
     .find(
-      { status: "confirmed", exclusiveKey: key, dateKey, itemId },
+      {
+        status: { $in: ["pending", "confirmed"] },
+        exclusiveKey: key,
+        dateKey,
+        itemId,
+      },
       { projection: { startMin: 1, endMin: 1 } }
     )
     .limit(5000)

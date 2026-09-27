@@ -93,6 +93,46 @@ export async function sendBookingCreatedEmail(args: {
   });
 }
 
+export async function sendPendingBookingReminderEmail(args: {
+  to: string;
+  name: string;
+  classTypeName: string;
+  bookingCode: string;
+  dateKey: string;
+  startMin: number;
+  endMin: number;
+  businessTimeZone: string;
+  resumeUrl: string;
+}) {
+  const resend = getResend();
+  const when = formatSlot(
+    args.dateKey,
+    args.startMin,
+    args.endMin,
+    args.businessTimeZone,
+  );
+  const result = await resend.emails.send({
+    from: getFrom(),
+    to: args.to,
+    subject: "Complete your pending Faséa booking",
+    text: [
+      `Hi ${args.name || "there"},`,
+      "",
+      "You still have an unfinished Pilates booking.",
+      `Class: ${args.classTypeName}`,
+      `When: ${when}`,
+      `Booking code: ${args.bookingCode}`,
+      "",
+      "Open your last step and send the WhatsApp message:",
+      args.resumeUrl,
+      "",
+      "Your booking remains pending until the studio confirms it after the conversation.",
+      "If the class has already started, this reminder link will no longer appear.",
+    ].join("\n"),
+  });
+  if (result.error) throw new Error(result.error.message);
+}
+
 export async function sendBookingCancelledEmail(args: {
   to: string; // customer email
   name: string;

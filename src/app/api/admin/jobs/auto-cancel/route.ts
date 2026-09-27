@@ -9,6 +9,8 @@ import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { sendClassCancelledByInstructorEmail } from "@/lib/email";
 import { sendClassCancelledByInstructorWhatsApp, sendStudioAlertWhatsApp } from "@/lib/twilioWhatsApp";
 import { releaseExclusiveLocksAfterBookingRemoved } from "@/lib/exclusiveLocks";
+import { sendClassCancelledPush } from "@/lib/pushNotifications";
+import { formatKlParts } from "@/lib/bookingMessages";
 
 function allowJob(req: NextRequest) {
   // Vercel Cron jobs send this header. This lets us safely use `vercel.json` crons
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
       considered++;
 
       const confirmed = await bookings.countDocuments(
-        { slotId: s._id, status: "confirmed" },
+        { slotId: s._id, status: { $in: ["pending", "confirmed"] } },
         { limit: 1000 }
       );
       if (confirmed >= minBookings) continue;
@@ -101,14 +103,17 @@ export async function POST(req: NextRequest) {
 
       autoCancelledSessions++;
 
-      // Cancel all confirmed bookings attached to this slot.
+      // Cancel all active bookings attached to this slot.
       const bs = await bookings
-        .find({ slotId: s._id, status: "confirmed" })
+        .find({
+          slotId: s._id,
+          status: { $in: ["pending", "confirmed"] },
+        })
         .toArray();
       if (bs.length > 0) {
         const ids = bs.map((b) => b._id);
         const r = await bookings.updateMany(
-          { _id: { $in: ids }, status: "confirmed" },
+          { _id: { $in: ids }, status: { $in: ["pending", "confirmed"] } },
           { $set: { status: "cancelled", cancelledAt: new Date() } }
         );
         cancelledBookings += r.modifiedCount;
@@ -144,19 +149,36 @@ export async function POST(req: NextRequest) {
           )
         );
 
-        // Notify customers via WhatsApp (best-effort)
+        // Notify customers via WhatsApp + push (best-effort)
         await Promise.all(
           bs.map((b) => {
-            const to = (b.whatsapp ?? "").trim();
-            if (!to) return Promise.resolve();
-            return sendClassCancelledByInstructorWhatsApp({
-              to,
-              classTypeName: item.name,
+            const bTz = b.businessTimeZone ?? tz;
+            const parts = formatKlParts({
               dateKey: b.dateKey,
               startMin: b.startMin,
               endMin: b.endMin,
-              businessTimeZone: b.businessTimeZone ?? tz,
-            }).catch(() => {});
+              tz: bTz,
+            });
+            const to = (b.whatsapp ?? "").trim();
+            return Promise.all([
+              to
+                ? sendClassCancelledByInstructorWhatsApp({
+                    to,
+                    classTypeName: item.name,
+                    dateKey: b.dateKey,
+                    startMin: b.startMin,
+                    endMin: b.endMin,
+                    businessTimeZone: bTz,
+                  }).catch(() => {})
+                : Promise.resolve(),
+              sendClassCancelledPush({
+                clientId: b.clientId,
+                className: item.name,
+                bookingCode: b.code ?? undefined,
+                dateLabel: parts.dateLabel,
+                timeLabel: parts.timeLabel,
+              }).catch(() => {}),
+            ]);
           })
         );
       }

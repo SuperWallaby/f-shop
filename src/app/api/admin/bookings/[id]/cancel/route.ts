@@ -10,6 +10,9 @@ import {
   sendAdminWhatsAppNotification,
   sendBookingCancelledByClientWhatsApp,
 } from "@/lib/twilioWhatsApp";
+import { sendBookingCancelledPush } from "@/lib/pushNotifications";
+import { formatKlParts } from "@/lib/bookingMessages";
+import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = requireAdmin(_req);
@@ -35,7 +38,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     }
 
     const updated = await bookings.updateOne(
-      { _id: bookingObjectId, status: "confirmed" },
+      { _id: bookingObjectId, status: { $in: ["pending", "confirmed"] } },
       { $set: { status: "cancelled", cancelledAt: now } }
     );
 
@@ -91,7 +94,14 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
         // ignore
       }
 
-      // WhatsApp (best-effort)
+      // WhatsApp + push (best-effort)
+      const cancelTz = booking.businessTimeZone || BUSINESS_TIME_ZONE;
+      const cancelParts = formatKlParts({
+        dateKey: booking.dateKey,
+        startMin: booking.startMin,
+        endMin: booking.endMin,
+        tz: cancelTz,
+      });
       await Promise.all([
         sendBookingCancelledByClientWhatsApp({
           to: booking.whatsapp,
@@ -100,7 +110,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
           dateKey: booking.dateKey,
           startMin: booking.startMin,
           endMin: booking.endMin,
-          businessTimeZone: booking.businessTimeZone || "UTC",
+          businessTimeZone: cancelTz,
         }).catch(() => {}),
         sendAdminWhatsAppNotification({
           kind: "booking_cancelled_by_client",
@@ -112,7 +122,14 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
           dateKey: booking.dateKey,
           startMin: booking.startMin,
           endMin: booking.endMin,
-          businessTimeZone: booking.businessTimeZone || "UTC",
+          businessTimeZone: cancelTz,
+        }).catch(() => {}),
+        sendBookingCancelledPush({
+          clientId: booking.clientId,
+          className: classTypeName,
+          bookingCode: booking.code ?? undefined,
+          dateLabel: cancelParts.dateLabel,
+          timeLabel: cancelParts.timeLabel,
         }).catch(() => {}),
       ]);
     }

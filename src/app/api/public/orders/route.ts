@@ -9,13 +9,13 @@ import {
   getOrderAmountForClient,
 } from "@/lib/credits";
 import { applyPromotionDiscount, findPromotionForPlanId } from "@/lib/sales";
-import { requireClient } from "@/app/api/_utils/clientAuth";
+import { requireClientReady } from "@/app/api/_utils/clientAuth";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
 
 const STUDIO_WHATSAPP = "60145403560";
 
 export async function POST(req: NextRequest) {
-  const { clientId, response } = requireClient(req);
+  const { clientId, response } = await requireClientReady(req);
   if (response) return response;
 
   try {
@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return jsonError("Invalid body", 400, parsed.error.flatten());
     if (!ObjectId.isValid(parsed.data.planId)) return jsonError("Invalid planId", 400);
 
-    const { clients, plans, orders, promotions } = await getCollections();
+    const { clients, plans, orders, promotions, creditLedger } =
+      await getCollections();
     await ensureDefaultPlans(plans);
     const [client, plan, promoDocs] = await Promise.all([
       clients.findOne({ _id: clientId! }),
@@ -39,6 +40,21 @@ export async function POST(req: NextRequest) {
     if (!plan) return jsonError("Plan not found", 404);
 
     const now = new Date();
+    const [previousPaidOrder, previousPurchaseGrant] = await Promise.all([
+      orders.findOne(
+        { clientId: client._id!, status: "paid" },
+        { projection: { _id: 1 } },
+      ),
+      creditLedger.findOne(
+        {
+          clientId: client._id!,
+          type: "purchase_grant",
+          amount: { $gt: 0 },
+        },
+        { projection: { _id: 1 } },
+      ),
+    ]);
+    const firstPurchaseLikely = !previousPaidOrder && !previousPurchaseGrant;
     const promo = findPromotionForPlanId(plan._id!.toHexString(), promoDocs);
     const listAmount = getOrderAmountForClient(plan, client);
     const amountRm = applyPromotionDiscount(listAmount, promo);
@@ -59,6 +75,7 @@ export async function POST(req: NextRequest) {
       client,
       plan,
       order: draft,
+      firstPurchaseLikely,
     });
     const insert = await orders.insertOne({ ...draft, whatsappMessage });
     const whatsappUrl = `https://wa.me/${STUDIO_WHATSAPP}?text=${encodeURIComponent(
@@ -73,6 +90,7 @@ export async function POST(req: NextRequest) {
         amountRm,
         status: draft.status,
         whatsappUrl,
+        firstPurchaseLikely,
       },
     });
   } catch (e) {

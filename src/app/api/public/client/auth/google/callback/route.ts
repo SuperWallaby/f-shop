@@ -7,8 +7,10 @@ import {
   oauthSuccessRedirect,
   readOAuthReturnTo,
 } from "@/lib/oauthReturn";
+import { jsonError } from "@/app/api/_utils/http";
 
 const STATE_COOKIE = "google_oauth_state";
+const phonePinOnlyAuth = (): boolean => true;
 
 type GoogleTokenResponse = {
   access_token?: string;
@@ -25,6 +27,9 @@ type GoogleUserInfo = {
 };
 
 export async function GET(req: NextRequest) {
+  if (phonePinOnlyAuth()) {
+    return jsonError("Google sign-in is no longer available. Use phone and PIN.", 410);
+  }
   const origin = new URL(req.url).origin;
   const returnOrigin = readOAuthReturnTo(req);
   const fail = (code: string) => {

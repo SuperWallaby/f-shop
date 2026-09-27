@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
       Array<{ itemId: string; startMin: number; endMin: number }>
     >();
     for (const b of bookingDocs) {
-      if (b.status !== "confirmed") continue;
+      if (b.status !== "pending" && b.status !== "confirmed") continue;
       const k = (b.exclusiveKey ?? "").trim();
       if (!k) continue;
       const gk = `${k}|${b.dateKey}`;
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
           name: string;
           email: string;
           whatsapp?: string;
-          status: "confirmed" | "cancelled" | "no_show";
+          status: "pending" | "confirmed" | "cancelled" | "no_show";
         }>;
       }>;
     };

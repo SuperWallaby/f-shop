@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (newExclusiveKey && usesExclusiveTimeBlocking(item.capacity)) {
       const conflict = await bookings.findOne(
         {
-          status: "confirmed",
+          status: { $in: ["pending", "confirmed"] },
           exclusiveKey: newExclusiveKey,
           dateKey: existingSlot.dateKey,
           itemId: { $ne: item._id },

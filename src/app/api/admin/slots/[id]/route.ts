@@ -12,6 +12,11 @@ import {
   sendClassCancelledByInstructorWhatsApp,
 } from "@/lib/twilioWhatsApp";
 import { releaseExclusiveLocksAfterBookingRemoved } from "@/lib/exclusiveLocks";
+import {
+  sendClassCancelledPush,
+  sendClassChangedPush,
+} from "@/lib/pushNotifications";
+import { formatKlParts } from "@/lib/bookingMessages";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = requireAdmin(req);
@@ -53,17 +58,27 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     const result = await timeSlots.updateOne({ _id: slotObjectId }, update);
     if (!result.matchedCount) return jsonError("Slot not found", 404);
 
+    const nextStartMin = set.startMin ?? existing.startMin;
+    const nextEndMin = set.endMin ?? existing.endMin;
+    const nextItemId = set.itemId ?? existing.itemId;
+    const timeChanged =
+      nextStartMin !== existing.startMin || nextEndMin !== existing.endMin;
+    const itemChanged = !nextItemId.equals(existing.itemId);
+
     // If this PATCH cancels a session, cancel all attached bookings + notify customers.
     if (existing.cancelled === false && parsed.data.cancelled === true) {
-      // Cancel all confirmed bookings attached to this slot.
+      // Cancel all active bookings attached to this slot.
       const bs = await bookings
-        .find({ slotId: slotObjectId, status: "confirmed" })
+        .find({
+          slotId: slotObjectId,
+          status: { $in: ["pending", "confirmed"] },
+        })
         .toArray();
 
       if (bs.length > 0) {
         const ids = bs.map((b) => b._id);
         await bookings.updateMany(
-          { _id: { $in: ids }, status: "confirmed" },
+          { _id: { $in: ids }, status: { $in: ["pending", "confirmed"] } },
           { $set: { status: "cancelled", cancelledAt: now } }
         );
         // Keep counts consistent with cancelled session UI
@@ -89,14 +104,19 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           })
         );
 
-        const effectiveItemId = set.itemId ?? existing.itemId;
-        const item = effectiveItemId ? await items.findOne({ _id: effectiveItemId }) : null;
+        const item = nextItemId ? await items.findOne({ _id: nextItemId }) : null;
         const classTypeName = item?.name ?? "Pilates";
 
         // Notify customers (best-effort)
         await Promise.all(
           bs.flatMap((b) => {
             const tz = (b.businessTimeZone ?? "").trim() || BUSINESS_TIME_ZONE;
+            const parts = formatKlParts({
+              dateKey: b.dateKey,
+              startMin: b.startMin,
+              endMin: b.endMin,
+              tz,
+            });
             const tasks: Array<Promise<unknown>> = [];
             tasks.push(
               sendClassCancelledByInstructorEmail({
@@ -121,6 +141,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
                 }).catch(() => {})
               );
             }
+            tasks.push(
+              sendClassCancelledPush({
+                clientId: b.clientId,
+                className: classTypeName,
+                bookingCode: b.code ?? undefined,
+                dateLabel: parts.dateLabel,
+                timeLabel: parts.timeLabel,
+              }).catch(() => {})
+            );
             return tasks;
           })
         );
@@ -135,6 +164,52 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           businessTimeZone: BUSINESS_TIME_ZONE,
           extra: `Bookings cancelled: ${bs.length}`,
         }).catch(() => {});
+      }
+    } else if (
+      existing.cancelled === false &&
+      parsed.data.cancelled !== true &&
+      (timeChanged || itemChanged)
+    ) {
+      // Session time/class changed — sync bookings and notify members.
+      const bs = await bookings
+        .find({
+          slotId: slotObjectId,
+          status: { $in: ["pending", "confirmed"] },
+        })
+        .toArray();
+      if (bs.length > 0) {
+        await bookings.updateMany(
+          {
+            _id: { $in: bs.map((b) => b._id) },
+            status: { $in: ["pending", "confirmed"] },
+          },
+          {
+            $set: {
+              startMin: nextStartMin,
+              endMin: nextEndMin,
+              itemId: nextItemId,
+            },
+          },
+        );
+        const item = await items.findOne({ _id: nextItemId });
+        const classTypeName = item?.name ?? "Pilates";
+        const parts = formatKlParts({
+          dateKey: existing.dateKey,
+          startMin: nextStartMin,
+          endMin: nextEndMin,
+          tz: BUSINESS_TIME_ZONE,
+        });
+        await Promise.all(
+          bs.map((b) =>
+            sendClassChangedPush({
+              clientId: b.clientId,
+              className: classTypeName,
+              bookingCode: b.code ?? undefined,
+              dateLabel: parts.dateLabel,
+              timeLabel: parts.timeLabel,
+            }).catch(() => {}),
+          ),
+        );
       }
     }
 

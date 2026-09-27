@@ -19,7 +19,7 @@ export type AdminDaySlot = {
     name: string;
     email: string;
     whatsapp?: string;
-    status: "confirmed" | "cancelled" | "no_show";
+    status: "pending" | "confirmed" | "cancelled" | "no_show";
     starred?: boolean;
     createdAt: string;
     cancelledAt: string | null;
@@ -45,7 +45,7 @@ export type CalendarDayDto = {
       name: string;
       email?: string;
       whatsapp?: string;
-      status: "confirmed" | "cancelled" | "no_show";
+      status: "pending" | "confirmed" | "cancelled" | "no_show";
       starred?: boolean;
       createdAt?: string;
       cancelledAt?: string | null;
@@ -66,7 +66,7 @@ export type BookingListItem = {
   itemColor: string;
   adminNote: string;
   starred: boolean;
-  status: "confirmed" | "cancelled" | "no_show";
+  status: "pending" | "confirmed" | "cancelled" | "no_show";
   createdAt: string;
   dateKey: string;
   startMin: number;

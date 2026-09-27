@@ -24,6 +24,7 @@ import {
   adminNavLabel,
 } from "./_components/AdminNavMenu";
 import { Pill } from "./_components/Pill";
+import { AdminNoticesBell } from "./_components/AdminNoticesBell";
 import type { AdminDaySlot } from "./_lib/types";
 import {
   dateToDateKeyBusiness,
@@ -106,6 +107,7 @@ export default function AdminPage() {
   type TabKey = (typeof allowedTabs)[number];
 
   const [tab, setTab] = useState<TabKey>("calendar");
+  const [bookingNoticeQuery, setBookingNoticeQuery] = useState("");
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(() => {
     // Default to "today" in the business timezone (KL), not the viewer's local timezone.
     // This prevents off-by-one-day surprises around midnight when admin runs from other zones.
@@ -223,13 +225,13 @@ export default function AdminPage() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [tab, hasAdminItemsChanges]);
 
-  function setTabSafe(next: TabKey) {
-    if (next === tab) return;
+  function setTabSafe(next: TabKey): boolean {
+    if (next === tab) return true;
     if (tab === "items" && hasAdminItemsChanges) {
       const ok = window.confirm(
         "You have unsaved changes in Class Types. Leave without saving?",
       );
-      if (!ok) return;
+      if (!ok) return false;
     }
     setTab(next);
     try {
@@ -239,6 +241,12 @@ export default function AdminPage() {
     } catch {
       // ignore
     }
+    return true;
+  }
+
+  function openBookingFromNotice(bookingCode: string) {
+    if (!setTabSafe("bookings")) return;
+    setBookingNoticeQuery(bookingCode);
   }
 
   // Sync tab with URL (?tab=...) on mount and when user uses back/forward.
@@ -1011,12 +1019,18 @@ export default function AdminPage() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={logout}
-              className="shrink-0 px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition"
-            >
-              Logout
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <AdminNoticesBell
+                onOpenTab={(key) => setTabSafe(key)}
+                onOpenBooking={openBookingFromNotice}
+              />
+              <button
+                onClick={logout}
+                className="px-4 py-2 rounded-full border border-[#E8DDD4] bg-white/80 text-sm hover:shadow-sm transition"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
         {tab === "time" ? (
@@ -1315,9 +1329,13 @@ export default function AdminPage() {
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <div className="text-xs text-[#716D64]">
-                                      {b.status === "confirmed"
+                                      {b.status === "pending"
+                                        ? "pending"
+                                        : b.status === "confirmed"
                                         ? "booked"
-                                        : "cancelled"}
+                                        : b.status === "no_show"
+                                          ? "no-show"
+                                          : "cancelled"}
                                     </div>
                                     {b.status === "confirmed" ? (
                                       <button
@@ -2530,7 +2548,10 @@ export default function AdminPage() {
         ) : tab === "expiry" ? (
           <AdminExpiryView />
         ) : tab === "bookings" ? (
-          <AdminBookingsView />
+          <AdminBookingsView
+            key={bookingNoticeQuery || "all-bookings"}
+            initialQuery={bookingNoticeQuery}
+          />
         ) : (
           <AdminBookingsView />
         )}

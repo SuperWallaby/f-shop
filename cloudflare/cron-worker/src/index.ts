@@ -43,8 +43,21 @@ export default {
     // We map based on the cron string configured in wrangler.toml.
     try {
       if (event.cron === "*/10 * * * *") {
-        const url = joinUrl(base, "/api/admin/jobs/auto-cancel?horizonHours=48");
-        await postJob({ url, secret: env.AUTO_CANCEL_JOB_SECRET, cf: ctx });
+        const jobs = [
+          joinUrl(base, "/api/admin/jobs/auto-cancel?horizonHours=48"),
+          joinUrl(base, "/api/admin/jobs/pending-booking-reminders"),
+        ];
+        const results = await Promise.allSettled(
+          jobs.map((url) =>
+            postJob({ url, secret: env.AUTO_CANCEL_JOB_SECRET, cf: ctx }),
+          ),
+        );
+        const failed = results.filter(
+          (result) => result.status === "rejected",
+        );
+        if (failed.length > 0) {
+          throw new Error(`${failed.length}/${jobs.length} scheduled jobs failed`);
+        }
         return;
       }
 
@@ -82,6 +95,14 @@ export default {
       if (job === "reminders") {
         await postJob({
           url: joinUrl(base, "/api/admin/jobs/reminders"),
+          secret: env.AUTO_CANCEL_JOB_SECRET,
+          cf: ctx,
+        });
+        return new Response("ok");
+      }
+      if (job === "pending-booking-reminders") {
+        await postJob({
+          url: joinUrl(base, "/api/admin/jobs/pending-booking-reminders"),
           secret: env.AUTO_CANCEL_JOB_SECRET,
           cf: ctx,
         });

@@ -10,13 +10,25 @@ import {
   sendAdminWhatsAppNotification,
   sendBookingCancelledByClientWhatsApp,
 } from "@/lib/twilioWhatsApp";
-import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
+import {
+  getClientIdFromRequest,
+  guardClientAccessIfAuthenticated,
+} from "@/app/api/_utils/clientAuth";
 import { insertBookingCancelRefund } from "@/lib/credits";
-
-const MIN_CANCEL_NOTICE_HOURS = 6;
+import { sendBookingCancelledPush } from "@/lib/pushNotifications";
+import { formatKlParts } from "@/lib/bookingMessages";
+import {
+  CANCEL_NOTICE_HOURS,
+  GROUP_LATE_CANCEL_FEE_RM,
+  PRIVATE_LATE_CANCEL_FEE_RM,
+  lateCancelFeeRm,
+} from "@/lib/cancelPolicy";
 
 export async function POST(req: NextRequest) {
   try {
+    const forcedChange = await guardClientAccessIfAuthenticated(req);
+    if (forcedChange) return forcedChange;
+
     const body = await req.json().catch(() => null);
     const parsed = publicCancelBookingSchema.safeParse(body);
     if (!parsed.success) return jsonError("Invalid body", 400, parsed.error.flatten());
@@ -78,9 +90,10 @@ export async function POST(req: NextRequest) {
       .plus({ minutes: booking.startMin });
     const hoursUntil = start.diff(DateTime.fromJSDate(now).setZone(tz), "hours").hours;
 
-    if (!(hoursUntil >= MIN_CANCEL_NOTICE_HOURS)) {
+    if (!(hoursUntil >= CANCEL_NOTICE_HOURS)) {
+      const fee = lateCancelFeeRm(classTypeName);
       return jsonError(
-        `Cancellation is allowed up to ${MIN_CANCEL_NOTICE_HOURS} hours before the session.`,
+        `Self-cancel closes ${CANCEL_NOTICE_HOURS} hours before class. Message the studio on WhatsApp and pay the RM ${fee} late cancellation fee (group class RM ${GROUP_LATE_CANCEL_FEE_RM}, private session RM ${PRIVATE_LATE_CANCEL_FEE_RM}).`,
         409,
       );
     }
@@ -149,6 +162,21 @@ export async function POST(req: NextRequest) {
           endMin: booking.endMin,
           businessTimeZone: tz,
         }).catch(() => {}),
+        (() => {
+          const parts = formatKlParts({
+            dateKey: booking.dateKey,
+            startMin: booking.startMin,
+            endMin: booking.endMin,
+            tz,
+          });
+          return sendBookingCancelledPush({
+            clientId: booking.clientId,
+            className: classTypeName,
+            bookingCode: booking.code ?? undefined,
+            dateLabel: parts.dateLabel,
+            timeLabel: parts.timeLabel,
+          });
+        })().catch(() => {}),
       ]);
 
       const clientOid = booking.clientId;

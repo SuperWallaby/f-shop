@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       Array<{ itemId: string; startMin: number; endMin: number }>
     >();
     for (const b of bookingDocs) {
-      if (b.status !== "confirmed") continue;
+      if (b.status !== "pending" && b.status !== "confirmed") continue;
       const k = (b.exclusiveKey ?? "").trim();
       if (!k) continue;
       const list = exclusiveBookingsByKey.get(k) ?? [];

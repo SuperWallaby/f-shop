@@ -44,7 +44,10 @@ export async function GET(req: NextRequest) {
     }
 
     const bookingDocs = await bookings
-      .find({ dateKey: { $gte: fromDateKey, $lte: toDateKey }, status: "confirmed" })
+      .find({
+        dateKey: { $gte: fromDateKey, $lte: toDateKey },
+        status: { $in: ["pending", "confirmed"] },
+      })
       .toArray();
 
     const exclusiveBookingsByGroup = new Map<

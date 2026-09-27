@@ -79,10 +79,10 @@ export const createBookingSchema = z
 
 export const publicBookingLookupQuerySchema = z
   .object({
-    code: z.string().trim().regex(/^\d{6}$/).optional(),
-    name: z.string().trim().min(1).max(200).optional(),
-    email: z.string().trim().email().max(320).optional(),
-    whatsapp: normalizedWhatsappSchema.optional(),
+    code: z.string().trim().regex(/^\d{6}$/).nullish(),
+    name: z.string().trim().min(1).max(200).nullish(),
+    email: z.string().trim().email().max(320).nullish(),
+    whatsapp: normalizedWhatsappSchema.nullish(),
   })
   .refine(
     (v) => {
@@ -135,10 +135,6 @@ export const adminUpdateSlotSchema = z.object({
   cancelled: z.boolean().optional(),
 });
 
-export const googleMobileAuthSchema = z.object({
-  idToken: z.string().min(10),
-});
-
 export const pushTokenRegisterSchema = z.object({
   token: z.string().min(20),
   platform: z.enum(["ios", "android", "web"]),
@@ -165,35 +161,47 @@ export const planCategorySchema = z.enum([
   "reformer_group",
 ]);
 
-export const clientAuthEmailSchema = z.object({
-  email: z.string().trim().email().max(320),
-  name: z.string().trim().max(200).optional(),
-  password: z.string().regex(/^\d{4}$/).optional(),
-});
-
 export const clientAuthPasswordLoginSchema = z.object({
-  email: z.string().trim().email().max(320),
+  /** Primary identity — same WhatsApp = same account. */
+  whatsapp: normalizedWhatsappSchema,
   password: z.string().regex(/^\d{4}$/),
 });
 
 export const clientAuthSignupSchema = z.object({
-  email: z.string().trim().email().max(320),
+  email: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().email().max(320).optional(),
+  ),
   password: z.string().regex(/^\d{4}$/),
   name: z.string().trim().max(200).optional(),
-  whatsapp: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
-    normalizedWhatsappSchema.optional(),
-  ),
-});
-
-export const clientAuthRecoverSchema = z.object({
-  name: z.string().trim().min(1).max(200),
   whatsapp: normalizedWhatsappSchema,
 });
 
-export const clientProfileNameSchema = z.object({
-  name: z.string().trim().min(1).max(200),
+/** Check whether a WhatsApp number already has an account (phone → PIN flow). */
+export const clientAuthLookupSchema = z.object({
+  whatsapp: normalizedWhatsappSchema,
 });
+
+/** Find password: phone only — temp 4-digit PIN sent via WhatsApp/SMS. */
+export const clientAuthFindPasswordSchema = z.object({
+  whatsapp: normalizedWhatsappSchema,
+});
+
+export const clientChangePasswordSchema = z.object({
+  password: z.string().regex(/^\d{4}$/),
+});
+
+export const clientProfileSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    email: z.string().trim().email().max(320).optional(),
+    whatsapp: normalizedWhatsappSchema.optional(),
+    currentPassword: z.string().regex(/^\d{4}$/).optional(),
+  })
+  .strict()
+  .refine((v) => v.name !== undefined || v.email !== undefined || v.whatsapp !== undefined, {
+    message: "Provide at least one profile field to update.",
+  });
 
 export const publicCreateOrderSchema = z.object({
   planId: z.string().min(1),

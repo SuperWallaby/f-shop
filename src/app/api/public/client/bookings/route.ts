@@ -3,18 +3,22 @@ import { ObjectId } from "mongodb";
 import { DateTime } from "luxon";
 import { z } from "zod";
 import { getCollections } from "@/lib/db";
-import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
+import { requireClientReady } from "@/app/api/_utils/clientAuth";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { minutesToUtcIso } from "@/lib/time";
 import type { DateKey } from "@/lib/time";
+import {
+  CANCEL_NOTICE_HOURS,
+  lateCancelFeeRm,
+} from "@/lib/cancelPolicy";
 
-const MIN_CANCEL_NOTICE_HOURS = 6;
+const MIN_RESCHEDULE_NOTICE_HOURS = 6;
 
 export async function GET(req: NextRequest) {
   try {
-    const clientId = getClientIdFromRequest(req);
-    if (!clientId) return jsonError("Sign in required", 401);
+    const { clientId, response } = await requireClientReady(req);
+    if (response || !clientId) return response;
 
     const { searchParams } = new URL(req.url);
     const scope = searchParams.get("scope") === "history" ? "history" : "upcoming";
@@ -78,26 +82,45 @@ export async function GET(req: NextRequest) {
         .startOf("day")
         .plus({ minutes: b.startMin });
       const hoursUntil = start.diff(now, "hours").hours;
-      const canCancel =
-        b.status === "confirmed" && hoursUntil >= MIN_CANCEL_NOTICE_HOURS;
+      const isConfirmed = b.status === "confirmed";
+      const className = itemNameById.get(b.itemId.toHexString()) ?? "";
+      const canCancel = isConfirmed && hoursUntil >= CANCEL_NOTICE_HOURS;
+      const canReschedule = isConfirmed && hoursUntil >= MIN_RESCHEDULE_NOTICE_HOURS;
+      const fee = lateCancelFeeRm(className);
+      const startUtc = minutesToUtcIso(typedDateKey, b.startMin, tz);
+      const endUtc = minutesToUtcIso(typedDateKey, b.endMin, tz);
+      const statusBlockedReason = isConfirmed
+        ? null
+        : "Only confirmed bookings can be changed.";
+      const cancelCutoffReason =
+        isConfirmed && !canCancel
+          ? `Self-cancel closes ${CANCEL_NOTICE_HOURS} hours before class. Message us on WhatsApp and pay the RM ${fee} late cancellation fee.`
+          : null;
+      const rescheduleCutoffReason =
+        isConfirmed && !canReschedule
+          ? `Rescheduling is allowed up to ${MIN_RESCHEDULE_NOTICE_HOURS} hours before the session.`
+          : null;
 
       return {
         id: b._id?.toHexString() ?? "",
         code: b.code ?? "",
         status: b.status,
+        date: b.dateKey,
         dateKey: b.dateKey,
+        start: startUtc,
         startMin: b.startMin,
+        end: endUtc,
         endMin: b.endMin,
-        className: itemNameById.get(b.itemId.toHexString()) ?? "",
-        startUtc: minutesToUtcIso(typedDateKey, b.startMin, tz),
-        endUtc: minutesToUtcIso(typedDateKey, b.endMin, tz),
+        class: className,
+        className,
+        startUtc,
+        endUtc,
+        slotId: b.slotId?.toHexString() ?? null,
+        itemId: b.itemId.toHexString(),
         canCancel,
-        cancelBlockedReason:
-          b.status !== "confirmed"
-            ? null
-            : hoursUntil < MIN_CANCEL_NOTICE_HOURS
-              ? `Cancellation is allowed up to ${MIN_CANCEL_NOTICE_HOURS} hours before the session.`
-              : null,
+        cancelBlockedReason: statusBlockedReason ?? cancelCutoffReason,
+        canReschedule,
+        rescheduleBlockedReason: statusBlockedReason ?? rescheduleCutoffReason,
       };
     });
 

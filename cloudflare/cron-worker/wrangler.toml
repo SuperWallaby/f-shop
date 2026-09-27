@@ -4,7 +4,7 @@ compatibility_date = "2025-01-01"
 
 [triggers]
 crons = [
-  "*/10 * * * *", # auto-cancel
+  "*/10 * * * *", # auto-cancel + unfinished booking reminders
   "0 1 * * *",    # reminders (01:00 UTC == 09:00 KL)
 ]
 

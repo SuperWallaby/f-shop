@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       clientId = new ObjectId(clientIdRaw);
       const client = await clients.findOne({ _id: clientId });
       if (!client) return jsonError("Client not found", 404);
-      clientName = clientName || client.name || client.email;
+      clientName = clientName || client.name || client.email || "";
       clientEmail = clientEmail || client.email || undefined;
       clientWhatsapp = clientWhatsapp || client.whatsapp || undefined;
     }
@@ -281,7 +281,7 @@ export async function POST(req: NextRequest) {
           pClientId = new ObjectId(pClientIdRaw);
           const c = await clients.findOne({ _id: pClientId });
           if (!c) return jsonError(`Client not found: ${pName}`, 404);
-          pName = pName || c.name || c.email;
+          pName = pName || c.name || c.email || "";
           pEmail = pEmail || c.email || undefined;
           pWa = pWa || c.whatsapp || undefined;
         }

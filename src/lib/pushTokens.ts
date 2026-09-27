@@ -44,3 +44,10 @@ export async function listPushTokensForClient(clientId: ObjectId) {
   const rows = await pushTokens.find({ clientId }).toArray();
   return rows.map((r) => r.token).filter(Boolean);
 }
+
+export async function deleteInvalidPushTokens(tokens: string[]) {
+  const unique = [...new Set(tokens.map((token) => token.trim()).filter(Boolean))];
+  if (!unique.length) return;
+  const { pushTokens } = await getCollections();
+  await pushTokens.deleteMany({ token: { $in: unique } });
+}
