@@ -9,11 +9,13 @@ import {
 } from "@/lib/bookingMessages";
 
 const DEFAULT_CONTENT_SIDS = {
-  bookingConfirmedEn: "HX8eb56c76730f61160facb74d91acd32a",
-  bookingReminderEn: "HXaf5345bb90988367047251d07dcf7f36",
-  bookingCancelledByClientEn: "HXde78c084556bb1672cf7f85d8d26e927",
-  classCancelledByInstructorEn: "HXa1e64586469081388ed540d7c50f0269",
-  noShowEn: "HXa1256393456f0496ca3679231572e00a",
+  bookingConfirmedEn: "HX41c592b37b25f875363c76b656c89f2a",
+  bookingReminderEn: "HXbd3d4b12be0f97c148b29f507caeea51",
+  bookingCancelledByClientEn: "HX8d36e7d55ed2e0d23289c39e1cd1b8af",
+  classCancelledByInstructorEn: "HXc806a82664a071ec81ac69659dce0a18",
+  noShowEn: "HXd82ce8413fd712391c3635e540bf5444",
+  bookingRescheduledEn: "HXb71c254fe8b8019177063b0d70ce5e46",
+  studioAlertEn: "HX9085d4dcb7b3dbd4184f486e05bedc19",
 } as const;
 
 function formEncode(params: Record<string, string>): string {
@@ -343,14 +345,77 @@ export async function sendNoShowWhatsApp(args: {
   });
 }
 
+export async function sendBookingRescheduledWhatsApp(args: {
+  to: string;
+  body: string;
+  dateKey: string;
+  startMin: number;
+  endMin: number;
+  businessTimeZone: string;
+}) {
+  let sid = getContentSid("TWILIO_CONTENT_SID_BOOKING_RESCHEDULED_EN");
+  if (!sid) sid = DEFAULT_CONTENT_SIDS.bookingRescheduledEn;
+  if (!sid) {
+    await sendTwilioWhatsApp({ to: args.to, body: args.body });
+    return;
+  }
+
+  const { dateLabel, timeLabel } = formatKlParts({
+    dateKey: args.dateKey,
+    startMin: args.startMin,
+    endMin: args.endMin,
+    tz: args.businessTimeZone,
+  });
+
+  await sendTwilioWhatsAppTemplate({
+    to: args.to,
+    contentSid: sid,
+    contentVariables: { "1": dateLabel, "2": timeLabel },
+  });
+}
+
+/**
+ * Studio/admin alert. Uses an approved template because the admin number
+ * rarely has an open 24h WhatsApp session (free-form bodies fail with 63016).
+ */
+export async function sendStudioAlertWhatsApp(args: {
+  to: string;
+  type: string;
+  classLabel?: string;
+  whenLabel?: string;
+  clientLabel?: string;
+  fallbackBody: string;
+}) {
+  let sid = getContentSid("TWILIO_CONTENT_SID_STUDIO_ALERT_EN");
+  if (!sid) sid = DEFAULT_CONTENT_SIDS.studioAlertEn;
+  if (!sid) {
+    await sendTwilioWhatsApp({ to: args.to, body: args.fallbackBody });
+    return;
+  }
+
+  await sendTwilioWhatsAppTemplate({
+    to: args.to,
+    contentSid: sid,
+    contentVariables: {
+      "1": args.type || "-",
+      "2": args.classLabel || "-",
+      "3": args.whenLabel || "-",
+      "4": args.clientLabel || "-",
+    },
+  });
+}
+
+const ADMIN_KIND_LABELS = {
+  booking_confirmed: "New booking",
+  booking_cancelled_by_client: "Booking cancelled (client)",
+  booking_rescheduled: "Booking rescheduled",
+  class_cancelled_by_instructor: "Class cancelled (instructor)",
+  reminder_sent: "Reminder job",
+  no_show_marked: "No-show marked",
+} as const;
+
 export async function sendAdminWhatsAppNotification(args: {
-  kind:
-    | "booking_confirmed"
-    | "booking_cancelled_by_client"
-    | "booking_rescheduled"
-    | "class_cancelled_by_instructor"
-    | "reminder_sent"
-    | "no_show_marked";
+  kind: keyof typeof ADMIN_KIND_LABELS;
   name?: string;
   email?: string;
   whatsapp?: string;
@@ -364,9 +429,38 @@ export async function sendAdminWhatsAppNotification(args: {
 }) {
   const to = optionalEnv("TWILIO_WHATSAPP_TO");
   if (!to) return;
-  await sendTwilioWhatsApp({
+
+  let whenLabel: string | undefined;
+  if (
+    args.dateKey &&
+    args.startMin !== undefined &&
+    args.endMin !== undefined &&
+    args.businessTimeZone
+  ) {
+    const { dateLabel, timeRangeLabel } = formatKlParts({
+      dateKey: args.dateKey,
+      startMin: args.startMin,
+      endMin: args.endMin,
+      tz: args.businessTimeZone,
+    });
+    whenLabel = `${dateLabel} ${timeRangeLabel}`;
+  }
+
+  const type = [ADMIN_KIND_LABELS[args.kind], args.bookingCode]
+    .filter(Boolean)
+    .join(" · ");
+  const clientLabel =
+    [args.name, args.whatsapp].filter(Boolean).join(" · ") ||
+    args.extra ||
+    undefined;
+
+  await sendStudioAlertWhatsApp({
     to,
-    body: buildAdminBookingMessage({
+    type,
+    classLabel: args.classTypeName,
+    whenLabel,
+    clientLabel,
+    fallbackBody: buildAdminBookingMessage({
       kind: args.kind,
       name: args.name,
       email: args.email,

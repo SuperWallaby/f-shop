@@ -7,7 +7,7 @@ import { requireAdmin } from "../../../_utils/adminAuth";
 import { optionalEnv, requireEnv } from "@/lib/env";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { sendClassCancelledByInstructorEmail } from "@/lib/email";
-import { sendClassCancelledByInstructorWhatsApp, sendTwilioWhatsApp } from "@/lib/twilioWhatsApp";
+import { sendClassCancelledByInstructorWhatsApp, sendStudioAlertWhatsApp } from "@/lib/twilioWhatsApp";
 import { releaseExclusiveLocksAfterBookingRemoved } from "@/lib/exclusiveLocks";
 
 function allowJob(req: NextRequest) {
@@ -167,7 +167,13 @@ export async function POST(req: NextRequest) {
         `Class: ${item.name}\n` +
         `When: ${s.dateKey} ${start.toFormat("h:mm a")} (${tz})\n` +
         `Bookings: ${confirmed}/${minBookings}`;
-      await sendTwilioWhatsApp({ to: notifyTo, body: msg }).catch(() => {});
+      await sendStudioAlertWhatsApp({
+        to: notifyTo,
+        type: `Auto-cancelled session (${confirmed}/${minBookings} booked)`,
+        classLabel: item.name,
+        whenLabel: `${s.dateKey} ${start.toFormat("h:mm a")}`,
+        fallbackBody: msg,
+      }).catch(() => {});
     }
 
     return jsonOk({
