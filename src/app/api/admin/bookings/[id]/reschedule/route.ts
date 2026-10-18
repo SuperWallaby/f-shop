@@ -44,8 +44,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     const booking = await bookings.findOne({ _id: bookingObjectId });
     if (!booking) return jsonError("Booking not found", 404);
-    if (booking.status !== "confirmed") {
-      return jsonError("Only confirmed bookings can be rescheduled", 409);
+    if (booking.status !== "confirmed" && booking.status !== "pending") {
+      return jsonError("Only active bookings can be rescheduled", 409);
     }
 
     if (booking.slotId?.equals(slotObjectId)) {
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     try {
       const updated = await bookings.updateOne(
-        { _id: bookingObjectId, status: "confirmed" },
+        { _id: bookingObjectId, status: { $in: ["pending", "confirmed"] } },
         {
           $set: {
             slotId: updatedSlot._id,

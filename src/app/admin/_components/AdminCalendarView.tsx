@@ -612,6 +612,57 @@ export function AdminCalendarView() {
     }
   }
 
+  async function confirmBooking(bookingId: string) {
+    const ok = window.confirm("Confirm this pending booking? (This will send a notice)");
+    if (!ok) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/bookings/${encodeURIComponent(bookingId)}/confirm`,
+        {
+          method: "POST",
+        },
+      );
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error?.message ?? "Failed to confirm booking");
+      }
+
+      // Reload month (same as patchSlot)
+      const res2 = await fetch(
+        `/api/admin/calendar?fromDateKey=${encodeURIComponent(fromDateKey)}&toDateKey=${encodeURIComponent(
+          toDateKey,
+        )}`,
+        { cache: "no-store" },
+      );
+      const json2 = await res2.json();
+      if (!res2.ok || !json2?.ok) {
+        throw new Error(json2?.error?.message ?? "Failed to reload calendar");
+      }
+      setDays(json2.data.days ?? []);
+
+      if (selected) {
+        const updatedDay = (json2.data.days ?? []).find(
+          (d: CalendarDayDto) => d.dateKey === selected.dateKey,
+        );
+        const updatedSlot =
+          updatedDay?.slots?.find(
+            (s: CalendarDayDto["slots"][number]) => s.id === selected.slot.id,
+          ) ?? null;
+        if (updatedSlot) {
+          const nextSel = { dateKey: selected.dateKey, slot: updatedSlot };
+          setSelected(nextSel);
+          syncEditorFromSelected(nextSel);
+        }
+      }
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function markNoShow(bookingId: string) {
     const ok = window.confirm(
       "Mark this booking as no-show? (This will send a notice)",
@@ -1481,6 +1532,7 @@ export function AdminCalendarView() {
                               }),
                             )
                           }
+                          onConfirmBooking={() => confirmBooking(b.id)}
                           onCancelBooking={() => cancelBooking(b.id)}
                           onMarkNoShow={() => markNoShow(b.id)}
                           onDeleteCancelled={async () => {

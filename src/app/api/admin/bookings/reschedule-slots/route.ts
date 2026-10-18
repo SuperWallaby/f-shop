@@ -22,8 +22,8 @@ export async function GET(req: NextRequest) {
 
     const booking = await bookings.findOne({ _id: bookingObjectId });
     if (!booking) return jsonError("Booking not found", 404);
-    if (booking.status !== "confirmed") {
-      return jsonError("Only confirmed bookings can be rescheduled", 409);
+    if (booking.status !== "confirmed" && booking.status !== "pending") {
+      return jsonError("Only active bookings can be rescheduled", 409);
     }
 
     const item = await items.findOne({ _id: booking.itemId });
