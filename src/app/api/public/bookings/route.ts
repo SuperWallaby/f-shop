@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const {
       slotId,
       name,
-      email,
+      email: rawEmail,
       whatsapp,
       consentWhatsapp,
       marketingOptIn,
@@ -90,6 +90,14 @@ export async function POST(req: NextRequest) {
 
     const sessionClientId = getClientIdFromRequest(req);
     let linkedClientId: ObjectId | undefined = sessionClientId ?? undefined;
+    const sessionClient = sessionClientId
+      ? await clients.findOne({ _id: sessionClientId })
+      : null;
+    // Clients who signed up with phone + PIN may have no email on file.
+    const email = rawEmail ?? (sessionClient?.email ?? "").trim();
+    if (!email && !sessionClient) {
+      return jsonError("Please enter a valid email.", 400);
+    }
 
     let signupClientId: ObjectId | undefined;
     if (signUp && password) {
@@ -180,11 +188,8 @@ export async function POST(req: NextRequest) {
         }
       }
       linkedClientId = signupClientId;
-    } else if (sessionClientId) {
-      const sessionClient = await clients.findOne({ _id: sessionClientId });
-      if (!sessionClient) {
-        linkedClientId = undefined;
-      }
+    } else if (sessionClientId && !sessionClient) {
+      linkedClientId = undefined;
     }
 
     const settingsDoc = await settings.findOne({ _id: "singleton" });

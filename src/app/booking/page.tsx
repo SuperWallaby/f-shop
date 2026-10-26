@@ -705,7 +705,7 @@ function BookingPageInner() {
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
     const loggedIn = Boolean(authedClient);
 
-    if (!emailOk) {
+    if (!emailOk && !(loggedIn && !trimmedEmail)) {
       setSubmitError("Please enter a valid email.");
       return;
     }
@@ -738,7 +738,7 @@ function BookingPageInner() {
         body: JSON.stringify({
           slotId: selectedSlotId,
           name: guestName,
-          email: trimmedEmail,
+          ...(trimmedEmail ? { email: trimmedEmail } : {}),
           whatsapp: trimmedWhatsapp,
           consentWhatsapp: true,
           marketingOptIn: false,

@@ -60,7 +60,11 @@ export const createBookingSchema = z
   .object({
     slotId: z.string().min(1),
     name: z.string().min(1).max(200),
-    email: z.string().email().max(320),
+    /** Optional only for signed-in clients (route enforces for guests). */
+    email: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+      z.string().trim().email().max(320).optional(),
+    ),
     whatsapp: normalizedWhatsappSchema,
     consentWhatsapp: z.boolean().optional(),
     marketingOptIn: z.boolean().optional(),
@@ -73,6 +77,13 @@ export const createBookingSchema = z
         code: z.ZodIssueCode.custom,
         message: "Enter a 4-digit password to create an account.",
         path: ["password"],
+      });
+    }
+    if (v.signUp && !v.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Please enter a valid email.",
+        path: ["email"],
       });
     }
   });

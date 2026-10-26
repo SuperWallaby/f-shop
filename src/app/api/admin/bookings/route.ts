@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { slotId, name, email, whatsapp } = parsed.data;
+    if (!email) return jsonError("Please enter a valid email.", 400);
     const slotObjectId = ObjectId.isValid(slotId) ? new ObjectId(slotId) : null;
     if (!slotObjectId) return jsonError("Invalid slotId", 400);
 

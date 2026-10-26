@@ -55,7 +55,7 @@ export function BookingGuestPanel({
   const pinOk = loggedIn || !signUp || /^\d{4}$/.test(password);
   const canSubmit =
     !!selectedSlotId &&
-    !!displayEmail.trim() &&
+    (loggedIn || !!displayEmail.trim()) &&
     !!displayWhatsapp.trim() &&
     pinOk &&
     !submitting;
