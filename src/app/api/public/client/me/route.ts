@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { getCollections } from "@/lib/db";
 import {
+  CLIENT_COOKIE_NAME,
   clearClientSessionCookie,
+  clientSessionNeedsRefresh,
   setClientSessionCookie,
 } from "@/lib/clientSession";
 import { getCreditBalance, publicClient } from "@/lib/credits";
@@ -27,16 +29,16 @@ export async function GET(req: NextRequest) {
     email: client.email,
   });
 
-  return setClientSessionCookie(
-    jsonOk({
-      authed: true,
-      client: publicClient(client),
-      balance,
-      needsName,
-      needsPasswordChange: Boolean(client.mustChangePassword),
-      hasUpcomingBookings,
-    }),
-    clientId,
-    req,
-  );
+  const res = jsonOk({
+    authed: true,
+    client: publicClient(client),
+    balance,
+    needsName,
+    needsPasswordChange: Boolean(client.mustChangePassword),
+    hasUpcomingBookings,
+  });
+  if (!clientSessionNeedsRefresh(req.cookies.get(CLIENT_COOKIE_NAME)?.value)) {
+    return res;
+  }
+  return setClientSessionCookie(res, clientId, req);
 }

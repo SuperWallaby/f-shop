@@ -41,6 +41,24 @@ export function createClientSessionValue(clientId: ObjectId): string {
 }
 
 export function verifyClientSessionValue(value: string | undefined): ObjectId | null {
+  return parseClientSessionValue(value)?.clientId ?? null;
+}
+
+const CLIENT_SESSION_REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Re-issuing on every /me lets an in-flight /me response overwrite the cleared
+ * cookie right after logout, so only refresh sessions older than a day.
+ */
+export function clientSessionNeedsRefresh(value: string | undefined): boolean {
+  const parsed = parseClientSessionValue(value);
+  if (!parsed) return false;
+  return Date.now() - parsed.iat > CLIENT_SESSION_REFRESH_AFTER_MS;
+}
+
+function parseClientSessionValue(
+  value: string | undefined,
+): { clientId: ObjectId; iat: number } | null {
   if (!value) return null;
   const secret = optionalEnv("CLIENT_SESSION_SECRET") ?? process.env.ADMIN_SESSION_SECRET;
   if (!secret) return null;
@@ -57,7 +75,7 @@ export function verifyClientSessionValue(value: string | undefined): ObjectId | 
     };
     if (!payload.iat || typeof payload.iat !== "number") return null;
     if (!payload.clientId || !ObjectId.isValid(payload.clientId)) return null;
-    return new ObjectId(payload.clientId);
+    return { clientId: new ObjectId(payload.clientId), iat: payload.iat };
   } catch {
     return null;
   }

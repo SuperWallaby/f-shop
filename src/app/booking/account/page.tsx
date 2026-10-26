@@ -92,6 +92,14 @@ export default function BookingAccountPage() {
     setLogoutLoading(true);
     try {
       await fetch("/api/public/client/logout", { method: "POST" });
+      // A /me request started before logout (e.g. the window focus after the
+      // confirm dialog) may land late and restore the cookie.
+      const check = await fetch("/api/public/client/me", { cache: "no-store" })
+        .then((r) => r.json())
+        .catch(() => null);
+      if (check?.data?.authed) {
+        await fetch("/api/public/client/logout", { method: "POST" });
+      }
       setClientMe({ authed: false });
       notifyClientAuthChanged();
     } finally {
