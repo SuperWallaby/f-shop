@@ -71,6 +71,9 @@ export async function PATCH(
       patch.badgeLabel = d.badgeLabel.trim() || undefined;
     }
     if (d.planIds !== undefined) patch.planIds = parsePlanObjectIds(d.planIds);
+    if (d.minClassesAttended !== undefined) {
+      patch.minClassesAttended = d.minClassesAttended;
+    }
     if (d.imageUrl !== undefined) {
       patch.imageUrl = d.imageUrl.trim() || undefined;
     }

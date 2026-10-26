@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
       discountLabel: d.discountLabel?.trim() || undefined,
       badgeLabel: d.badgeLabel?.trim() || undefined,
       planIds: parsePlanObjectIds(d.planIds),
+      ...(d.minClassesAttended
+        ? { minClassesAttended: d.minClassesAttended }
+        : {}),
       imageUrl,
       showAsModal: Boolean(d.showAsModal),
       modalLink,

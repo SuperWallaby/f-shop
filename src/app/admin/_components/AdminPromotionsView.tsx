@@ -16,6 +16,7 @@ type PromotionRow = {
   discountLabel: string;
   badgeLabel: string;
   planIds: string[];
+  minClassesAttended: number;
   imageUrl: string;
   showAsModal: boolean;
   modalLink: string;
@@ -33,6 +34,7 @@ const emptyForm = {
   discountLabel: "",
   badgeLabel: "",
   planIds: [] as string[],
+  minClassesAttended: 0,
   imageUrl: "",
   showAsModal: false,
   modalLink: "",
@@ -126,6 +128,10 @@ export function AdminPromotionsView() {
               : form.discountLabel.trim() || undefined,
           badgeLabel: form.badgeLabel.trim() || undefined,
           planIds: form.planIds,
+          minClassesAttended: Math.max(
+            0,
+            Math.floor(Number(form.minClassesAttended) || 0),
+          ),
           imageUrl: form.imageUrl.trim() || "",
           showAsModal: form.showAsModal,
           modalLink: form.modalLink.trim() || "",
@@ -175,6 +181,7 @@ export function AdminPromotionsView() {
       discountLabel: row.discountLabel,
       badgeLabel: row.badgeLabel,
       planIds: row.planIds ?? [],
+      minClassesAttended: row.minClassesAttended ?? 0,
       imageUrl: row.imageUrl,
       showAsModal: row.showAsModal,
       modalLink: row.modalLink,
@@ -312,6 +319,27 @@ export function AdminPromotionsView() {
               }
               className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
             />
+          </label>
+          <label className="grid gap-1 sm:col-span-2">
+            <span className="text-xs text-[#716D64]">
+              Only for clients who attended at least (classes)
+            </span>
+            <input
+              type="number"
+              min={0}
+              value={form.minClassesAttended}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  minClassesAttended: Number(e.target.value),
+                }))
+              }
+              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+            />
+            <span className="text-[11px] text-[#716D64]">
+              0 = everyone. Otherwise hidden from guests and clients with fewer
+              attended classes.
+            </span>
           </label>
 
           <div className="sm:col-span-2 grid gap-2">
@@ -493,7 +521,14 @@ export function AdminPromotionsView() {
                       </div>
                     </div>
                   </td>
-                  <td className="py-3 pr-3">{discountCell(row)}</td>
+                  <td className="py-3 pr-3">
+                    {discountCell(row)}
+                    {row.minClassesAttended > 0 ? (
+                      <div className="text-xs text-[#716D64] mt-0.5">
+                        {row.minClassesAttended}+ classes only
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="py-3 pr-3">
                     {(row.planIds ?? []).length
                       ? `${row.planIds.length} plan(s)`

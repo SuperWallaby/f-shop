@@ -364,6 +364,7 @@ export const adminPromotionCreateSchema = z.object({
   discountLabel: z.string().trim().max(200).optional(),
   badgeLabel: z.string().trim().max(80).optional(),
   planIds: z.array(z.string().min(1)).max(50).optional(),
+  minClassesAttended: z.number().int().min(0).max(1000).optional(),
   imageUrl: z
     .union([
       z.string().url().max(2048),

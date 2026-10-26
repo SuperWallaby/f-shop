@@ -1,18 +1,29 @@
+import { NextRequest } from "next/server";
 import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
+import { getClientIdFromRequest } from "@/app/api/_utils/clientAuth";
 import {
   formatPromotionDiscountText,
   promotionBadgeLabel,
 } from "@/lib/promotionMath";
+import {
+  isPromotionUnlocked,
+  loadPromotionContext,
+} from "@/lib/promotionEligibility";
 
 /** Public active promotions (modal + plan badge metadata). */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const { promotions } = await getCollections();
-    const docs = await promotions
-      .find({ active: true })
-      .sort({ sortOrder: 1, name: 1 })
-      .toArray();
+    const { promotions, bookings, clients } = await getCollections();
+    const { promos, attended } = await loadPromotionContext({
+      promotions,
+      bookings,
+      clients,
+      clientId: getClientIdFromRequest(req),
+    });
+    const docs = promos
+      .filter((p) => isPromotionUnlocked(p, attended))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 
     return jsonOk({
       promotions: docs.map((doc) => ({

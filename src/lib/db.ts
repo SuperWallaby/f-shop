@@ -264,6 +264,8 @@ export type PromotionDb = {
  badgeLabel?: string;
  /** Plans that show this promo badge / discounted price. */
  planIds?: ObjectId[];
+ /** Only signed-in clients with at least this many attended classes see/get it. */
+ minClassesAttended?: number;
  /** Promo image (https URL or data:image… for small uploads). */
  imageUrl?: string;
  /** Show as site popup modal when active + has image. */

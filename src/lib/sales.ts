@@ -55,6 +55,7 @@ export function serializePromotion(
     discountLabel: doc.discountLabel ?? "",
     badgeLabel: doc.badgeLabel ?? "",
     planIds: (doc.planIds ?? []).map((id) => id.toHexString()),
+    minClassesAttended: doc.minClassesAttended ?? 0,
     imageUrl: doc.imageUrl ?? "",
     showAsModal: Boolean(doc.showAsModal),
     modalLink: doc.modalLink ?? "",

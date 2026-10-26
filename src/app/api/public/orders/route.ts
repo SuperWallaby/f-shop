@@ -8,7 +8,11 @@ import {
   ensureDefaultPlans,
   getOrderAmountForClient,
 } from "@/lib/credits";
-import { applyPromotionDiscount, findPromotionForPlanId } from "@/lib/sales";
+import { applyPromotionDiscount } from "@/lib/sales";
+import {
+  findEligiblePromotionForPlanId,
+  loadPromotionContext,
+} from "@/lib/promotionEligibility";
 import { requireClientReady } from "@/app/api/_utils/clientAuth";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
 
@@ -24,17 +28,22 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return jsonError("Invalid body", 400, parsed.error.flatten());
     if (!ObjectId.isValid(parsed.data.planId)) return jsonError("Invalid planId", 400);
 
-    const { clients, plans, orders, promotions, creditLedger } =
+    const { clients, plans, orders, promotions, creditLedger, bookings } =
       await getCollections();
     await ensureDefaultPlans(plans);
-    const [client, plan, promoDocs] = await Promise.all([
+    const [client, plan, { promos, attended }] = await Promise.all([
       clients.findOne({ _id: clientId! }),
       plans.findOne({
         _id: new ObjectId(parsed.data.planId),
         active: true,
         hidden: { $ne: true },
       }),
-      promotions.find({ active: true }).sort({ sortOrder: 1 }).toArray(),
+      loadPromotionContext({
+        promotions,
+        bookings,
+        clients,
+        clientId: clientId!,
+      }),
     ]);
     if (!client) return jsonError("Client not found", 404);
     if (!plan) return jsonError("Plan not found", 404);
@@ -55,7 +64,11 @@ export async function POST(req: NextRequest) {
       ),
     ]);
     const firstPurchaseLikely = !previousPaidOrder && !previousPurchaseGrant;
-    const promo = findPromotionForPlanId(plan._id!.toHexString(), promoDocs);
+    const promo = findEligiblePromotionForPlanId(
+      plan._id!.toHexString(),
+      promos,
+      attended,
+    );
     const listAmount = getOrderAmountForClient(plan, client);
     const amountRm = applyPromotionDiscount(listAmount, promo);
     const draft = {
