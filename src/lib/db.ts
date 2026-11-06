@@ -27,6 +27,8 @@ export type SettingsDoc = {
  whatsappDedupeV1Done?: boolean;
  /** Re-run merge with expanded phone variants (+60 / 60 / 0… / 00…). */
  whatsappDedupeV2Done?: boolean;
+ /** Hex sha256 of the scheduled-job secret sent by the cron worker. */
+ jobSecretSha256?: string;
  updatedAt: Date;
 };
 
@@ -195,6 +197,9 @@ export type ClientDb = {
   passwordHash?: string;
   /** Set after a PIN reset until the client chooses a new PIN. */
   mustChangePassword?: boolean;
+  /** Temporary PIN from Find password; the regular PIN keeps working alongside it. */
+  tempPasswordHash?: string;
+  tempPasswordExpiresAt?: Date;
   /** App push notifications (promotions / events). Booking alerts always sent when device registered. */
   pushMarketingOptIn?: boolean;
 };

@@ -17,6 +17,7 @@ import {
   sendClassChangedPush,
 } from "@/lib/pushNotifications";
 import { formatKlParts } from "@/lib/bookingMessages";
+import { refundCancelledClassBookings } from "@/lib/credits";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = requireAdmin(req);
@@ -33,7 +34,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return jsonError("Invalid body", 400, parsed.error.flatten());
     }
 
-    const { timeSlots, bookings, items, exclusiveLocks } = await getCollections();
+    const { timeSlots, bookings, items, exclusiveLocks, creditLedger } =
+      await getCollections();
     const now = new Date();
 
     const existing = await timeSlots.findOne({ _id: slotObjectId });
@@ -81,6 +83,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           { _id: { $in: ids }, status: { $in: ["pending", "confirmed"] } },
           { $set: { status: "cancelled", cancelledAt: now } }
         );
+        await refundCancelledClassBookings({ creditLedger, bookings: bs, now });
         // Keep counts consistent with cancelled session UI
         await timeSlots.updateOne(
           { _id: slotObjectId },

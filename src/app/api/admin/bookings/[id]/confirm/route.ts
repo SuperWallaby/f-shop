@@ -3,14 +3,7 @@ import { ObjectId } from "mongodb";
 import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "../../../../_utils/http";
 import { requireAdmin } from "../../../../_utils/adminAuth";
-import { sendBookingCreatedEmail } from "@/lib/email";
-import {
-  sendAdminWhatsAppNotification,
-  sendBookingConfirmedWhatsApp,
-} from "@/lib/twilioWhatsApp";
-import { sendBookingConfirmedPush } from "@/lib/pushNotifications";
-import { formatKlParts } from "@/lib/bookingMessages";
-import { BUSINESS_TIME_ZONE } from "@/lib/constants";
+import { notifyBookingConfirmed } from "@/lib/bookingConfirmedNotify";
 
 export async function POST(
   req: NextRequest,
@@ -47,58 +40,11 @@ export async function POST(
       { _id: booking.itemId },
       { projection: { name: 1 } },
     );
-    const classTypeName = item?.name ?? "Pilates";
-    const tz = booking.businessTimeZone || BUSINESS_TIME_ZONE;
-    const parts = formatKlParts({
-      dateKey: booking.dateKey,
-      startMin: booking.startMin,
-      endMin: booking.endMin,
-      tz,
+    await notifyBookingConfirmed({
+      booking,
+      classTypeName: item?.name ?? "Pilates",
+      adminNote: "Confirmed by admin after WhatsApp conversation",
     });
-
-    await Promise.all([
-      sendBookingCreatedEmail({
-        to: booking.email,
-        name: booking.name,
-        classTypeName,
-        whatsapp: booking.whatsapp ?? "",
-        bookingCode: booking.code,
-        dateKey: booking.dateKey,
-        startMin: booking.startMin,
-        endMin: booking.endMin,
-        businessTimeZone: tz,
-      }).catch(() => {}),
-      sendBookingConfirmedWhatsApp({
-        to: booking.whatsapp,
-        name: booking.name,
-        classTypeName,
-        bookingCode: booking.code,
-        dateKey: booking.dateKey,
-        startMin: booking.startMin,
-        endMin: booking.endMin,
-        businessTimeZone: tz,
-      }).catch(() => {}),
-      sendAdminWhatsAppNotification({
-        kind: "booking_confirmed",
-        name: booking.name,
-        email: booking.email,
-        whatsapp: booking.whatsapp,
-        bookingCode: booking.code,
-        classTypeName,
-        dateKey: booking.dateKey,
-        startMin: booking.startMin,
-        endMin: booking.endMin,
-        businessTimeZone: tz,
-        extra: "Confirmed by admin after WhatsApp conversation",
-      }).catch(() => {}),
-      sendBookingConfirmedPush({
-        clientId: booking.clientId,
-        className: classTypeName,
-        bookingCode: booking.code ?? "",
-        dateLabel: parts.dateLabel,
-        timeLabel: parts.timeLabel,
-      }).catch(() => {}),
-    ]);
 
     return jsonOk({ confirmed: true, status: "confirmed" });
   } catch (e) {

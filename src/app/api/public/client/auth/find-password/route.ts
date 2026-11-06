@@ -5,13 +5,10 @@ import { clientAuthFindPasswordSchema } from "@/lib/schemas";
 import { findClientsByWhatsapp, pickPrimaryClient } from "@/lib/clientMerge";
 import { hashPassword } from "@/lib/password";
 import { sendTempPasswordMessage } from "@/lib/twilioWhatsApp";
-import {
-  clearLoginFailures,
-  loginRateLimitKeys,
-} from "@/lib/authRateLimit";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
 
 const RESET_COOLDOWN_MS = 60_000;
+const TEMP_PIN_TTL_MS = 30 * 60_000;
 const GENERIC_RESPONSE = {
   sent: true,
   message:
@@ -36,7 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     const whatsapp = parsed.data.whatsapp;
-    const { clients, authRateLimits } = await getCollections();
+    const { clients } = await getCollections();
     const matches = await findClientsByWhatsapp(clients, whatsapp);
     if (!matches.length) {
       return jsonOk(GENERIC_RESPONSE);
@@ -87,8 +84,8 @@ export async function POST(req: NextRequest) {
       { _id: client._id, passwordResetToken: resetToken },
       {
         $set: {
-          passwordHash,
-          mustChangePassword: true,
+          tempPasswordHash: passwordHash,
+          tempPasswordExpiresAt: new Date(Date.now() + TEMP_PIN_TTL_MS),
           updatedAt: new Date(),
         },
         $unset: { passwordResetToken: "" },
@@ -96,11 +93,6 @@ export async function POST(req: NextRequest) {
     );
     if (!committed.modifiedCount) {
       console.error("[auth] temporary PIN delivered but reset reservation was lost");
-    } else {
-      const [phoneRateLimitKey] = loginRateLimitKeys(req, whatsapp);
-      if (phoneRateLimitKey) {
-        await clearLoginFailures(authRateLimits, [phoneRateLimitKey]);
-      }
     }
 
     return jsonOk(GENERIC_RESPONSE);

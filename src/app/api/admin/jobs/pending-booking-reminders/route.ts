@@ -4,24 +4,10 @@ import { getCollections } from "@/lib/db";
 import { optionalEnv } from "@/lib/env";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { sendPendingBookingReminderEmail } from "@/lib/email";
-import { requireAdmin } from "../../../_utils/adminAuth";
+import { allowJobRequest } from "../../../_utils/jobAuth";
 import { jsonError, jsonOk } from "../../../_utils/http";
 
 const DEFAULT_DELAY_MINUTES = 30;
-
-function allowJob(req: NextRequest) {
-  if (req.headers.get("x-vercel-cron") === "1") return null;
-  const auth = requireAdmin(req);
-  if (!auth) return null;
-  const secret = optionalEnv("AUTO_CANCEL_JOB_SECRET");
-  if (!secret) return auth;
-  const got =
-    req.headers.get("x-job-secret") ??
-    req.nextUrl.searchParams.get("secret") ??
-    "";
-  if (got === secret) return null;
-  return auth;
-}
 
 function reminderDelayMinutes(): number {
   const parsed = Number(optionalEnv("PENDING_BOOKING_REMINDER_MINUTES"));
@@ -31,7 +17,7 @@ function reminderDelayMinutes(): number {
 }
 
 export async function POST(req: NextRequest) {
-  const blocked = allowJob(req);
+  const blocked = await allowJobRequest(req);
   if (blocked) return blocked;
 
   try {

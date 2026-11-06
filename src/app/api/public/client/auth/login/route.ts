@@ -45,25 +45,44 @@ export async function POST(req: NextRequest) {
     }
 
     const client = pickPrimaryClient(matches);
-    if (!client.passwordHash) {
+    const now = new Date();
+    const tempHash =
+      client.tempPasswordHash &&
+      client.tempPasswordExpiresAt &&
+      client.tempPasswordExpiresAt > now
+        ? client.tempPasswordHash
+        : null;
+    if (!client.passwordHash && !tempHash) {
       await verifyPassword(parsed.data.password, await DUMMY_PASSWORD_HASH);
       await recordLoginFailure(authRateLimits, rateLimitKeys);
       return jsonError("Invalid phone number or password.", 401);
     }
 
-    const ok = await verifyPassword(parsed.data.password, client.passwordHash);
-    if (!ok) {
+    const okRegular = client.passwordHash
+      ? await verifyPassword(parsed.data.password, client.passwordHash)
+      : false;
+    const okTemp =
+      !okRegular && tempHash
+        ? await verifyPassword(parsed.data.password, tempHash)
+        : false;
+    if (!okRegular && !okTemp) {
       await recordLoginFailure(authRateLimits, rateLimitKeys);
       return jsonError("Invalid phone number or password.", 401);
     }
 
-    const now = new Date();
     // Clear the account-specific counter after success. Keep the IP counter so
     // an attacker cannot reset it by signing into a separate known account.
     await clearLoginFailures(authRateLimits, rateLimitKeys.slice(0, 1));
     await clients.updateOne(
       { _id: client._id },
-      { $set: { lastLoginAt: now, updatedAt: now } },
+      {
+        $set: {
+          lastLoginAt: now,
+          updatedAt: now,
+          ...(okTemp ? { mustChangePassword: true } : {}),
+        },
+        $unset: { tempPasswordHash: "", tempPasswordExpiresAt: "" },
+      },
     );
     const refreshed = await clients.findOne({ _id: client._id });
     if (!refreshed) return jsonError("Client not found", 404);

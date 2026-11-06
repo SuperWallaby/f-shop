@@ -1,8 +1,22 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { jsonError } from "../../_utils/http";
 import { adminLoginSchema } from "@/lib/schemas";
 import { requireEnv } from "@/lib/env";
 import { setAdminSessionCookie } from "@/lib/adminSession";
+import { getCollections } from "@/lib/db";
+import {
+  adminLoginRateLimitKeys,
+  clearLoginFailures,
+  getLoginRateLimit,
+  recordLoginFailure,
+} from "@/lib/authRateLimit";
+
+function samePassword(got: string, expected: string): boolean {
+  const a = createHash("sha256").update(got).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}
 
 export async function POST(req: NextRequest) {
  try {
@@ -23,12 +37,24 @@ export async function POST(req: NextRequest) {
    );
   }
 
-  const passwordMatch = parsed.data.password === expected;
+  const { authRateLimits } = await getCollections();
+  const rateLimitKeys = adminLoginRateLimitKeys(req);
+  const rateLimit = await getLoginRateLimit(authRateLimits, rateLimitKeys);
+  if (rateLimit.limited) {
+   const response = jsonError(
+    "Too many attempts. Please wait a few minutes and try again.",
+    429
+   );
+   response.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));
+   return response;
+  }
 
-  if (!passwordMatch) {
+  if (!samePassword(parsed.data.password, expected)) {
+   await recordLoginFailure(authRateLimits, rateLimitKeys);
    return jsonError("Invalid password", 401);
   }
 
+  await clearLoginFailures(authRateLimits, rateLimitKeys);
   const res = NextResponse.json({ ok: true, data: { authed: true } });
   setAdminSessionCookie(res);
   return res;

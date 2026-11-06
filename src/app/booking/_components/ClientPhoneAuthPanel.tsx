@@ -36,6 +36,8 @@ export function ClientPhoneAuthPanel({
   const [phoneLocal, setPhoneLocal] = useState("");
   const [pin, setPin] = useState("");
   const [accountHasPin, setAccountHasPin] = useState(false);
+  const [claimNeedsEmail, setClaimNeedsEmail] = useState(false);
+  const [claimEmail, setClaimEmail] = useState("");
   const [finding, setFinding] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +60,7 @@ export function ClientPhoneAuthPanel({
       setStep("phone");
       setPin("");
       setAccountHasPin(false);
+      setClaimNeedsEmail(false);
     }
   }
 
@@ -91,6 +94,7 @@ export function ClientPhoneAuthPanel({
         throw new Error(json?.error?.message ?? "Lookup failed");
       }
       setAccountHasPin(Boolean(json.data?.exists && json.data?.hasPassword));
+      setClaimNeedsEmail(Boolean(json.data?.claimNeedsEmail));
       setStep("pin");
       setFinding(false);
       setPin("");
@@ -106,6 +110,11 @@ export function ClientPhoneAuthPanel({
       setError("Enter a 4-digit PIN.");
       return;
     }
+    const sendEmail = !accountHasPin && claimNeedsEmail;
+    if (sendEmail && !claimEmail.trim().includes("@")) {
+      setError("Enter the email you gave the studio.");
+      return;
+    }
     setLoading(true);
     setError(null);
     setInfo(null);
@@ -117,10 +126,17 @@ export function ClientPhoneAuthPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ whatsapp: whatsappE164(), password: pin }),
+        body: JSON.stringify({
+          whatsapp: whatsappE164(),
+          password: pin,
+          ...(sendEmail ? { email: claimEmail.trim() } : {}),
+        }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
+        if (json?.error?.details?.code === "claim_email_required") {
+          setClaimNeedsEmail(true);
+        }
         throw new Error(json?.error?.message ?? "Sign-in failed");
       }
       await onAuthed();
@@ -182,7 +198,9 @@ export function ClientPhoneAuthPanel({
         : "Use your WhatsApp number"
       : accountHasPin
         ? "Enter the 4-digit PIN for this phone number."
-        : "No account found for this number yet. Set a 4-digit PIN to create one.";
+        : claimNeedsEmail
+          ? "We found your studio profile. Enter the email you gave us and choose a 4-digit PIN."
+          : "No account found for this number yet. Set a 4-digit PIN to create one.";
 
   const showInternalBack = !hideInternalBack && (step === "pin" || finding);
 
@@ -240,7 +258,24 @@ export function ClientPhoneAuthPanel({
               />
             </div>
           </label>
-        ) : (
+        ) : null}
+
+        {step === "pin" && !finding && !accountHasPin && claimNeedsEmail ? (
+          <label className="grid gap-1">
+            <span className="text-xs text-[#716D64]">Email on file</span>
+            <input
+              value={claimEmail}
+              onChange={(e) => setClaimEmail(e.target.value)}
+              disabled={loading}
+              className="rounded-2xl border border-[#E8DDD4] bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#DFD1C9]"
+              placeholder="you@example.com"
+              inputMode="email"
+              autoComplete="email"
+            />
+          </label>
+        ) : null}
+
+        {finding || step === "phone" ? null : (
           <label className="grid gap-1">
             <span className="text-xs text-[#716D64]">4-digit PIN</span>
             <input

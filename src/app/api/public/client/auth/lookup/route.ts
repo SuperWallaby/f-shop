@@ -33,7 +33,11 @@ export async function POST(req: NextRequest) {
     const matches = await findClientsByWhatsapp(clients, whatsapp);
     const exists = matches.length > 0;
     const hasPassword = matches.some((c) => Boolean(c.passwordHash));
-    return jsonOk({ exists, hasPassword });
+    const claimNeedsEmail =
+      exists &&
+      !hasPassword &&
+      matches.some((c) => Boolean((c.email ?? "").trim()));
+    return jsonOk({ exists, hasPassword, claimNeedsEmail });
   } catch (e) {
     return jsonError("Server error", 500, e instanceof Error ? e.message : e);
   }

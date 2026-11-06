@@ -99,10 +99,9 @@ export async function POST(req: NextRequest) {
     }
 
     const updated = await bookings.updateOne(
-      { _id: booking._id, status: "confirmed" },
+      { _id: booking._id, status: { $in: ["pending", "confirmed"] } },
       { $set: { status: "cancelled", cancelledAt: new Date() } },
     );
-
     if (updated.modifiedCount) {
       if (booking.slotId) {
         await timeSlots.updateOne(
@@ -193,6 +192,8 @@ export async function POST(req: NextRequest) {
           // best-effort; booking is already cancelled
         }
       }
+    } else {
+      return jsonError("This booking can no longer be cancelled.", 409);
     }
 
     return jsonOk({ cancelled: true });

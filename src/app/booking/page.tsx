@@ -181,6 +181,7 @@ function BookingPageInner() {
   const [successBookingCode, setSuccessBookingCode] = useState<string | null>(
     previewDone ? "AB12CD" : null,
   );
+  const [successConfirmed, setSuccessConfirmed] = useState(false);
   const [signedUpOnBook, setSignedUpOnBook] = useState(false);
   const [needsPlanHint, setNeedsPlanHint] = useState(previewDone);
   const [planOptions, setPlanOptions] = useState<PublicPlanDto[]>([]);
@@ -779,9 +780,11 @@ function BookingPageInner() {
       } catch {
         planHint = didSignUp || !loggedIn;
       }
-      setNeedsPlanHint(planHint);
+      const confirmed = json.data?.status === "confirmed";
+      setSuccessConfirmed(confirmed);
+      setNeedsPlanHint(confirmed ? false : planHint);
       const bookingCode = String(json.data.bookingCode ?? "");
-      rememberPendingBookingCode(bookingCode);
+      if (!confirmed) rememberPendingBookingCode(bookingCode);
       setSuccessBookingCode(bookingCode);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Booking failed");
@@ -856,6 +859,18 @@ function BookingPageInner() {
             ``,
             `Booking Code: ${successBookingCode}`,
           ].join("\n");
+
+    const confirmedText = [
+      `Please bring grip socks, wear comfortable attire, and bring a water bottle.`,
+      `Kindly arrive 10–15 minutes earlier before class.`,
+      ``,
+      `✨ Cancellation & No-Show Policy:`,
+      `• Free cancellation at least 10 hours before class`,
+      `• Inside 10 hours, cancel on WhatsApp and pay the late fee`,
+      `• Reschedule at least 6 hours before class`,
+      `• Group class: RM10 (late cancellation / no-show)`,
+      `• Private session: RM20 (late cancellation / no-show)`,
+    ].join("\n");
 
     const preferredPlanCategory = matchPlanCategoryForClassName(bookedClassName);
     const sortedPlanOptions = (() => {
@@ -937,14 +952,32 @@ function BookingPageInner() {
         <SiteHeader />
         <main className="max-w-2xl mx-auto mt-16">
           <div className="bg-white/70 border border-[#E8DDD4] rounded-3xl p-8 shadow-sm">
-            <h1 className="font-serif text-3xl font-bold mb-3">Last Step</h1>
-            <p className="text-[#5C574F] mb-6">
-              Your booking is{" "}
-              <strong className="font-bold" style={{ color: "#C62828" }}>
-                not complete
-              </strong>{" "}
-              until you send the WhatsApp message and the studio confirms it.
-            </p>
+            {successConfirmed ? (
+              <>
+                <h1 className="font-serif text-3xl font-bold mb-3">
+                  You&apos;re booked
+                </h1>
+                <p className="text-[#5C574F] mb-6">
+                  Your class is{" "}
+                  <strong className="font-bold" style={{ color: "#1F6B3C" }}>
+                    confirmed
+                  </strong>{" "}
+                  and 1 credit was used. We&apos;ve sent the details to your
+                  email and WhatsApp.
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="font-serif text-3xl font-bold mb-3">Last Step</h1>
+                <p className="text-[#5C574F] mb-6">
+                  Your booking is{" "}
+                  <strong className="font-bold" style={{ color: "#C62828" }}>
+                    not complete
+                  </strong>{" "}
+                  until you send the WhatsApp message and the studio confirms it.
+                </p>
+              </>
+            )}
             {signedUpOnBook ? (
               <div className="mb-6 rounded-2xl border border-[#E8DDD4] bg-white px-5 py-4 text-sm text-[#444444]">
                 <div className="font-semibold">You&apos;re signed in</div>
@@ -1135,6 +1168,7 @@ function BookingPageInner() {
               .fasea-plan-toast-in { animation: fasea-plan-toast-in 0.32s ease-out both; }
               .fasea-plan-toast-out { animation: fasea-plan-toast-out 0.28s ease-in both; }
             `}</style>
+            {successConfirmed ? null : (
             <div className="relative mt-6">
               <div
                 className="fasea-wa-bubble pointer-events-none absolute left-1/2 z-10"
@@ -1196,6 +1230,7 @@ function BookingPageInner() {
                 Complete Booking.
               </a>
             </div>
+            )}
 
             {planToast ? (
               <div
@@ -1220,10 +1255,10 @@ function BookingPageInner() {
 
             <div className="mt-6 rounded-2xl border border-[#E8DDD4] bg-white/70 px-5 py-4">
               <div className="text-xs text-[#716D64] font-medium mb-2">
-                Pending studio confirmation
+                {successConfirmed ? "Before class" : "Pending studio confirmation"}
               </div>
               <pre className="whitespace-pre-wrap leading-loose text-sm text-[#444444]">
-                {lastStepText}
+                {successConfirmed ? confirmedText : lastStepText}
               </pre>
             </div>
             <div className="flex items-center justify-between gap-2">
@@ -1231,6 +1266,7 @@ function BookingPageInner() {
                 className="mt-8 px-6 py-3 rounded-full bg-[#DFD1C9] text-sm font-medium hover:brightness-95 transition cursor-pointer"
                 onClick={() => {
                   setSuccessBookingCode(null);
+                  setSuccessConfirmed(false);
                   setNeedsPlanHint(false);
                   setSelectedPlanInterest("");
                   setPlanOptions([]);

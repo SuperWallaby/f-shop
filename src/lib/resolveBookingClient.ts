@@ -106,6 +106,11 @@ export async function resolveOrCreateBookingClient(args: {
   whatsapp: string;
   now?: Date;
   createIfMissing?: boolean;
+  /**
+   * False for public guest bookings: the typed phone/email are unverified, so
+   * never merge accounts on them or write them onto an existing client.
+   */
+  trustedIdentity?: boolean;
 }): Promise<{
   clientId: ObjectId | undefined;
   created: boolean;
@@ -119,6 +124,7 @@ export async function resolveOrCreateBookingClient(args: {
     : null;
   const whatsappNormalized = waFields?.whatsapp ?? "";
   const createIfMissing = args.createIfMissing !== false;
+  const trusted = args.trustedIdentity !== false;
   const cols = {
     clients: args.clients,
     bookings: args.bookings,
@@ -158,7 +164,7 @@ export async function resolveOrCreateBookingClient(args: {
       const primaryWa = whatsappDigitsCanonical(
         client.whatsapp || whatsappNormalized,
       );
-      if (!emailWa || emailWa === primaryWa) {
+      if (emailWa ? emailWa === primaryWa : trusted) {
         await mergeClientInto(cols, client._id, byEmail._id, {
           whatsapp: whatsappNormalized,
         });
@@ -251,7 +257,10 @@ export async function resolveOrCreateBookingClient(args: {
 
   const clientId = client._id;
   const patch: Partial<ClientDb> = { updatedAt: now };
-  if (waFields) {
+  const samePhone =
+    !!waFields &&
+    whatsappDigitsCanonical(client.whatsapp ?? "") === waFields.whatsappDigits;
+  if (waFields && (trusted || samePhone)) {
     // Always canonicalize stored phone to +60… form
     if (
       client.whatsapp !== waFields.whatsapp ||
@@ -264,17 +273,21 @@ export async function resolveOrCreateBookingClient(args: {
   if (nameTrim && !(client.name ?? "").trim()) {
     patch.name = nameTrim;
   }
-  if (emailTrim && !(client.email ?? "").trim()) {
+  if (trusted && emailTrim && !(client.email ?? "").trim()) {
     patch.email = emailTrim;
   }
   if (Object.keys(patch).length > 1) {
     await args.clients.updateOne({ _id: clientId }, { $set: patch });
   }
 
-  const linkFilter = unlinkedBookingsMatchFilter({
-    email: emailTrim || client.email,
-    whatsapp: whatsappNormalized || client.whatsapp,
-  });
+  const linkFilter = unlinkedBookingsMatchFilter(
+    trusted
+      ? {
+          email: emailTrim || client.email,
+          whatsapp: whatsappNormalized || client.whatsapp,
+        }
+      : { email: client.email, whatsapp: patch.whatsapp ?? client.whatsapp },
+  );
   if (linkFilter) {
     await args.bookings.updateMany(linkFilter, { $set: { clientId } });
   }

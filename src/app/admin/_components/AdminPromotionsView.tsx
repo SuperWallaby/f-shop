@@ -42,6 +42,35 @@ const emptyForm = {
   sortOrder: 100,
 };
 
+const PROMO_IMAGE_MAX_SIDE = 1200;
+
+async function shrinkImageToDataUrl(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = url;
+    });
+    const scale = Math.min(
+      1,
+      PROMO_IMAGE_MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight),
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unavailable");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function discountCell(row: PromotionRow) {
   if (row.discountType === "percent") return `${row.discountValue}% off`;
   if (row.discountType === "fixed") return `RM ${row.discountValue} off`;
@@ -205,17 +234,17 @@ export function AdminPromotionsView() {
       setError("Please choose an image file");
       return;
     }
-    if (file.size > 900_000) {
-      setError("Image too large (max ~900KB). Compress or use a URL.");
+    if (file.size > 20_000_000) {
+      setError("Image too large (max 20MB).");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setForm((f) => ({ ...f, imageUrl: String(reader.result ?? "") }));
-      setError(null);
-    };
-    reader.onerror = () => setError("Failed to read image");
-    reader.readAsDataURL(file);
+    // Stored inline and sent to every visitor, so shrink before saving.
+    shrinkImageToDataUrl(file)
+      .then((dataUrl) => {
+        setForm((f) => ({ ...f, imageUrl: dataUrl }));
+        setError(null);
+      })
+      .catch(() => setError("Failed to read image"));
   }
 
   return (

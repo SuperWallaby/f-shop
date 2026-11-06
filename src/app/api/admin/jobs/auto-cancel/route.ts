@@ -3,35 +3,18 @@ import { ObjectId } from "mongodb";
 import { DateTime } from "luxon";
 import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "../../../_utils/http";
-import { requireAdmin } from "../../../_utils/adminAuth";
-import { optionalEnv, requireEnv } from "@/lib/env";
+import { optionalEnv } from "@/lib/env";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { sendClassCancelledByInstructorEmail } from "@/lib/email";
 import { sendClassCancelledByInstructorWhatsApp, sendStudioAlertWhatsApp } from "@/lib/twilioWhatsApp";
 import { releaseExclusiveLocksAfterBookingRemoved } from "@/lib/exclusiveLocks";
 import { sendClassCancelledPush } from "@/lib/pushNotifications";
 import { formatKlParts } from "@/lib/bookingMessages";
-
-function allowJob(req: NextRequest) {
-  // Vercel Cron jobs send this header. This lets us safely use `vercel.json` crons
-  // without committing secrets into the repo.
-  // Ref: Vercel Cron Jobs.
-  if (req.headers.get("x-vercel-cron") === "1") return null;
-
-  const auth = requireAdmin(req);
-  if (!auth) return null; // admin cookie ok
-  const secret = optionalEnv("AUTO_CANCEL_JOB_SECRET");
-  if (!secret) return auth;
-  const got =
-    req.headers.get("x-job-secret") ??
-    req.nextUrl.searchParams.get("secret") ??
-    "";
-  if (got === secret) return null;
-  return auth;
-}
+import { refundCancelledClassBookings } from "@/lib/credits";
+import { allowJobRequest } from "../../../_utils/jobAuth";
 
 export async function POST(req: NextRequest) {
-  const blocked = allowJob(req);
+  const blocked = await allowJobRequest(req);
   if (blocked) return blocked;
 
   try {
@@ -41,7 +24,8 @@ export async function POST(req: NextRequest) {
     const horizonHours = Number(req.nextUrl.searchParams.get("horizonHours") ?? 48);
     const maxHours = Number.isFinite(horizonHours) && horizonHours > 0 ? horizonHours : 48;
 
-    const { timeSlots, bookings, items, exclusiveLocks } = await getCollections();
+    const { timeSlots, bookings, items, exclusiveLocks, creditLedger } =
+      await getCollections();
 
     // Look at near-future sessions only (keep it cheap)
     const fromDateKey = nowUtc.setZone(tz).toISODate()!;
@@ -60,7 +44,7 @@ export async function POST(req: NextRequest) {
     const itemById = new Map<string, (typeof itemDocs)[number]>();
     for (const it of itemDocs) itemById.set(it._id!.toHexString(), it);
 
-    const notifyTo = requireEnv("TWILIO_WHATSAPP_TO"); // studio/admin number
+    const notifyTo = optionalEnv("TWILIO_WHATSAPP_TO"); // studio/admin number
 
     let considered = 0;
     let autoCancelledSessions = 0;
@@ -117,6 +101,11 @@ export async function POST(req: NextRequest) {
           { $set: { status: "cancelled", cancelledAt: new Date() } }
         );
         cancelledBookings += r.modifiedCount;
+        await refundCancelledClassBookings({ creditLedger, bookings: bs });
+        await timeSlots.updateOne(
+          { _id: s._id },
+          { $set: { bookedCount: 0, updatedAt: new Date() } },
+        );
 
         // Release exclusive locks (best-effort)
         await Promise.all(
@@ -189,13 +178,15 @@ export async function POST(req: NextRequest) {
         `Class: ${item.name}\n` +
         `When: ${s.dateKey} ${start.toFormat("h:mm a")} (${tz})\n` +
         `Bookings: ${confirmed}/${minBookings}`;
-      await sendStudioAlertWhatsApp({
-        to: notifyTo,
-        type: `Auto-cancelled session (${confirmed}/${minBookings} booked)`,
-        classLabel: item.name,
-        whenLabel: `${s.dateKey} ${start.toFormat("h:mm a")}`,
-        fallbackBody: msg,
-      }).catch(() => {});
+      if (notifyTo) {
+        await sendStudioAlertWhatsApp({
+          to: notifyTo,
+          type: `Auto-cancelled session (${confirmed}/${minBookings} booked)`,
+          classLabel: item.name,
+          whenLabel: `${s.dateKey} ${start.toFormat("h:mm a")}`,
+          fallbackBody: msg,
+        }).catch(() => {});
+      }
     }
 
     return jsonOk({

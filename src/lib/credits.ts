@@ -480,6 +480,28 @@ export async function insertBookingCancelRefund(args: {
   return { inserted: true as const, id: ins.insertedId };
 }
 
+/** Restore the reserved credit for every client booking in a cancelled class. */
+export async function refundCancelledClassBookings(args: {
+  creditLedger: Collection<CreditLedgerDb>;
+  bookings: Array<{ _id: ObjectId; clientId?: ObjectId | null }>;
+  now?: Date;
+  note?: string;
+}) {
+  let refunded = 0;
+  for (const b of args.bookings) {
+    if (!b.clientId) continue;
+    const res = await insertBookingCancelRefund({
+      creditLedger: args.creditLedger,
+      clientId: b.clientId,
+      bookingId: b._id,
+      now: args.now,
+      note: args.note ?? "Credit restored: class cancelled by studio",
+    });
+    if (res.inserted) refunded++;
+  }
+  return refunded;
+}
+
 /** For confirmed/no-show bookings linked to a client, ensure each has a consume row. */
 export async function backfillBookingConsumesForClient(args: {
   bookings: Collection<BookingDb>;

@@ -2,8 +2,7 @@ import { NextRequest } from "next/server";
 import { DateTime } from "luxon";
 import { getCollections } from "@/lib/db";
 import { jsonError, jsonOk } from "../../../_utils/http";
-import { requireAdmin } from "../../../_utils/adminAuth";
-import { optionalEnv } from "@/lib/env";
+import { allowJobRequest } from "../../../_utils/jobAuth";
 import { BUSINESS_TIME_ZONE } from "@/lib/constants";
 import { sendBookingReminderEmail } from "@/lib/email";
 import {
@@ -14,22 +13,8 @@ import { listPushTokensForClient } from "@/lib/pushTokens";
 import { sendClassReminderPush } from "@/lib/pushNotifications";
 import { formatKlParts } from "@/lib/bookingMessages";
 
-function allowJob(req: NextRequest) {
-  if (req.headers.get("x-vercel-cron") === "1") return null;
-  const auth = requireAdmin(req);
-  if (!auth) return null;
-  const secret = optionalEnv("AUTO_CANCEL_JOB_SECRET");
-  if (!secret) return auth;
-  const got =
-    req.headers.get("x-job-secret") ??
-    req.nextUrl.searchParams.get("secret") ??
-    "";
-  if (got === secret) return null;
-  return auth;
-}
-
 export async function POST(req: NextRequest) {
-  const blocked = allowJob(req);
+  const blocked = await allowJobRequest(req);
   if (blocked) return blocked;
 
   try {

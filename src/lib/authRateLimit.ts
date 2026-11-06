@@ -23,6 +23,10 @@ export function loginRateLimitKeys(req: NextRequest, phone: string): string[] {
   ];
 }
 
+export function adminLoginRateLimitKeys(req: NextRequest): string[] {
+  return [`admin:ip:${digest(requestIp(req))}`];
+}
+
 export async function getLoginRateLimit(
   collection: Collection<AuthRateLimitDb>,
   keys: string[],

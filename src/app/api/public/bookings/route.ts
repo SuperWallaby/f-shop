@@ -11,9 +11,11 @@ import { generateBookingCode6 } from "@/lib/bookingCode";
 import { acquireExclusiveLocks } from "@/lib/exclusiveLocks";
 import {
   backfillBookingConsumesForClient,
+  getCreditBalance,
   insertBookingConsume,
   makeCustomerKey,
 } from "@/lib/credits";
+import { notifyBookingConfirmed } from "@/lib/bookingConfirmedNotify";
 import { hashPassword } from "@/lib/password";
 import { setClientSessionCookie } from "@/lib/clientSession";
 import {
@@ -21,7 +23,11 @@ import {
   guardClientAccessIfAuthenticated,
 } from "@/app/api/_utils/clientAuth";
 import { findClientsByWhatsapp } from "@/lib/clientMerge";
-import { clientWhatsappFields, normalizeWhatsapp } from "@/lib/whatsapp";
+import {
+  clientWhatsappFields,
+  normalizeWhatsapp,
+  whatsappDigitsCanonical,
+} from "@/lib/whatsapp";
 import {
   resolveOrCreateBookingClient,
   unlinkedBookingsMatchFilter,
@@ -112,6 +118,15 @@ export async function POST(req: NextRequest) {
         return jsonError(
           "An account with this email already exists. Sign in instead, or book as a guest.",
           409,
+        );
+      }
+      // Claiming a PIN-less studio profile by email needs the phone on file too.
+      const existingWa = whatsappDigitsCanonical(existing?.whatsapp ?? "");
+      if (existingWa && existingWa !== whatsappDigitsCanonical(waNorm)) {
+        return jsonError(
+          "This email is already linked to a different WhatsApp number. Use that number, or book as a guest.",
+          409,
+          { code: "email_taken" },
         );
       }
       if (waNorm) {
@@ -304,6 +319,7 @@ export async function POST(req: NextRequest) {
         whatsapp,
         now,
         createIfMissing: true,
+        trustedIdentity: false,
       });
       linkedClientId = resolved.clientId;
       whatsappNormalized = resolved.whatsappNormalized;
@@ -330,6 +346,23 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Signed-in clients who already hold a credit are confirmed straight away;
+    // guests and pay-later bookings still wait for the studio.
+    let autoConfirm = false;
+    if (
+      sessionClient &&
+      sessionClientId &&
+      !signupClientId &&
+      linkedClientId?.equals(sessionClientId)
+    ) {
+      const { rawBalance } = await getCreditBalance({
+        creditLedger,
+        clientId: sessionClientId,
+        now,
+      });
+      autoConfirm = rawBalance >= 1;
+    }
+
     const bookingDoc: BookingDb = {
       code: generateBookingCode6(),
       slotId: slotRef._id,
@@ -344,7 +377,8 @@ export async function POST(req: NextRequest) {
       ...(marketingOptIn
         ? { marketingOptIn: true, marketingOptInAt: now }
         : {}),
-      status: "pending" as const,
+      status: autoConfirm ? "confirmed" : "pending",
+      ...(autoConfirm ? { confirmedAt: now } : {}),
       createdAt: now,
       dateKey: slotRef.dateKey,
       startMin: slotRef.startMin,
@@ -392,7 +426,7 @@ export async function POST(req: NextRequest) {
           now,
           // A pending booking holds the seat, so reserve its credit too.
           // Releasing the booking restores it through booking_cancel_refund.
-          note: "Credit reserved for pending booking",
+          note: autoConfirm ? "Class booking" : "Credit reserved for pending booking",
         });
       } catch (ledgerErr) {
         await bookings.deleteOne({ _id: result.insertedId });
@@ -401,11 +435,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (autoConfirm) {
+      await notifyBookingConfirmed({
+        booking: bookingDoc,
+        classTypeName: itemRef.name,
+        adminNote: "Auto-confirmed: paid with existing credit",
+      });
+    }
+
     const payload = jsonOk({
       bookingId: result.insertedId.toHexString(),
       bookingCode: bookingDoc.code,
       slotId: slotRef._id.toHexString(),
-      status: "pending",
+      status: bookingDoc.status,
       signedUp: Boolean(signupClientId),
     });
     if (signupClientId) {

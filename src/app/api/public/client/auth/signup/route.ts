@@ -8,6 +8,11 @@ import { setClientSessionCookie } from "@/lib/clientSession";
 import { hashPassword } from "@/lib/password";
 import { clientWhatsappFields } from "@/lib/whatsapp";
 import { jsonError, jsonOk } from "@/app/api/_utils/http";
+import {
+  getLoginRateLimit,
+  loginRateLimitKeys,
+  recordLoginFailure,
+} from "@/lib/authRateLimit";
 
 function exactEmailRegex(email: string): RegExp {
   return new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
@@ -36,7 +41,7 @@ export async function POST(req: NextRequest) {
     const passwordHash = await hashPassword(parsed.data.password);
     const now = new Date();
 
-    const { clients, creditLedger } = await getCollections();
+    const { clients, creditLedger, authRateLimits } = await getCollections();
 
     const waMatches = await findClientsByWhatsapp(clients, whatsapp);
     const byPhone = waMatches.length ? pickPrimaryClient(waMatches) : null;
@@ -51,7 +56,32 @@ export async function POST(req: NextRequest) {
     }
 
     // Guest / admin-created row with no PIN: attach PIN and continue (like signup).
+    // A phone number alone is easy to know, so the email on file must match too.
     if (byPhone && !byPhone.passwordHash) {
+      const emailOnFile = (byPhone.email ?? "").trim().toLowerCase();
+      if (emailOnFile && email !== emailOnFile) {
+        const rateLimitKeys = loginRateLimitKeys(req, whatsapp);
+        const rateLimit = await getLoginRateLimit(authRateLimits, rateLimitKeys);
+        if (rateLimit.limited) {
+          const response = jsonError(
+            "Too many attempts. Please try again later.",
+            429,
+          );
+          response.headers.set(
+            "Retry-After",
+            String(rateLimit.retryAfterSeconds),
+          );
+          return response;
+        }
+        if (email) await recordLoginFailure(authRateLimits, rateLimitKeys);
+        return jsonError(
+          email
+            ? "That email doesn't match our records for this number. Use the email you gave the studio, or message us on WhatsApp."
+            : "We already have a profile for this number. Enter the email you gave the studio to set your PIN.",
+          409,
+          { code: email ? "claim_email_mismatch" : "claim_email_required" },
+        );
+      }
       await clients.updateOne(
         { _id: byPhone._id },
         {
