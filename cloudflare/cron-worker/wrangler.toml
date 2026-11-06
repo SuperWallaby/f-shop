@@ -2,6 +2,13 @@ name = "f-shop-cron"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
+# AUTO_CANCEL_JOB_SECRET is a secret: `wrangler secret put AUTO_CANCEL_JOB_SECRET`.
+[vars]
+TARGET_BASE_URL = "https://fasea.studio"
+
+[observability]
+enabled = true
+
 [triggers]
 crons = [
   "*/10 * * * *", # auto-cancel + unfinished booking reminders
